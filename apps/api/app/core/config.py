@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     analysis_poll_interval_ms: int = Field(default=2500, alias="TRIBE_POLL_INTERVAL_MS")
     convex_site_url: str | None = Field(default=None, alias="CONVEX_SITE_URL")
     convex_service_secret: str | None = Field(default=None, alias="CONVEX_SERVICE_SECRET")
+    require_convex_ids: bool = Field(default=True, alias="REQUIRE_CONVEX_IDS")
 
     @field_validator("uploads_dir", "results_dir", "cache_dir", mode="before")
     @classmethod

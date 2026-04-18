@@ -88,15 +88,25 @@ def health(context: APIContext = Depends(get_context)) -> HealthResponse:
 @router.post("/upload", response_model=UploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_video(
     file: UploadFile = File(...),
-    convexUploadId: str | None = Form(default=None),
+    convex_upload_id: str | None = Form(default=None, alias="convexUploadId"),
     context: APIContext = Depends(get_context),
 ) -> UploadResponse:
+    settings = context.settings
+    if settings.require_convex_ids and not convex_upload_id:
+        raise HTTPException(
+            status_code=400,
+            detail="convexUploadId is required. Log in and let the app create a pending upload first.",
+        )
+    if convex_upload_id is not None:
+        if len(convex_upload_id) > 64 or any(
+            ord(ch) < 0x20 or ord(ch) > 0x7E for ch in convex_upload_id
+        ):
+            raise HTTPException(status_code=400, detail="Invalid convexUploadId.")
     if not file.filename or not file.filename.lower().endswith(".mp4"):
         raise HTTPException(status_code=400, detail="Only MP4 uploads are supported in v1.")
 
     storage = context.storage
     media = context.media
-    settings = context.settings
     paths = await storage.save_upload(file)
     if paths.source_path.stat().st_size > settings.max_upload_bytes:
         storage.delete_upload(paths.upload_id)
@@ -126,7 +136,7 @@ async def upload_video(
     response = UploadResponse(uploadId=paths.upload_id, video=video)
     storage.write_upload_metadata(response)
     context.convex_sync.attach_upload_local_id(
-        convex_upload_id=convexUploadId,
+        convex_upload_id=convex_upload_id,
         local_upload_id=paths.upload_id,
         duration_sec=metadata.duration_sec,
     )
@@ -140,6 +150,17 @@ def analyze_video(
 ) -> AnalysisResponse:
     storage = context.storage
     jobs = context.jobs
+    settings = context.settings
+    if settings.require_convex_ids and not request.convexScanId:
+        raise HTTPException(
+            status_code=400,
+            detail="convexScanId is required. Log in and let the app create a pending scan first.",
+        )
+    if request.convexScanId is not None:
+        if len(request.convexScanId) > 64 or any(
+            ord(ch) < 0x20 or ord(ch) > 0x7E for ch in request.convexScanId
+        ):
+            raise HTTPException(status_code=400, detail="Invalid convexScanId.")
     try:
         storage.read_upload_metadata(request.uploadId)
     except FileNotFoundError as exc:

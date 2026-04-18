@@ -9,6 +9,7 @@ from app.core.config import Settings
 
 
 logger = logging.getLogger(__name__)
+_REQUEST_TIMEOUT_SECONDS = 5.0
 
 
 class ConvexSyncService:
@@ -53,7 +54,7 @@ class ConvexSyncService:
                 "scanId": convex_scan_id,
                 "status": status,
                 "localAnalysisId": local_analysis_id,
-                "errorMessage": error_message,
+                "errorMessage": str(error_message)[:500] if error_message is not None else None,
             },
         )
 
@@ -86,14 +87,27 @@ class ConvexSyncService:
         )
 
     def _post(self, path: str, payload: dict[str, Any]) -> None:
+        if not self.enabled:
+            return
         compact_payload = {key: value for key, value in payload.items() if value is not None}
+        base = (self.settings.convex_site_url or "").rstrip("/")
+        url = f"{base}{path}"
         try:
-            with httpx.Client(timeout=10.0) as client:
-                response = client.post(
-                    f"{self.settings.convex_site_url}{path}",
-                    json=compact_payload,
-                    headers={"x-service-secret": self.settings.convex_service_secret or ""},
-                )
-                response.raise_for_status()
+            response = httpx.post(
+                url,
+                json=compact_payload,
+                headers={
+                    "content-type": "application/json",
+                    "x-service-secret": self.settings.convex_service_secret or "",
+                },
+                timeout=_REQUEST_TIMEOUT_SECONDS,
+            )
         except httpx.HTTPError as exc:
             logger.warning("Convex sync failed for %s: %s", path, exc)
+            return
+        if response.status_code >= 400:
+            logger.warning(
+                "Convex sync failed for %s: status=%s",
+                path,
+                response.status_code,
+            )

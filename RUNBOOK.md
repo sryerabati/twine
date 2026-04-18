@@ -32,6 +32,13 @@ Native Windows:
 py -3.11 apps\api\scripts\run_tribe_windows.py serve
 ```
 
+For authenticated upload/history flows, also keep Convex running in a separate terminal:
+
+```bash
+cd apps/web
+npx convex dev
+```
+
 ## Clear caches safely
 
 Remove analysis artifacts:
@@ -124,6 +131,8 @@ cat storage/analyses/<analysisId>/provider-response.json
 4. Inspect `storage/uploads/<uploadId>/`.
 5. Inspect `storage/analyses/<analysisId>/record.json`.
 6. If the payload is missing but the record says completed, rerun after clearing that analysis directory.
+7. If `/api/upload` or `/api/analyze` now 400 on missing Convex IDs, confirm the frontend is creating pending Convex upload/scan rows and that `REQUIRE_CONVEX_IDS` matches your intended mode.
+8. If the backend logs Convex sync warnings, compare `CONVEX_SERVICE_SECRET` in `.env` with the value configured in Convex and restart the backend after changes.
 
 For a quick launcher-side sanity check:
 

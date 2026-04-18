@@ -165,6 +165,17 @@ py -3.11 apps\api\scripts\run_tribe_windows.py serve
 
 By default this starts the API on `http://127.0.0.1:8000` using `API_PORT` from `.env`.
 
+### 4b. Start Convex for authenticated app flows
+
+If you want the saved scan workspace, authenticated uploads, and scan history to work locally, start Convex in its own terminal from `apps/web`:
+
+```bash
+cd apps/web
+npx convex dev
+```
+
+On first run it will create a dev deployment and populate `apps/web/.env.local` with `NEXT_PUBLIC_CONVEX_URL`.
+
 ### 5. Run the website locally
 
 Open a second terminal at the repo root.
@@ -229,6 +240,10 @@ This runs one MP4 through the same upload, thumbnail, analysis, artifact, and sc
 - `GEMINI_MODEL` – defaults to `gemini-2.5-pro`
 - `TRIBE_MAX_VIDEO_SECONDS` – upload duration cap for the MVP
 - `HUGGINGFACE_HUB_TOKEN` – required for real TRIBE model access
+- `NEXT_PUBLIC_CONVEX_URL` – Convex deployment URL consumed by the web app
+- `CONVEX_SITE_URL` – Convex `.convex.site` URL used by the FastAPI sync bridge
+- `CONVEX_SERVICE_SECRET` – shared secret FastAPI sends on Convex service routes
+- `REQUIRE_CONVEX_IDS` – when `true`, `/api/upload` and `/api/analyze` require Convex-minted IDs
 
 ## Known limitations
 

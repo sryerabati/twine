@@ -130,6 +130,7 @@ def test_settings(tmp_path: Path) -> Settings:
         huggingface_hub_token=None,
         ffmpeg_bin="ffmpeg",
         ffprobe_bin="ffprobe",
+        require_convex_ids=False,
     )
 
 

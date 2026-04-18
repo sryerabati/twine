@@ -165,6 +165,10 @@ GEMINI_MODEL=gemini-2.5-pro
 TRIBE_MAX_VIDEO_SECONDS=60
 TRIBE_MAX_UPLOAD_BYTES=250000000
 TRIBE_POLL_INTERVAL_MS=2500
+NEXT_PUBLIC_CONVEX_URL=
+CONVEX_SITE_URL=
+CONVEX_SERVICE_SECRET=
+REQUIRE_CONVEX_IDS=true
 HUGGINGFACE_HUB_TOKEN=
 FFMPEG_BIN=ffmpeg
 FFPROBE_BIN=ffprobe
@@ -175,6 +179,8 @@ Notes:
 - Keep `TRIBE_DEVICE=auto` on this Mac baseline unless you explicitly want to experiment with `mps`.
 - CUDA is the recommended faster path, but the app should still run locally without it.
 - `ANALYSIS_BACKEND=gemini` skips the TRIBE model download path and uses the remote content-analysis backend instead.
+- `NEXT_PUBLIC_CONVEX_URL` is populated automatically by `npx convex dev` in `apps/web`.
+- Leave `REQUIRE_CONVEX_IDS=true` for the authenticated web flow; only disable it for intentional local API-only smoke tests.
 
 ## Run the website locally
 
