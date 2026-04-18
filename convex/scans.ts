@@ -100,10 +100,13 @@ async function listMineScans(ctx: QueryCtx, userId: string) {
     .query("scans")
     .withIndex("by_userId_createdAt", (q) => q.eq("userId", userId as never))
     .order("desc")
-    .take(50);
+    .collect();
 
   return await Promise.all(
-    rows.filter((row) => row.scanType !== "compare").map(async (row) => summarizeScan(ctx, row)),
+    rows
+      .filter((row) => row.scanType !== "compare")
+      .slice(0, 50)
+      .map(async (row) => summarizeScan(ctx, row)),
   );
 }
 

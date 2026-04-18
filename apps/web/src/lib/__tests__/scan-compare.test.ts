@@ -111,6 +111,34 @@ describe("compare scan handlers", () => {
     ).rejects.toThrow("compare scan");
   });
 
+  it("patches compare analysis ids on a valid compare scan", async () => {
+    const get = vi.fn().mockResolvedValue({
+      _id: "scan_2",
+      userId: "user_1",
+      scanType: "compare",
+      secondaryUploadId: "upload_2",
+    });
+    const insert = vi.fn();
+    const patch = vi.fn();
+    const query = vi.fn();
+    const ctx = makeMutationCtx({ get, insert, patch, query });
+
+    await expect(
+      scansModule.attachCompareAnalysisIds.handler(ctx, {
+        scanId: "scan_2",
+        analysisIdA: "analysis_a",
+        analysisIdB: "analysis_b",
+      }),
+    ).resolves.toBe("scan_2");
+
+    expect(patch).toHaveBeenCalledWith("scan_2", {
+      localAnalysisId: "analysis_a",
+      secondaryLocalAnalysisId: "analysis_b",
+      status: "running",
+      updatedAt: 1700000000000,
+    });
+  });
+
   it("rejects compare scans that are missing analysis ids before finalization", async () => {
     const get = vi.fn().mockResolvedValue({
       _id: "scan_2",
@@ -144,6 +172,59 @@ describe("compare scan handlers", () => {
     ).rejects.toThrow("analysis IDs");
   });
 
+  it("patches compare result fields on a valid completed compare scan", async () => {
+    const get = vi.fn().mockResolvedValue({
+      _id: "scan_3",
+      userId: "user_1",
+      scanType: "compare",
+      secondaryUploadId: "upload_2",
+      localAnalysisId: "analysis_a",
+      secondaryLocalAnalysisId: "analysis_b",
+    });
+    const insert = vi.fn();
+    const patch = vi.fn();
+    const query = vi.fn();
+    const ctx = makeMutationCtx({ get, insert, patch, query });
+
+    await expect(
+      scansModule.saveCompareResult.handler(ctx, {
+        scanId: "scan_3",
+        winner: "B",
+        winnerReason: "Better pacing",
+        recommendation: "Use B",
+        summary: ["B"],
+        slices: [
+          {
+            label: "Pacing",
+            winner: "B",
+            aScore: 7,
+            bScore: 9,
+          },
+        ],
+      }),
+    ).resolves.toBe("scan_3");
+
+    expect(patch).toHaveBeenCalledWith("scan_3", {
+      status: "completed",
+      compareResult: {
+        winner: "B",
+        winnerReason: "Better pacing",
+        recommendation: "Use B",
+        summary: ["B"],
+        slices: [
+          {
+            label: "Pacing",
+            winner: "B",
+            aScore: 7,
+            bScore: 9,
+          },
+        ],
+      },
+      overviewRecommendation: "Use B",
+      updatedAt: 1700000000000,
+    });
+  });
+
   it("keeps compare scans out of the recent scan list", async () => {
     const rows = [
       {
@@ -166,8 +247,8 @@ describe("compare scan handlers", () => {
         updatedAt: 1700000000000,
       },
     ];
-    const take = vi.fn().mockResolvedValue(rows);
-    const order = vi.fn(() => ({ take }));
+    const collect = vi.fn().mockResolvedValue(rows);
+    const order = vi.fn(() => ({ collect }));
     const withIndex = vi.fn(() => ({ order }));
     const query = vi.fn(() => ({ withIndex }));
     const get = vi.fn(async (id: string) => {
