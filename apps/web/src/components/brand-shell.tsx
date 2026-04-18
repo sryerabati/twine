@@ -1,8 +1,5 @@
 import Link from "next/link";
 
-import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-
 export function BrandShell({
   children,
   compact = false,
@@ -11,20 +8,27 @@ export function BrandShell({
   compact?: boolean;
 }) {
   return (
-    <div
-      className="min-h-screen bg-[radial-gradient(circle_at_72%_18%,rgba(255,194,214,0.12),transparent_20%),radial-gradient(circle_at_18%_88%,rgba(198,108,149,0.1),transparent_26%),linear-gradient(180deg,#07070c_0%,#0d0b14_52%,#130f18_100%)]"
-      data-compact={compact ? "true" : "false"}
-    >
-      <header className="sticky top-0 z-20 border-b border-white/8 bg-black/30 backdrop-blur-2xl">
+    <div className="min-h-screen bg-background" data-compact={compact ? "true" : "false"}>
+      <header className="border-b border-pink-200/10 bg-background">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 lg:px-10">
-          <Link href="/" className="text-sm font-semibold uppercase tracking-[0.32em] text-primary">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-3 font-heading text-xl font-semibold tracking-tight text-pink-100"
+          >
+            <span className="inline-flex size-3 rounded-full border-2 border-pink-100 bg-pink-400" />
             VibeCheck
           </Link>
-          <nav className="flex items-center gap-2">
-            <Link href="/app" className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}>
+          <nav className="flex items-center gap-3">
+            <Link
+              href="/app"
+              className="rounded-full px-3 py-2 text-sm font-medium text-pink-100/70 transition-colors hover:text-pink-50"
+            >
               Login
             </Link>
-            <Link href="/app" className={cn(buttonVariants({ variant: "default", size: "sm" }))}>
+            <Link
+              href="/app"
+              className="inline-flex items-center justify-center rounded-full border-2 border-pink-200 bg-pink-400 px-4 py-2 text-sm font-semibold text-[#2d1322] shadow-[4px_4px_0_0_rgba(116,34,85,0.95)] transition-transform hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0_0_rgba(116,34,85,0.95)]"
+            >
               Open dashboard
             </Link>
           </nav>
