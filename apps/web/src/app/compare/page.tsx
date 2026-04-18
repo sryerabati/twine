@@ -10,7 +10,12 @@ export default async function ComparePage({
 
   return (
     <BrandShell compact>
-      <CompareView analysisIdA={a ?? null} analysisIdB={b ?? null} />
+      <CompareView
+        analysisIdA={a ?? null}
+        analysisIdB={b ?? null}
+        title="Legacy compare bridge"
+        legacy
+      />
     </BrandShell>
   );
 }

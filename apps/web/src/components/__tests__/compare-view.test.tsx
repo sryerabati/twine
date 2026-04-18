@@ -9,6 +9,33 @@ vi.mock("@/lib/api", () => ({
 }));
 
 describe("CompareView", () => {
+  it("renders a persisted compare result without requiring analysis payloads", () => {
+    render(
+      <CompareView
+        compare={{
+          winner: "B",
+          winnerReason: "Version B keeps attention through the first five seconds.",
+          recommendation: "Ship B, then test A's opening against it.",
+          summary: ["B holds the opening beat longer.", "A recovers in the ending."],
+          slices: [
+            { label: "Opening", winner: "B", aScore: 74, bScore: 82 },
+            { label: "Middle", winner: "tie", aScore: 69, bScore: 69 },
+          ],
+        }}
+        title="Spring promo compare"
+        primaryLabel="spring-a.mp4"
+        secondaryLabel="spring-b.mp4"
+      />,
+    );
+
+    expect(screen.getByText(/Spring promo compare/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Version B$/i)).toBeInTheDocument();
+    expect(screen.getByText(/Ship B, then test A's opening against it./i)).toBeInTheDocument();
+    expect(screen.getByText(/spring-a.mp4/i)).toBeInTheDocument();
+    expect(screen.getByText(/spring-b.mp4/i)).toBeInTheDocument();
+    expect(screen.getByText(/B holds the opening beat longer./i)).toBeInTheDocument();
+  });
+
   it("renders compare summary after both analyses complete", async () => {
     const { compareAnalyses, fetchAnalysis } = await import("@/lib/api");
     const completed = {
@@ -156,11 +183,21 @@ describe("CompareView", () => {
       ],
     });
 
-    render(<CompareView analysisIdA="analysis-a" analysisIdB="analysis-b" />);
+    render(
+      <CompareView
+        analysisIdA="analysis-a"
+        analysisIdB="analysis-b"
+        title="Legacy compare bridge"
+        primaryLabel="clip-a.mp4"
+        secondaryLabel="clip-b.mp4"
+        legacy
+      />,
+    );
 
     await waitFor(() => {
-      expect(screen.getByText(/Content Compare/i)).toBeInTheDocument();
-      expect(screen.getByText(/Winner: Version A/i)).toBeInTheDocument();
+      expect(screen.getByText(/Legacy compare bridge/i)).toBeInTheDocument();
+      expect(screen.getByText(/Open analysis A/i)).toBeInTheDocument();
+      expect(screen.getByText(/^Version A$/i)).toBeInTheDocument();
       expect(screen.getByText(/Opening/i)).toBeInTheDocument();
       expect(screen.getByText(/Use A as the base cut/i)).toBeInTheDocument();
     });
