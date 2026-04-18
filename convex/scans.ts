@@ -16,6 +16,7 @@ async function listMineScans(ctx: QueryCtx, userId: string) {
       return {
         _id: row._id,
         uploadId: row.uploadId,
+        localUploadId: upload?.localUploadId ?? null,
         status: row.status,
         localAnalysisId: row.localAnalysisId ?? null,
         viralPotential: row.viralPotential ?? null,
@@ -161,6 +162,7 @@ export const getMineById = query({
     return {
       ...scan,
       filename: upload?.filename ?? "untitled.mp4",
+      localUploadId: upload?.localUploadId ?? null,
       selectedCutIds: scan.selectedCutIds ?? [],
       latestExportUrl: scan.latestExportUrl ?? null,
       lastExportedAt: scan.lastExportedAt ?? null,

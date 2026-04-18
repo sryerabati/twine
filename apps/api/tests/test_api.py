@@ -92,3 +92,22 @@ def test_analyze_and_compare_complete_with_stubbed_runner(
     compare_payload = compare.json()
     assert compare_payload["winner"] in {"A", "B", "tie"}
     assert len(compare_payload["slices"]) == 3
+
+
+def test_lookup_completed_analysis_by_upload_id(
+    client: TestClient,
+) -> None:
+    upload = client.post(
+        "/api/upload",
+        files={"file": ("clip.mp4", BytesIO(b"video"), "video/mp4")},
+    ).json()
+
+    analysis = client.post("/api/analyze", json={"uploadId": upload["uploadId"]}).json()
+
+    response = client.get(f"/api/analysis/by-upload/{upload['uploadId']}")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["analysisId"] == analysis["analysisId"]
+    assert payload["status"] == "completed"
+    assert payload["payload"]["video"]["uploadId"] == upload["uploadId"]

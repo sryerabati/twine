@@ -55,6 +55,12 @@ export async function fetchAnalysis(analysisId: string): Promise<AnalysisRespons
   });
 }
 
+export async function fetchAnalysisByUpload(uploadId: string): Promise<AnalysisResponse> {
+  return request<AnalysisResponse>(`/api/analysis/by-upload/${uploadId}`, {
+    cache: "no-store",
+  });
+}
+
 export async function trimAnalysis(
   analysisId: string,
   cutIds?: string[],

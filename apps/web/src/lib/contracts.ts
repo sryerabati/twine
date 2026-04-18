@@ -216,6 +216,7 @@ export type CurrentUser = {
 export type SavedScanSummary = {
   _id: string;
   uploadId: string;
+  localUploadId: string | null;
   status: AnalysisStatus;
   localAnalysisId: string | null;
   viralPotential: number | null;

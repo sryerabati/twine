@@ -86,11 +86,12 @@ class ConvexSyncService:
         )
 
     def _post(self, path: str, payload: dict[str, Any]) -> None:
+        compact_payload = {key: value for key, value in payload.items() if value is not None}
         try:
             with httpx.Client(timeout=10.0) as client:
                 response = client.post(
                     f"{self.settings.convex_site_url}{path}",
-                    json=payload,
+                    json=compact_payload,
                     headers={"x-service-secret": self.settings.convex_service_secret or ""},
                 )
                 response.raise_for_status()

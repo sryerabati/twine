@@ -173,6 +173,32 @@ class StorageService:
             raise FileNotFoundError(f"Analysis payload {analysis_id} not found")
         return AnalysisPayload.model_validate(load_json(path))
 
+    def find_latest_analysis_for_upload(self, upload_id: str) -> AnalysisResponse:
+        self._validate_analysis_id(upload_id)
+
+        latest: AnalysisResponse | None = None
+        for record_path in sorted(self.settings.results_dir.glob("*/record.json")):
+            data = load_json(record_path)
+            record = AnalysisResponse.model_validate(data)
+            if record.status != "completed":
+                continue
+
+            payload_path = record_path.parent / "payload.json"
+            if not payload_path.exists():
+                continue
+
+            payload = AnalysisPayload.model_validate(load_json(payload_path))
+            if payload.video.uploadId != upload_id:
+                continue
+
+            hydrated = record.model_copy(update={"payload": payload})
+            if latest is None or hydrated.updatedAt > latest.updatedAt:
+                latest = hydrated
+
+        if latest is None:
+            raise FileNotFoundError(f"No completed analysis found for upload {upload_id!r}")
+        return latest
+
     def write_segments(self, analysis_id: str, payload: list[dict[str, Any]]) -> None:
         dump_json(self.analysis_paths(analysis_id).segments_path, payload)
 

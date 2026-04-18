@@ -177,6 +177,21 @@ def get_analysis(
     return record
 
 
+@router.get("/analysis/by-upload/{upload_id}", response_model=AnalysisResponse)
+def get_analysis_by_upload(
+    upload_id: str,
+    context: APIContext = Depends(get_context),
+) -> AnalysisResponse:
+    storage = context.storage
+    try:
+        return storage.find_latest_analysis_for_upload(upload_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail="No completed analysis found for this upload yet.",
+        ) from exc
+
+
 @router.post("/compare", response_model=CompareResponse)
 def compare_analyses(
     request: CompareRequest,
