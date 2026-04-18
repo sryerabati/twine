@@ -20,5 +20,8 @@
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
+  },
+  "dependencies": {
+    "huggingface-cli": "^0.0.1-security"
   }
 }
