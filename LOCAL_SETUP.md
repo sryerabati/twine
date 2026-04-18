@@ -12,7 +12,7 @@ Both platforms need:
 - `uv v0.9.x`
 - `git`
 - `ffmpeg` with `ffprobe`
-- Hugging Face access to `facebook/tribev2` and the upstream gated dependencies
+- either Hugging Face access to `facebook/tribev2` and the upstream gated dependencies, or a Gemini API key for the fallback backend
 
 macOS notes:
 
@@ -83,9 +83,30 @@ Expected on the target baseline:
 - `uv 0.9.x`
 - Homebrew `ffmpeg 8.x`
 
+## Backend configuration
+
+Choose one backend in the repo-root `.env`.
+
+TRIBE mode:
+
+```bash
+ANALYSIS_BACKEND=tribe
+HUGGINGFACE_HUB_TOKEN=hf_your_token_here
+```
+
+Gemini fallback mode:
+
+```bash
+ANALYSIS_BACKEND=gemini
+GEMINI_API_KEY=your_google_ai_studio_key_here
+GEMINI_MODEL=gemini-2.5-pro
+```
+
+Put `GEMINI_API_KEY` in the repo-root `.env`. The backend does not read it from `.env.example`.
+
 ## TRIBE v2 setup and local download
 
-The backend depends on the official GitHub repo directly, not PyPI.
+The TRIBE backend depends on the official GitHub repo directly, not PyPI.
 
 ```bash
 cd apps/api
@@ -96,13 +117,7 @@ The `pyproject.toml` pins:
 
 - `tribev2 @ git+https://github.com/facebookresearch/tribev2.git@72399081ed3f1040c4d996cefb2864a4c46f5b8e`
 
-Set your Hugging Face token in `.env`:
-
-```bash
-HUGGINGFACE_HUB_TOKEN=hf_your_token_here
-```
-
-The launcher and backend read the token from `.env` or the active environment only; there is no CLI override. The first real analysis request or an explicit launcher `download` command triggers the model download into `TRIBE_CACHE_DIR`, and that download still requires gated Hugging Face access.
+The launcher and backend read tokens from `.env` or the active environment only; there is no CLI override. The first real TRIBE analysis request or an explicit launcher `download` command triggers the model download into `TRIBE_CACHE_DIR`, and that download still requires gated Hugging Face access.
 
 macOS:
 
@@ -143,7 +158,10 @@ TRIBE_UPLOADS_DIR=./storage/uploads
 TRIBE_RESULTS_DIR=./storage/analyses
 TRIBE_CACHE_DIR=./storage/cache
 TRIBE_ALLOWED_ORIGIN=http://localhost:3000
+ANALYSIS_BACKEND=tribe
 TRIBE_DEVICE=auto
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-2.5-pro
 TRIBE_MAX_VIDEO_SECONDS=60
 TRIBE_MAX_UPLOAD_BYTES=250000000
 TRIBE_POLL_INTERVAL_MS=2500
@@ -156,6 +174,7 @@ Notes:
 
 - Keep `TRIBE_DEVICE=auto` on this Mac baseline unless you explicitly want to experiment with `mps`.
 - CUDA is the recommended faster path, but the app should still run locally without it.
+- `ANALYSIS_BACKEND=gemini` skips the TRIBE model download path and uses the remote content-analysis backend instead.
 
 ## Run the website locally
 
@@ -196,10 +215,11 @@ That shortcut starts both services together, but the cross-platform setup flow i
 5. A completed analysis creates:
    - `storage/analyses/<analysisId>/record.json`
    - `payload.json`
-   - `preds.npy`
    - `events.csv`
    - `segments.json`
    - `cut-list.json`
+   - `preds.npy` when `ANALYSIS_BACKEND=tribe`
+   - `provider-response.json` when `ANALYSIS_BACKEND=gemini`
 6. The analysis page renders timeline, heat-strip, scores, markers, and export links.
 
 ## Troubleshooting

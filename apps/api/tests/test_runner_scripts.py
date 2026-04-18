@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.core.config import Settings
 from app.core.context import APIContext
 from app.services.analysis_engine import AnalysisEngine
+from app.services.convex_sync import ConvexSyncService
 from app.services.media import MediaFeatures, VideoMetadata
 from app.services.storage import StorageService
 from app.services.tribe_runner import (
@@ -135,6 +136,7 @@ def make_settings(tmp_path: Path, *, token: str | None) -> Settings:
         results_dir=tmp_path / "analyses",
         cache_dir=tmp_path / "cache",
         allowed_origin="http://localhost:3000",
+        analysis_backend="tribe",
         tribe_device="cpu",
         max_video_seconds=60,
         huggingface_hub_token=token,
@@ -162,6 +164,7 @@ def make_context(
     )
     runner = StubRunner(install_present=install_present)
     engine = AnalysisEngine(storage, media)
+    convex_sync = ConvexSyncService(settings)
     return APIContext(
         settings=settings,
         storage=storage,
@@ -169,6 +172,7 @@ def make_context(
         runner=runner,
         engine=engine,
         jobs=None,
+        convex_sync=convex_sync,
     )
 
 

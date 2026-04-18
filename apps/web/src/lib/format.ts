@@ -12,3 +12,13 @@ export function formatBytes(value: number): string {
   }
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
+
+export function formatDateTime(value: number | string): string {
+  const date = typeof value === "string" ? new Date(value) : new Date(value);
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}

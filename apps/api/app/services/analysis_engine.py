@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -9,6 +10,7 @@ import pandas as pd
 from app.models.contracts import (
     AnalysisPayload,
     AnalysisSummary,
+    ActionBoard,
     ArtifactLinks,
     BrainResponsePayload,
     BrainResponsePoint,
@@ -17,10 +19,12 @@ from app.models.contracts import (
     ConfidenceBand,
     DeadspaceCut,
     Diagnostics,
+    ExportArtifact,
     HemisphereHeatmap,
     Marker,
     MeshInfo,
     ScoreSet,
+    TimelineSegment,
     VideoAsset,
 )
 from app.services.media import MediaFeatures, MediaService
@@ -33,7 +37,8 @@ class AnalysisArtifacts:
     payload: AnalysisPayload
     events_csv: str
     segments_json: list[dict[str, float | int]]
-    preds: np.ndarray
+    preds: np.ndarray | None
+    provider_raw: dict[str, Any] | None = None
 
 
 class AnalysisEngine:
@@ -48,6 +53,13 @@ class AnalysisEngine:
         source_path: Path,
         result: TribeRunResult,
     ) -> AnalysisArtifacts:
+        if result.proxyAnalysis is not None:
+            return self._build_proxy_payload(
+                analysis_id=analysis_id,
+                video=video,
+                result=result,
+            )
+
         windows = [
             (segment.start, segment.start + segment.duration)
             for segment in result.segments
@@ -61,13 +73,23 @@ class AnalysisEngine:
 
         points = self._brain_response_points(result, media_features)
         markers, cuts = self._markers_and_cuts(points)
+        low_value_cuts = self._low_value_cuts(points, markers, cuts)
+        cut_plan = sorted([*cuts, *low_value_cuts], key=lambda cut: (cut.start, cut.end))
         scores = self._scores(points, cuts, video.durationSec)
         summary = self._summary(points, markers, cuts, scores)
-        artifacts = ArtifactLinks(**self.storage.artifacts_for(analysis_id))
+        action_board = self._action_board(summary, scores, cuts, low_value_cuts)
+        timeline_segments = self._timeline_segments(points, markers, cut_plan)
+        artifacts = ArtifactLinks(
+            **self.storage.artifacts_for(
+                analysis_id,
+                include_raw_predictions=result.provider == "tribe",
+                include_provider_raw=bool(result.providerRaw),
+            )
+        )
         diagnostics = Diagnostics(
             device=result.device,
-            modelRepo=MODEL_REPO,
-            modelCommit=MODEL_COMMIT,
+            modelRepo=result.modelRepo,
+            modelCommit=result.modelCommit,
             transcriptWordCount=int((result.events["type"] == "Word").sum())
             if "type" in result.events
             else 0,
@@ -76,17 +98,22 @@ class AnalysisEngine:
                 sum(cut.end - cut.start for cut in cuts),
                 2,
             ),
-            warnings=self._warnings(video, result, cuts),
+            warnings=[*self._warnings(video, result, cuts), *result.warnings],
         )
         payload = AnalysisPayload(
             analysisId=analysis_id,
             video=video,
             brainResponse=BrainResponsePayload(
                 timeSeries=points,
-                meshInfo=MeshInfo(totalVertices=int(result.preds.shape[1])),
+                meshInfo=MeshInfo(totalVertices=int(result.preds.shape[1]) if result.preds is not None else 0),
             ),
             markers=markers,
             deadspaceCuts=cuts,
+            lowValueCuts=low_value_cuts,
+            cutPlan=cut_plan,
+            actionBoard=action_board,
+            timelineSegments=timeline_segments,
+            exports=[],
             scores=scores,
             summary=summary,
             artifacts=artifacts,
@@ -104,6 +131,7 @@ class AnalysisEngine:
                 for segment in result.segments
             ],
             preds=result.preds,
+            provider_raw=result.providerRaw,
         )
 
     def build_payload_from_features(
@@ -115,6 +143,8 @@ class AnalysisEngine:
     ) -> AnalysisPayload:
         points = self._brain_response_points(result, media_features)
         markers, cuts = self._markers_and_cuts(points)
+        low_value_cuts = self._low_value_cuts(points, markers, cuts)
+        cut_plan = sorted([*cuts, *low_value_cuts], key=lambda cut: (cut.start, cut.end))
         scores = self._scores(points, cuts, video.durationSec)
         summary = self._summary(points, markers, cuts, scores)
         artifacts = ArtifactLinks(**self.storage.artifacts_for(analysis_id))
@@ -127,20 +157,124 @@ class AnalysisEngine:
             ),
             markers=markers,
             deadspaceCuts=cuts,
+            lowValueCuts=low_value_cuts,
+            cutPlan=cut_plan,
+            actionBoard=self._action_board(summary, scores, cuts, low_value_cuts),
+            timelineSegments=self._timeline_segments(points, markers, cut_plan),
+            exports=[],
             scores=scores,
             summary=summary,
             artifacts=artifacts,
             diagnostics=Diagnostics(
                 device=result.device,
-                modelRepo=MODEL_REPO,
-                modelCommit=MODEL_COMMIT,
+                modelRepo=result.modelRepo,
+                modelCommit=result.modelCommit,
                 transcriptWordCount=int((result.events["type"] == "Word").sum())
                 if "type" in result.events
                 else 0,
                 sceneChangeCount=media_features.scene_change_count,
                 deadspaceSeconds=round(sum(cut.end - cut.start for cut in cuts), 2),
-                warnings=self._warnings(video, result, cuts),
+                warnings=[*self._warnings(video, result, cuts), *result.warnings],
             ),
+        )
+
+    def _build_proxy_payload(
+        self,
+        *,
+        analysis_id: str,
+        video: VideoAsset,
+        result: TribeRunResult,
+    ) -> AnalysisArtifacts:
+        proxy = result.proxyAnalysis or {}
+        timeline = proxy.get("timeline", [])
+        points = self._points_from_proxy_timeline(timeline)
+        markers = [
+            Marker(
+                t=round(float(marker["t"]), 2),
+                type=marker["type"],
+                severity=marker["severity"],
+                explanation=str(marker["explanation"]),
+                suggestion=str(marker["suggestion"]),
+            )
+            for marker in proxy.get("markers", [])
+        ]
+        cuts = self._normalize_proxy_cuts(proxy.get("deadspaceCuts", []), "deadspace")
+        low_value_cuts = self._normalize_proxy_cuts(proxy.get("lowValueCuts", []), "low_value")
+        if not low_value_cuts:
+            low_value_cuts = self._low_value_cuts(points, markers, cuts)
+        cut_plan = sorted([*cuts, *low_value_cuts], key=lambda cut: (cut.start, cut.end))
+        score_payload = proxy["scores"]
+        summary_payload = proxy["summary"]
+        summary = AnalysisSummary(
+            strengths=[str(item) for item in summary_payload.get("strengths", [])],
+            weaknesses=[str(item) for item in summary_payload.get("weaknesses", [])],
+            overallRecommendation=str(summary_payload["overallRecommendation"]),
+        )
+        scores = ScoreSet(
+            hookScore=int(score_payload["hookScore"]),
+            pacingScore=int(score_payload["pacingScore"]),
+            retentionEstimate=int(score_payload["retentionEstimate"]),
+            viralPotential=int(score_payload["viralPotential"]),
+            confidence=score_payload["confidence"],
+            helpingFactors=[str(item) for item in score_payload.get("helpingFactors", [])],
+            hurtingFactors=[str(item) for item in score_payload.get("hurtingFactors", [])],
+        )
+        payload = AnalysisPayload(
+            analysisId=analysis_id,
+            video=video,
+            brainResponse=BrainResponsePayload(
+                timeSeries=points,
+                meshInfo=MeshInfo(
+                    space="content-analysis",
+                    subject="proxy",
+                    lagCompensationSec=0.0,
+                    totalVertices=int(result.preds.shape[1]) if result.preds is not None else 128,
+                ),
+            ),
+            markers=markers,
+            deadspaceCuts=cuts,
+            lowValueCuts=low_value_cuts,
+            cutPlan=cut_plan,
+            actionBoard=self._action_board_from_proxy(proxy.get("actionBoard"), summary, scores, cuts, low_value_cuts),
+            timelineSegments=self._timeline_segments_from_proxy(proxy.get("timelineSegments"), points, markers, cut_plan),
+            exports=[],
+            scores=scores,
+            summary=summary,
+            artifacts=ArtifactLinks(
+                **self.storage.artifacts_for(
+                    analysis_id,
+                    include_raw_predictions=False,
+                    include_provider_raw=bool(result.providerRaw),
+                )
+            ),
+            diagnostics=Diagnostics(
+                device=result.device,
+                modelRepo=result.modelRepo,
+                modelCommit=result.modelCommit,
+                transcriptWordCount=0,
+                sceneChangeCount=sum(1 for point in points if point.sceneChange),
+                deadspaceSeconds=round(sum(cut.end - cut.start for cut in cuts), 2),
+                warnings=[
+                    *[str(item) for item in proxy.get("warnings", [])],
+                    *result.warnings,
+                ],
+            ),
+        )
+        segments_json = [
+            {
+                "start": round(float(window["startSec"]), 2),
+                "duration": round(float(window["endSec"]) - float(window["startSec"]), 2),
+                "nsEventCount": 0,
+            }
+            for window in timeline
+        ]
+        events_csv = result.events.to_csv(index=False) if not result.events.empty else "type,start,label\n"
+        return AnalysisArtifacts(
+            payload=payload,
+            events_csv=events_csv,
+            segments_json=segments_json,
+            preds=None,
+            provider_raw=result.providerRaw,
         )
 
     def compare(self, payload_a: AnalysisPayload, payload_b: AnalysisPayload) -> CompareResponse:
@@ -339,6 +473,99 @@ class AnalysisEngine:
         return deduped[:12], cuts[:6]
 
     @staticmethod
+    def _low_value_cuts(
+        points: list[BrainResponsePoint],
+        markers: list[Marker],
+        deadspace_cuts: list[DeadspaceCut],
+    ) -> list[DeadspaceCut]:
+        suggestions: list[DeadspaceCut] = []
+        deadspace_ranges = [(cut.start, cut.end) for cut in deadspace_cuts]
+        for marker in markers:
+            if marker.type not in {"attention_drop", "pacing_issue", "audio_energy_drop"}:
+                continue
+            point = AnalysisEngine._closest_point(points, marker.t)
+            if point is None:
+                continue
+            start = round(point.segmentStartSec, 2)
+            end = round(point.segmentStartSec + max(point.segmentDurationSec, 0.8), 2)
+            if any(AnalysisEngine._ranges_overlap((start, end), existing) for existing in deadspace_ranges):
+                continue
+            if any(AnalysisEngine._ranges_overlap((start, end), (cut.start, cut.end)) for cut in suggestions):
+                continue
+            suggestions.append(
+                DeadspaceCut(
+                    id=f"low-value-{len(suggestions) + 1}",
+                    type="low_value",
+                    start=start,
+                    end=end,
+                    reason=marker.explanation,
+                    defaultSelected=False,
+                    recommendedAction=marker.suggestion,
+                )
+            )
+        if not suggestions:
+            for point in points:
+                start = round(point.segmentStartSec, 2)
+                end = round(point.segmentStartSec + max(point.segmentDurationSec, 0.8), 2)
+                if any(AnalysisEngine._ranges_overlap((start, end), existing) for existing in deadspace_ranges):
+                    continue
+                if point.globalActivation > 0.45 or point.transcriptDensity > 0.35:
+                    continue
+                suggestions.append(
+                    DeadspaceCut(
+                        id="low-value-1",
+                        type="low_value",
+                        start=start,
+                        end=end,
+                        reason="This beat stays comparatively weak without adding much motion, speech density, or payoff.",
+                        defaultSelected=False,
+                        recommendedAction="Optionally remove or compress this segment if you want a tighter export.",
+                    )
+                )
+                break
+        return suggestions[:4]
+
+    @staticmethod
+    def _points_from_proxy_timeline(timeline: list[dict[str, Any]]) -> list[BrainResponsePoint]:
+        if not timeline:
+            return []
+        activations = [float(window["globalActivation"]) for window in timeline]
+        rolling_variance = AnalysisEngine._rolling_variance(activations)
+        activation_delta = np.diff(np.asarray(activations), prepend=activations[0])
+        spike_score = AnalysisEngine._normalize_series(np.maximum(activation_delta, 0.0))
+        drop_score = AnalysisEngine._normalize_series(np.maximum(-activation_delta, 0.0))
+
+        points: list[BrainResponsePoint] = []
+        for index, window in enumerate(timeline):
+            start = float(window["startSec"])
+            end = float(window["endSec"])
+            activation = max(0.0, min(float(window["globalActivation"]), 1.0))
+            points.append(
+                BrainResponsePoint(
+                    stimulusTimeSec=round(start, 2),
+                    segmentStartSec=round(start, 2),
+                    segmentDurationSec=round(max(end - start, 0.1), 2),
+                    globalActivation=round(activation, 4),
+                    leftHemisphereActivation=round(activation, 4),
+                    rightHemisphereActivation=round(activation, 4),
+                    rollingVariance=round(float(rolling_variance[index]), 4),
+                    activationDelta=round(float(activation_delta[index]), 4),
+                    spikeScore=round(float(spike_score[index]), 4),
+                    dropScore=round(float(drop_score[index]), 4),
+                    audioEnergy=round(float(window["audioEnergy"]), 4),
+                    motionScore=round(float(window["motionScore"]), 4),
+                    transcriptDensity=round(float(window["transcriptDensity"]), 4),
+                    sceneChange=bool(window["sceneChange"]),
+                    silenceOverlap=bool(window["silenceOverlap"]),
+                    hemisphereHeatmap=HemisphereHeatmap(
+                        left=[round(activation, 4) for _ in range(64)],
+                        right=[round(activation, 4) for _ in range(64)],
+                    ),
+                )
+            )
+        return points
+
+    @staticmethod
     def _finalize_plateau(
         points: list[BrainResponsePoint],
         start_index: int,
@@ -384,9 +611,13 @@ class AnalysisEngine:
         )
         cuts.append(
             DeadspaceCut(
+                id=f"deadspace-{len(cuts) + 1}",
+                type="deadspace",
                 start=round(start, 2),
                 end=round(end, 2),
                 reason="Likely deadspace from low activation, low motion, and low audio energy.",
+                defaultSelected=True,
+                recommendedAction=f"Cut roughly {round(end - start, 1)}s or cover it with a harder transition.",
             )
         )
 
@@ -511,6 +742,184 @@ class AnalysisEngine:
             weaknesses=weaknesses[:3] or ["No obvious deadspace, but the score remains heuristic rather than predictive."],
             overallRecommendation=recommendation,
         )
+
+    @staticmethod
+    def _action_board(
+        summary: AnalysisSummary,
+        scores: ScoreSet,
+        deadspace_cuts: list[DeadspaceCut],
+        low_value_cuts: list[DeadspaceCut],
+    ) -> ActionBoard:
+        deadspace_seconds = round(sum(cut.end - cut.start for cut in deadspace_cuts), 1)
+        low_value_seconds = round(sum(cut.end - cut.start for cut in low_value_cuts), 1)
+        keep = list(summary.strengths[:2])
+        if not keep:
+            keep = ["Keep the strongest early spike intact."]
+        fix_now = []
+        if deadspace_cuts:
+            fix_now.append(
+                f"Remove {deadspace_seconds}s of deadspace across {len(deadspace_cuts)} default cut{'s' if len(deadspace_cuts) != 1 else ''}."
+            )
+        if low_value_cuts:
+            fix_now.append(
+                f"Review {len(low_value_cuts)} AI-flagged low-value segment{'s' if len(low_value_cuts) != 1 else ''} before export."
+            )
+        fix_now.extend(summary.weaknesses[:1])
+        test_next = []
+        if scores.hookScore < 70:
+            test_next.append("Test a sharper first-two-second hook with less setup.")
+        else:
+            test_next.append("Keep the current hook and test a tighter first-frame title or caption.")
+        if scores.pacingScore < 65:
+            test_next.append("Test a faster mid-clip transition pattern to reduce flat sections.")
+        else:
+            test_next.append("Test a slightly shorter export to preserve pacing momentum.")
+        export_plan = []
+        if deadspace_cuts:
+            export_plan.append("Default export keeps all deadspace cuts selected.")
+        if low_value_cuts:
+            export_plan.append(
+                f"Optional AI trims can remove up to {low_value_seconds}s more if you want a harder edit."
+            )
+        else:
+            export_plan.append("Optional AI trims were not necessary on this pass.")
+        return ActionBoard(
+            keep=keep[:3],
+            fixNow=fix_now[:3] or ["No urgent edit blockers were detected."],
+            testNext=test_next[:3],
+            exportPlan=export_plan[:3],
+        )
+
+    @staticmethod
+    def _timeline_segments(
+        points: list[BrainResponsePoint],
+        markers: list[Marker],
+        cut_plan: list[DeadspaceCut],
+    ) -> list[TimelineSegment]:
+        segments: list[TimelineSegment] = []
+        for cut in cut_plan:
+            segments.append(
+                TimelineSegment(
+                    id=f"segment-{cut.id}",
+                    type=cut.type,
+                    label="Deadspace cut" if cut.type == "deadspace" else "Low-value segment",
+                    start=cut.start,
+                    end=cut.end,
+                    severity="high" if cut.type == "deadspace" else "medium",
+                    reason=cut.reason,
+                    recommendedAction=cut.recommendedAction,
+                    cutId=cut.id,
+                )
+            )
+        for index, marker in enumerate(markers, start=1):
+            point = AnalysisEngine._closest_point(points, marker.t)
+            if point is None:
+                continue
+            start = round(point.segmentStartSec, 2)
+            end = round(point.segmentStartSec + max(point.segmentDurationSec, 0.8), 2)
+            segments.append(
+                TimelineSegment(
+                    id=f"segment-marker-{index}",
+                    type=marker.type,
+                    label=marker.type.replace("_", " ").title(),
+                    start=start,
+                    end=end,
+                    severity=marker.severity,
+                    reason=marker.explanation,
+                    recommendedAction=marker.suggestion,
+                )
+            )
+        segments.sort(key=lambda segment: (segment.start, segment.end))
+        deduped: list[TimelineSegment] = []
+        seen: set[tuple[float, str]] = set()
+        for segment in segments:
+            key = (round(segment.start, 2), segment.label)
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(segment)
+        return deduped[:12]
+
+    @staticmethod
+    def _timeline_segments_from_proxy(
+        raw_segments: Any,
+        points: list[BrainResponsePoint],
+        markers: list[Marker],
+        cut_plan: list[DeadspaceCut],
+    ) -> list[TimelineSegment]:
+        if not isinstance(raw_segments, list):
+            return AnalysisEngine._timeline_segments(points, markers, cut_plan)
+        normalized: list[TimelineSegment] = []
+        for index, segment in enumerate(raw_segments, start=1):
+            normalized.append(
+                TimelineSegment(
+                    id=str(segment.get("id") or f"proxy-segment-{index}"),
+                    type=segment.get("type", "low_value"),
+                    label=str(segment.get("label") or "Timeline segment"),
+                    start=round(float(segment.get("start", 0.0)), 2),
+                    end=round(float(segment.get("end", 0.1)), 2),
+                    severity=segment.get("severity", "medium"),
+                    reason=str(segment.get("reason") or "Review this portion of the clip."),
+                    recommendedAction=str(
+                        segment.get("recommendedAction") or "Tighten or preserve this beat based on the surrounding context."
+                    ),
+                    cutId=segment.get("cutId"),
+                )
+            )
+        return normalized[:12]
+
+    @staticmethod
+    def _action_board_from_proxy(
+        raw_board: Any,
+        summary: AnalysisSummary,
+        scores: ScoreSet,
+        deadspace_cuts: list[DeadspaceCut],
+        low_value_cuts: list[DeadspaceCut],
+    ) -> ActionBoard:
+        if not isinstance(raw_board, dict):
+            return AnalysisEngine._action_board(summary, scores, deadspace_cuts, low_value_cuts)
+        return ActionBoard(
+            keep=[str(item) for item in raw_board.get("keep", [])][:3],
+            fixNow=[str(item) for item in raw_board.get("fixNow", [])][:3],
+            testNext=[str(item) for item in raw_board.get("testNext", [])][:3],
+            exportPlan=[str(item) for item in raw_board.get("exportPlan", [])][:3],
+        )
+
+    @staticmethod
+    def _normalize_proxy_cuts(raw_cuts: Any, cut_type: str) -> list[DeadspaceCut]:
+        if not isinstance(raw_cuts, list):
+            return []
+        normalized: list[DeadspaceCut] = []
+        for index, cut in enumerate(raw_cuts, start=1):
+            normalized.append(
+                DeadspaceCut(
+                    id=str(cut.get("id") or f"{cut_type.replace('_', '-')}-{index}"),
+                    type=cut_type,
+                    start=round(float(cut["start"]), 2),
+                    end=round(float(cut["end"]), 2),
+                    reason=str(cut["reason"]),
+                    defaultSelected=bool(cut.get("defaultSelected", cut_type == "deadspace")),
+                    recommendedAction=str(
+                        cut.get("recommendedAction")
+                        or (
+                            "Remove this section or bridge it with a harder cut."
+                            if cut_type == "deadspace"
+                            else "Review this segment and remove it if it weakens the overall pace."
+                        )
+                    ),
+                )
+            )
+        return normalized
+
+    @staticmethod
+    def _closest_point(points: list[BrainResponsePoint], t: float) -> BrainResponsePoint | None:
+        if not points:
+            return None
+        return min(points, key=lambda point: abs(point.stimulusTimeSec - t))
+
+    @staticmethod
+    def _ranges_overlap(a: tuple[float, float], b: tuple[float, float]) -> bool:
+        return max(a[0], b[0]) < min(a[1], b[1])
 
     @staticmethod
     def _warnings(

@@ -29,8 +29,8 @@ export default function RunbookPage() {
               code={`npm run dev`}
             />
             <Step
-              title="Upload from the landing page"
-              code={`Choose sample-tribe.mp4 in the single or compare workbench.`}
+              title="Upload from the app dashboard"
+              code={`Open /app and choose sample-tribe.mp4 in the saved scan workbench.`}
             />
           </div>
         </section>

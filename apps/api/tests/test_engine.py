@@ -68,3 +68,11 @@ def test_engine_generates_heatmaps_markers_and_scores(test_context) -> None:
     assert payload.scores.viralPotential >= 0
     assert payload.summary.overallRecommendation
     assert any(marker.type in {"strong_hook", "deadspace_candidate"} for marker in payload.markers)
+    assert payload.actionBoard.keep
+    assert payload.actionBoard.fixNow
+    assert payload.timelineSegments
+    assert all(segment.recommendedAction for segment in payload.timelineSegments)
+    assert payload.cutPlan
+    assert any(cut.type == "deadspace" and cut.defaultSelected for cut in payload.cutPlan)
+    assert any(cut.type == "low_value" and not cut.defaultSelected for cut in payload.cutPlan)
+    assert all(cut.id for cut in payload.cutPlan)

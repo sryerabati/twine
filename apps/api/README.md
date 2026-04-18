@@ -142,6 +142,32 @@ npm run dev:web
 
 Open [http://localhost:3000](http://localhost:3000). The Next.js app rewrites `/api/*` and `/storage/*` to the backend port configured by `API_PORT`.
 
+## Enable Convex auth and saved scan history
+
+The Cortent app now expects Convex to handle:
+
+- email/password authentication
+- durable upload and scan records
+- saved cut selections
+- latest export metadata per scan
+
+Minimal setup:
+
+```bash
+npx convex dev
+```
+
+Then populate the shared `.env` values:
+
+```dotenv
+NEXT_PUBLIC_CONVEX_URL=https://<deployment>.convex.cloud
+CONVEX_SITE_URL=https://<deployment>.convex.site
+CONVEX_SERVICE_SECRET=your-shared-secret
+CONVEX_DEPLOYMENT=<deployment-name>
+```
+
+The frontend uses `NEXT_PUBLIC_CONVEX_URL` for client auth and scan queries. The FastAPI backend uses `CONVEX_SITE_URL` and `CONVEX_SERVICE_SECRET` to patch upload/scan status back into Convex after uploads, analysis, and exports.
+
 ## Key environment variables
 
 - `API_PORT` - backend port
@@ -154,6 +180,10 @@ Open [http://localhost:3000](http://localhost:3000). The Next.js app rewrites `/
 - `HUGGINGFACE_HUB_TOKEN` - required for real model download and analysis
 - `FFMPEG_BIN` - ffmpeg binary name or path
 - `FFPROBE_BIN` - ffprobe binary name or path
+- `NEXT_PUBLIC_CONVEX_URL` - Convex client URL for auth and app queries
+- `CONVEX_SITE_URL` - Convex `.site` URL for the FastAPI service bridge
+- `CONVEX_SERVICE_SECRET` - shared secret for FastAPI -> Convex service writes
+- `CONVEX_DEPLOYMENT` - deployment selector used by `npx convex dev`
 
 ## Verify the backend
 

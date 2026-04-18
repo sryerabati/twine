@@ -1,115 +1,156 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import type { FormEvent } from "react";
+import { useState } from "react";
 import { useAuthActions } from "@convex-dev/auth/react";
+import { LoaderCircle, LockKeyhole } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 
-/**
- * Email + password login/signup. Users toggle between "sign-in" and "sign-up"
- * locally; the server accepts both via the same Password provider.
- *
- * Google OAuth is commented out. To enable, uncomment the Google button below
- * and enable the Google provider in `convex/auth.ts`.
- */
 export function LoginPanel() {
   const { signIn } = useAuthActions();
   const [mode, setMode] = useState<"signIn" | "signUp">("signIn");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setPending(true);
     setError(null);
-    const formData = new FormData(event.currentTarget);
-    formData.set("flow", mode);
-    setSubmitting(true);
+    setMessage(null);
+
     try {
-      await signIn("password", formData);
-    } catch (err) {
-      const message =
-        err instanceof Error && err.message
-          ? err.message
-          : "Sign in failed. Double-check your email and password.";
-      setError(message);
+      const result = await signIn("password", {
+        flow: mode,
+        email: email.trim(),
+        password,
+        ...(mode === "signUp" && name.trim() ? { name: name.trim() } : {}),
+      });
+
+      if (!result.signingIn) {
+        setMessage("Verification started. Finish the auth flow to enter the app.");
+      }
+    } catch (authError) {
+      setError(authError instanceof Error ? authError.message : "Authentication failed.");
     } finally {
-      setSubmitting(false);
+      setPending(false);
     }
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col gap-6 rounded-xl border border-foreground/10 bg-background/40 p-8 shadow-sm">
-      <div>
-        <h1 className="text-2xl font-semibold">
-          {mode === "signIn" ? "Sign in" : "Create your account"}
-        </h1>
-        <p className="text-sm text-foreground/70">
-          {mode === "signIn"
-            ? "Enter your email and password to continue."
-            : "Use an email you can access — we tie your scans to this account."}
-        </p>
+    <div className="mx-auto flex w-full max-w-md flex-col gap-6 rounded-[2rem] border border-border/70 bg-white/95 p-8 shadow-[0_24px_80px_rgba(17,24,39,0.08)]">
+      <div className="space-y-3">
+        <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+          <LockKeyhole className="size-3.5" />
+          Secure creator workspace
+        </div>
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight">
+            {mode === "signIn" ? "Sign in to Cortent" : "Create your Cortent workspace"}
+          </h1>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            Email/password auth is powered by Convex. Your scan history, selected cuts, and exports
+            stay attached to your account.
+          </p>
+        </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-        <label className="flex flex-col gap-1 text-sm">
-          <span>Email</span>
-          <input
-            name="email"
-            type="email"
-            required
-            autoComplete="email"
-            className="rounded-md border border-foreground/15 bg-background px-3 py-2"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span>Password</span>
-          <input
-            name="password"
-            type="password"
-            required
-            minLength={8}
-            autoComplete={
-              mode === "signIn" ? "current-password" : "new-password"
-            }
-            className="rounded-md border border-foreground/15 bg-background px-3 py-2"
-          />
-        </label>
-        {error ? (
-          <p className="text-sm text-red-400" role="alert">
-            {error}
-          </p>
+      <div className="grid grid-cols-2 gap-2 rounded-[1.1rem] bg-muted/70 p-1">
+        <button
+          type="button"
+          className={cn(
+            "rounded-[0.9rem] px-4 py-2 text-sm font-medium transition-colors",
+            mode === "signIn"
+              ? "bg-white text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+          onClick={() => setMode("signIn")}
+        >
+          Sign in
+        </button>
+        <button
+          type="button"
+          className={cn(
+            "rounded-[0.9rem] px-4 py-2 text-sm font-medium transition-colors",
+            mode === "signUp"
+              ? "bg-white text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+          onClick={() => setMode("signUp")}
+        >
+          Create account
+        </button>
+      </div>
+
+      <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+        {mode === "signUp" ? (
+          <div className="space-y-2">
+            <Label htmlFor="name">Name</Label>
+            <Input
+              id="name"
+              autoComplete="name"
+              placeholder="Your creator name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </div>
         ) : null}
-        <Button type="submit" disabled={submitting}>
-          {submitting
-            ? "Working…"
-            : mode === "signIn"
-              ? "Sign in"
-              : "Create account"}
+
+        <div className="space-y-2">
+          <Label htmlFor="email">Email</Label>
+          <Input
+            id="email"
+            autoComplete="email"
+            placeholder="you@example.com"
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            required
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="password">Password</Label>
+          <Input
+            id="password"
+            autoComplete={mode === "signIn" ? "current-password" : "new-password"}
+            placeholder="Minimum 8 characters"
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+          />
+        </div>
+
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
+
+        <Button type="submit" disabled={pending}>
+          {pending ? (
+            <>
+              <LoaderCircle data-icon="inline-start" className="animate-spin" />
+              {mode === "signIn" ? "Signing in" : "Creating account"}
+            </>
+          ) : (
+            <>{mode === "signIn" ? "Enter workspace" : "Create workspace"}</>
+          )}
         </Button>
       </form>
 
-      {/*
-        To enable Google OAuth:
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => signIn("google")}
-        >
-          Continue with Google
-        </Button>
-      */}
-
-      <button
-        type="button"
-        className="text-xs text-foreground/60 underline-offset-2 hover:underline"
-        onClick={() =>
-          setMode((current) => (current === "signIn" ? "signUp" : "signIn"))
-        }
-      >
-        {mode === "signIn"
-          ? "Need an account? Sign up"
-          : "Already have an account? Sign in"}
-      </button>
+      <div className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4 text-sm text-muted-foreground">
+        <p className="font-medium text-foreground">What happens after login</p>
+        <p className="mt-1 leading-6">
+          Uploads create durable scan records in Convex before the FastAPI worker starts analysis,
+          so completed clips stay in your library even after local scratch storage is cleaned up.
+        </p>
+      </div>
     </div>
   );
 }

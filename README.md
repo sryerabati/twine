@@ -1,10 +1,10 @@
-# TRIBE v2 Creator Analyzer
+# Content Analysis Lab
 
-Hackathon MVP for uploading one or two short-form videos, running real TRIBE v2 inference locally, and converting the raw cortical prediction output into a creator-oriented timeline workspace.
+Hackathon MVP for uploading one or two short-form videos, running either a local TRIBE workflow or a temporary remote content-analysis backend, and turning the result into a creator-oriented timeline workspace.
 
 ## What this app does
 
-- Upload a short MP4 and run TRIBE v2 locally through the official `TribeModel.from_pretrained(...)`, `get_events_dataframe(...)`, and `predict(...)` flow.
+- Upload a short MP4 and run full-video content analysis through the configured backend.
 - Convert raw fsaverage5 vertex predictions into:
   - global activation
   - left/right hemisphere summaries
@@ -17,12 +17,22 @@ Hackathon MVP for uploading one or two short-form videos, running real TRIBE v2 
   - compare-mode winner summaries
   - a clearly labeled viral potential estimate
 
+## Backend modes
+
+- `ANALYSIS_BACKEND=tribe`
+  - uses the official TRIBE path locally through `TribeModel.from_pretrained(...)`, `get_events_dataframe(...)`, and `predict(...)`
+  - requires `HUGGINGFACE_HUB_TOKEN` plus gated Hugging Face access
+- `ANALYSIS_BACKEND=gemini`
+  - sends the full uploaded MP4 to Gemini Files API and normalizes the structured response into the same analysis contract
+  - requires `GEMINI_API_KEY` in the repo-root `.env`
+  - is a temporary content-analysis fallback, not cortical prediction
+
 ## What is direct model output vs app heuristic
 
-- Direct TRIBE output:
+- Direct TRIBE output when `ANALYSIS_BACKEND=tribe`:
   - per-segment cortical response predictions on the average-subject fsaverage5 mesh
   - segment/event timing derived by the official TRIBE pipeline
-- App-side heuristics:
+- App-side heuristics in both modes:
   - marker labels such as `strong_hook`, `attention_drop`, and `deadspace_candidate`
   - deadspace cut ranges
   - score panels
@@ -33,6 +43,7 @@ Hackathon MVP for uploading one or two short-form videos, running real TRIBE v2 
 
 - This is a non-commercial demo and must be treated as such under TRIBE v2's CC BY-NC 4.0 license.
 - The app visualizes predicted average-subject brain-response signals and derived heuristics.
+- In fallback mode it presents a temporary content-analysis proxy, not real cortical prediction.
 - It is not a medical device.
 - It is not mind reading.
 - It does not claim that TRIBE v2 directly predicts virality.
@@ -97,13 +108,24 @@ uv sync --python 3.11
 cd ../..
 ```
 
-### 2. Put your Hugging Face token in `.env`
+### 2. Configure the backend you want in `.env`
+
+TRIBE mode:
 
 ```dotenv
+ANALYSIS_BACKEND=tribe
 HUGGINGFACE_HUB_TOKEN=hf_your_token_here
 ```
 
-The launcher and backend read `HUGGINGFACE_HUB_TOKEN` from `.env` or the active environment only. There is no CLI flag for the token.
+Gemini fallback mode:
+
+```dotenv
+ANALYSIS_BACKEND=gemini
+GEMINI_API_KEY=your_google_ai_studio_key_here
+GEMINI_MODEL=gemini-2.5-pro
+```
+
+Put `GEMINI_API_KEY` in the repo-root `.env`. Do not put it only in `.env.example`.
 
 ### 3. Probe the runtime and download the model
 
@@ -201,7 +223,10 @@ This runs one MP4 through the same upload, thumbnail, analysis, artifact, and sc
 - `TRIBE_RESULTS_DIR` – analysis artifact directory
 - `TRIBE_CACHE_DIR` – TRIBE cache directory
 - `TRIBE_ALLOWED_ORIGIN` – CORS origin for the frontend
+- `ANALYSIS_BACKEND` – `tribe` or `gemini`
 - `TRIBE_DEVICE` – `auto`, `cpu`, `cuda`, or optional manual `mps`
+- `GEMINI_API_KEY` – required for the Gemini content-analysis fallback
+- `GEMINI_MODEL` – defaults to `gemini-2.5-pro`
 - `TRIBE_MAX_VIDEO_SECONDS` – upload duration cap for the MVP
 - `HUGGINGFACE_HUB_TOKEN` – required for real TRIBE model access
 

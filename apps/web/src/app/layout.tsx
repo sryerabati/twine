@@ -1,9 +1,17 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
+import { IBM_Plex_Mono, Manrope, Sora } from "next/font/google";
+
+import { ConvexClientProvider } from "@/app/ConvexClientProvider";
+
 import "./globals.css";
 
-const headingFont = Space_Grotesk({
+const headingFont = Sora({
   variable: "--font-heading-display",
+  subsets: ["latin"],
+});
+
+const bodyFont = Manrope({
+  variable: "--font-manrope",
   subsets: ["latin"],
 });
 
@@ -14,9 +22,9 @@ const monoFont = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TRIBE v2 Creator Analyzer",
+  title: "Cortent",
   description:
-    "Upload one or two short-form videos, simulate predicted brain response over time, and get editing suggestions before posting.",
+    "Cortent is a clean creator SaaS with a brain-style scan viewer, structured action board, saved scan history, and deadspace-first export workflow.",
 };
 
 export default function RootLayout({
@@ -27,10 +35,10 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${headingFont.variable} ${monoFont.variable} dark h-full antialiased`}
+      className={`${headingFont.variable} ${bodyFont.variable} ${monoFont.variable} h-full antialiased`}
     >
       <body className="min-h-full bg-background text-foreground flex flex-col">
-        {children}
+        <ConvexClientProvider>{children}</ConvexClientProvider>
       </body>
     </html>
   );

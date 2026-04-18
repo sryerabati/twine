@@ -21,7 +21,31 @@ import { Password } from "@convex-dev/auth/providers/Password";
 
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [
-    Password,
+    Password({
+      profile(params) {
+        const email = String(params.email ?? "")
+          .trim()
+          .toLowerCase();
+        if (!email) {
+          throw new Error("Email is required.");
+        }
+        const explicitName = typeof params.name === "string" ? params.name.trim() : "";
+        const fallbackName = email
+          .split("@")[0]
+          .replace(/[._-]+/g, " ")
+          .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+        return {
+          email,
+          name: explicitName || fallbackName,
+        };
+      },
+      validatePasswordRequirements(password) {
+        if (!password || password.length < 8) {
+          throw new Error("Password must be at least 8 characters long.");
+        }
+      },
+    }),
     // Google,
   ],
 });

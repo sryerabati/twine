@@ -27,9 +27,10 @@ for site_packages in (POSIX_SITE_PACKAGES, WINDOWS_SITE_PACKAGES):
 
 from app.core.config import get_settings
 from app.core.context import APIContext
-from app.main import create_app
+from app.main import build_context, create_app
 from app.models.contracts import UploadResponse
 from app.services.analysis_engine import AnalysisEngine
+from app.services.gemini_runner import GeminiIntegrationError
 from app.services.jobs import AnalysisJobService
 from app.services.media import MediaInspectionError, MediaService
 from app.services.storage import StorageService
@@ -44,12 +45,14 @@ class RunnerScriptError(RuntimeError):
 class ScriptProbe:
     ok: bool
     osName: str
+    analysisBackend: str
     pythonVersion: str
     pythonValid: bool
     tribev2Installed: bool
     ffmpegAvailable: bool
     ffprobeAvailable: bool
     huggingFaceTokenPresent: bool
+    geminiApiKeyPresent: bool
     selectedDevice: str
     modelStatus: str
     modelRepo: str
@@ -61,20 +64,7 @@ class ScriptProbe:
 
 
 def get_runtime_context() -> APIContext:
-    settings = get_settings()
-    storage = StorageService(settings)
-    media = MediaService(settings)
-    runner = TribeRunner(settings)
-    engine = AnalysisEngine(storage, media)
-    jobs = AnalysisJobService(storage, runner, engine)
-    return APIContext(
-        settings=settings,
-        storage=storage,
-        media=media,
-        runner=runner,
-        engine=engine,
-        jobs=jobs,
-    )
+    return build_context(get_settings())
 
 
 def probe_runtime(context: APIContext, os_name: str) -> ScriptProbe:
@@ -87,29 +77,36 @@ def probe_runtime(context: APIContext, os_name: str) -> ScriptProbe:
     ffmpeg_available = shutil.which(settings.ffmpeg_bin) is not None
     ffprobe_available = shutil.which(settings.ffprobe_bin) is not None
     token_present = bool(settings.huggingface_hub_token)
+    gemini_key_present = bool(settings.gemini_api_key)
 
     if not python_valid:
         blockers.append(
             f"Python 3.11 is required. Current interpreter is {python_version}."
         )
-    if not runner_probe.installed:
+    if settings.analysis_backend == "tribe" and not runner_probe.installed:
         blockers.append("The tribev2 package is not installed in the API environment.")
     if not ffmpeg_available:
         blockers.append("ffmpeg is not installed or not on PATH.")
     if not ffprobe_available:
         blockers.append("ffprobe is not installed or not on PATH.")
-    if not token_present:
+    if settings.analysis_backend == "tribe" and not token_present:
         blockers.append(
             "HUGGINGFACE_HUB_TOKEN is not set. Real TRIBE analysis and downloads require valid Hugging Face access."
         )
+    if settings.analysis_backend == "gemini" and not gemini_key_present:
+        blockers.append(
+            "GEMINI_API_KEY is not set. Content analysis cannot call the configured remote backend."
+        )
     if runner_probe.modelError:
         blockers.append(f"Model error: {runner_probe.modelError}")
-    if settings.tribe_device == "auto":
+    if settings.analysis_backend == "tribe" and settings.tribe_device == "auto":
         notes.append(
             "Device selection is automatic and defaults to CUDA when available, otherwise CPU."
         )
-    else:
+    elif settings.analysis_backend == "tribe":
         notes.append(f"TRIBE_DEVICE is pinned to {settings.tribe_device}.")
+    else:
+        notes.append("Content analysis runs against the configured remote backend.")
     if platform.machine().lower() == "arm64":
         notes.append("Apple Silicon is supported as a baseline, but inference may be slow.")
     if os_name == "windows":
@@ -118,12 +115,14 @@ def probe_runtime(context: APIContext, os_name: str) -> ScriptProbe:
     return ScriptProbe(
         ok=not blockers,
         osName=os_name,
+        analysisBackend=settings.analysis_backend,
         pythonVersion=python_version,
         pythonValid=python_valid,
         tribev2Installed=runner_probe.installed,
         ffmpegAvailable=ffmpeg_available,
         ffprobeAvailable=ffprobe_available,
         huggingFaceTokenPresent=token_present,
+        geminiApiKeyPresent=gemini_key_present,
         selectedDevice=runner_probe.selectedDevice,
         modelStatus=runner_probe.modelStatus,
         modelRepo=runner_probe.modelRepo,
@@ -137,6 +136,10 @@ def probe_runtime(context: APIContext, os_name: str) -> ScriptProbe:
 
 def command_download(context: APIContext, os_name: str) -> dict[str, Any]:
     probe = probe_runtime(context, os_name)
+    if context.settings.analysis_backend == "gemini":
+        raise RunnerScriptError(
+            "download is only available for the local TRIBE backend. For remote content analysis, set GEMINI_API_KEY and use `serve`."
+        )
     if not probe.huggingFaceTokenPresent:
         raise RunnerScriptError(
             "HUGGINGFACE_HUB_TOKEN is required for download. Add it to .env or the shell environment and rerun."
@@ -224,7 +227,7 @@ def command_analyze(context: APIContext, os_name: str, video_path: Path) -> dict
 
     analysis_paths = storage.create_analysis_paths()
     storage.init_analysis_record(analysis_paths.analysis_id)
-    AnalysisJobService(storage, runner, engine).run_now(
+    AnalysisJobService(storage, runner, engine, context.convex_sync).run_now(
         analysis_paths.analysis_id,
         upload_paths.upload_id,
     )
@@ -247,6 +250,7 @@ def command_analyze(context: APIContext, os_name: str, video_path: Path) -> dict
             "recordPath": str(analysis_paths.record_path),
             "payloadPath": str(analysis_paths.payload_path),
             "predictionsPath": str(analysis_paths.preds_path),
+            "providerRawPath": str(analysis_paths.provider_raw_path),
             "eventsPath": str(analysis_paths.events_path),
             "segmentsPath": str(analysis_paths.segments_path),
             "cutsPath": str(analysis_paths.cuts_path),
@@ -299,7 +303,13 @@ def main(os_name: str) -> int:
             emit_json(command_analyze(context, os_name, args.video))
             return 0
         raise RunnerScriptError(f"Unsupported command: {args.command}")
-    except (RunnerScriptError, TribeIntegrationError, RuntimeError, FileNotFoundError) as exc:
+    except (
+        GeminiIntegrationError,
+        RunnerScriptError,
+        TribeIntegrationError,
+        RuntimeError,
+        FileNotFoundError,
+    ) as exc:
         emit_json(
             {
                 "status": "error",

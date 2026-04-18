@@ -123,6 +123,7 @@ http.route({
         retentionEstimate?: number;
         deadspaceSeconds?: number;
         trimmedDurationSec?: number;
+        overallRecommendation?: string;
       }>(request);
       if (!body.scanId) {
         return new Response("scanId is required.", { status: 400 });
@@ -135,6 +136,7 @@ http.route({
         retentionEstimate: body.retentionEstimate,
         deadspaceSeconds: body.deadspaceSeconds,
         trimmedDurationSec: body.trimmedDurationSec,
+        overallRecommendation: body.overallRecommendation,
       });
       return new Response(null, { status: 204 });
     } catch (err) {

@@ -17,6 +17,7 @@ MarkerType = Literal[
     "audio_energy_drop",
 ]
 ConfidenceBand = Literal["low", "medium", "high"]
+CutType = Literal["deadspace", "low_value"]
 
 
 class VideoAsset(BaseModel):
@@ -37,6 +38,7 @@ class UploadResponse(BaseModel):
 
 class AnalyzeRequest(BaseModel):
     uploadId: str
+    convexScanId: str | None = None
 
 
 class HemisphereHeatmap(BaseModel):
@@ -84,9 +86,41 @@ class Marker(BaseModel):
 
 
 class DeadspaceCut(BaseModel):
+    id: str
+    type: CutType = "deadspace"
     start: float
     end: float
     reason: str
+    defaultSelected: bool = True
+    recommendedAction: str = "Remove this section or bridge it with a harder cut."
+
+
+class ActionBoard(BaseModel):
+    keep: list[str] = Field(default_factory=list)
+    fixNow: list[str] = Field(default_factory=list)
+    testNext: list[str] = Field(default_factory=list)
+    exportPlan: list[str] = Field(default_factory=list)
+
+
+class TimelineSegment(BaseModel):
+    id: str
+    type: MarkerType | CutType
+    label: str
+    start: float
+    end: float
+    severity: MarkerSeverity
+    reason: str
+    recommendedAction: str
+    cutId: str | None = None
+
+
+class ExportArtifact(BaseModel):
+    exportId: str
+    createdAt: datetime
+    trimmedVideoUrl: str
+    selectedCutIds: list[str]
+    removedSeconds: float
+    trimmedDurationSec: float
 
 
 class ScoreSet(BaseModel):
@@ -106,7 +140,8 @@ class AnalysisSummary(BaseModel):
 
 
 class ArtifactLinks(BaseModel):
-    rawPredictionsUrl: str
+    rawPredictionsUrl: str | None = None
+    providerRawJsonUrl: str | None = None
     processedJsonUrl: str
     cutListJsonUrl: str
     eventsCsvUrl: str
@@ -130,7 +165,12 @@ class AnalysisPayload(BaseModel):
     video: VideoAsset
     brainResponse: BrainResponsePayload
     markers: list[Marker]
-    deadspaceCuts: list[DeadspaceCut]
+    deadspaceCuts: list[DeadspaceCut] = Field(default_factory=list)
+    lowValueCuts: list[DeadspaceCut] = Field(default_factory=list)
+    cutPlan: list[DeadspaceCut] = Field(default_factory=list)
+    actionBoard: ActionBoard = Field(default_factory=ActionBoard)
+    timelineSegments: list[TimelineSegment] = Field(default_factory=list)
+    exports: list[ExportArtifact] = Field(default_factory=list)
     scores: ScoreSet
     summary: AnalysisSummary
     artifacts: ArtifactLinks
@@ -148,10 +188,12 @@ class AnalysisResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     ok: bool
+    analysisBackend: Literal["tribe", "gemini"]
     pythonVersion: str
     ffmpegAvailable: bool
     ffprobeAvailable: bool
     huggingFaceTokenPresent: bool
+    geminiApiKeyPresent: bool
     selectedDevice: str
     modelStatus: Literal["unloaded", "loaded", "error"]
     modelRepo: str
@@ -169,6 +211,7 @@ class TrimRequest(BaseModel):
     """Request to trim a video using a subset of detected deadspace cuts."""
 
     cutIndices: list[int] | None = None
+    cutIds: list[str] | None = None
 
 
 class TrimResponse(BaseModel):

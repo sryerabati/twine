@@ -8,6 +8,8 @@ from app.core.config import get_settings
 from app.core.context import APIContext
 from app.routers.api import router
 from app.services.analysis_engine import AnalysisEngine
+from app.services.convex_sync import ConvexSyncService
+from app.services.gemini_runner import GeminiRunner
 from app.services.jobs import AnalysisJobService
 from app.services.media import MediaService
 from app.services.storage import StorageService
@@ -18,9 +20,14 @@ def build_context(settings=None) -> APIContext:
     resolved_settings = settings or get_settings()
     storage = StorageService(resolved_settings)
     media = MediaService(resolved_settings)
-    runner = TribeRunner(resolved_settings)
+    runner = (
+        GeminiRunner(resolved_settings)
+        if resolved_settings.analysis_backend == "gemini"
+        else TribeRunner(resolved_settings)
+    )
     engine = AnalysisEngine(storage, media)
-    jobs = AnalysisJobService(storage, runner, engine)
+    convex_sync = ConvexSyncService(resolved_settings)
+    jobs = AnalysisJobService(storage, runner, engine, convex_sync)
     return APIContext(
         settings=resolved_settings,
         storage=storage,
@@ -28,12 +35,13 @@ def build_context(settings=None) -> APIContext:
         runner=runner,
         engine=engine,
         jobs=jobs,
+        convex_sync=convex_sync,
     )
 
 
 def create_app(context: APIContext | None = None) -> FastAPI:
     resolved_context = context or build_context()
-    app = FastAPI(title="TRIBE Creator Analyzer API", version="0.1.0")
+    app = FastAPI(title="Content Analysis API", version="0.1.0")
     app.state.context = resolved_context
     app.add_middleware(
         CORSMiddleware,

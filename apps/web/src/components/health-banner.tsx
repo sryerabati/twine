@@ -12,6 +12,12 @@ export function HealthBanner({ health }: { health: HealthResponse | null }) {
   }
 
   const degraded = !health.ok || health.modelStatus === "error";
+  const backendLabel =
+    health.analysisBackend === "gemini" ? "remote content backend" : "local model backend";
+  const credentialReady =
+    health.analysisBackend === "gemini"
+      ? health.geminiApiKeyPresent
+      : health.huggingFaceTokenPresent;
 
   return (
     <Alert
@@ -26,10 +32,9 @@ export function HealthBanner({ health }: { health: HealthResponse | null }) {
         <div className="flex flex-wrap gap-2">
           <Badge variant="secondary">Python {health.pythonVersion}</Badge>
           <Badge variant="secondary">Device {health.selectedDevice}</Badge>
+          <Badge variant="secondary">{backendLabel}</Badge>
           <Badge variant="secondary">Model {health.modelStatus}</Badge>
-          <Badge variant="secondary">
-            HF token {health.huggingFaceTokenPresent ? "present" : "missing"}
-          </Badge>
+          <Badge variant="secondary">Access {credentialReady ? "ready" : "missing"}</Badge>
         </div>
         {health.blockers.length ? (
           <ul className="flex flex-col gap-1 text-sm text-muted-foreground">
@@ -42,8 +47,8 @@ export function HealthBanner({ health }: { health: HealthResponse | null }) {
           </ul>
         ) : (
           <p className="text-sm text-muted-foreground">
-            The app can accept uploads immediately. Real TRIBE execution still depends on the local
-            Python environment and Hugging Face access.
+            The app can accept uploads immediately. Full content analysis still depends on the
+            selected backend and local media tooling staying available.
           </p>
         )}
       </AlertDescription>

@@ -60,7 +60,49 @@ describe("CompareView", () => {
           ],
         },
         markers: [],
-        deadspaceCuts: [],
+        deadspaceCuts: [
+          {
+            id: "deadspace-1",
+            type: "deadspace",
+            start: 1,
+            end: 2,
+            reason: "Low-energy beat.",
+            defaultSelected: true,
+            recommendedAction: "Trim the deadspace.",
+          },
+        ],
+        lowValueCuts: [],
+        cutPlan: [
+          {
+            id: "deadspace-1",
+            type: "deadspace",
+            start: 1,
+            end: 2,
+            reason: "Low-energy beat.",
+            defaultSelected: true,
+            recommendedAction: "Trim the deadspace.",
+          },
+        ],
+        actionBoard: {
+          keep: [],
+          fixNow: ["Trim the deadspace."],
+          testNext: [],
+          exportPlan: ["Ship the default deadspace trim."],
+        },
+        timelineSegments: [
+          {
+            id: "segment-1",
+            type: "deadspace",
+            label: "Deadspace cut",
+            start: 1,
+            end: 2,
+            severity: "medium",
+            reason: "Low-energy beat.",
+            recommendedAction: "Trim the deadspace.",
+            cutId: "deadspace-1",
+          },
+        ],
+        exports: [],
         scores: {
           hookScore: 80,
           pacingScore: 70,
@@ -76,19 +118,22 @@ describe("CompareView", () => {
           overallRecommendation: "Keep it.",
         },
         artifacts: {
-          rawPredictionsUrl: "/storage/a.npy",
+          rawPredictionsUrl: null,
+          providerRawJsonUrl: "/storage/a-provider.json",
           processedJsonUrl: "/storage/a.json",
           cutListJsonUrl: "/storage/a-cuts.json",
           eventsCsvUrl: "/storage/a-events.csv",
           segmentsJsonUrl: "/storage/a-segments.json",
+          trimmedVideoUrl: null,
         },
         diagnostics: {
-          device: "cpu",
+          device: "remote",
           modelRepo: "facebook/tribev2",
           modelCommit: "72399081ed3f1040c4d996cefb2864a4c46f5b8e",
           transcriptWordCount: 1,
           sceneChangeCount: 1,
           deadspaceSeconds: 0,
+          trimmedDurationSec: null,
           warnings: [],
         },
       },
@@ -114,6 +159,7 @@ describe("CompareView", () => {
     render(<CompareView analysisIdA="analysis-a" analysisIdB="analysis-b" />);
 
     await waitFor(() => {
+      expect(screen.getByText(/Content Compare/i)).toBeInTheDocument();
       expect(screen.getByText(/Winner: Version A/i)).toBeInTheDocument();
       expect(screen.getByText(/Opening/i)).toBeInTheDocument();
       expect(screen.getByText(/Use A as the base cut/i)).toBeInTheDocument();

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import platform
 import shutil
+from datetime import UTC, datetime
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 
 from app.core.context import APIContext
 from app.models.contracts import (
@@ -11,6 +13,7 @@ from app.models.contracts import (
     AnalysisResponse,
     CompareRequest,
     CompareResponse,
+    ExportArtifact,
     HealthResponse,
     TrimRequest,
     TrimResponse,
@@ -30,6 +33,7 @@ def get_context(request: Request) -> APIContext:
 def health(context: APIContext = Depends(get_context)) -> HealthResponse:
     settings = context.settings
     runner = context.runner
+    analysis_backend = settings.analysis_backend
     blockers = []
     notes = []
     ffmpeg_available = shutil.which(settings.ffmpeg_bin) is not None
@@ -38,30 +42,40 @@ def health(context: APIContext = Depends(get_context)) -> HealthResponse:
         blockers.append("ffmpeg is not installed or not on PATH.")
     if not ffprobe_available:
         blockers.append("ffprobe is not installed or not on PATH.")
-    if not settings.huggingface_hub_token:
-        blockers.append(
-            "HUGGINGFACE_HUB_TOKEN is not set. Real TRIBE analysis will fail without valid Hugging Face access."
-        )
-    if not runner.has_install():
-        blockers.append(
-            "The tribev2 package is not installed in the API environment."
-        )
+    if analysis_backend == "tribe":
+        if not settings.huggingface_hub_token:
+            blockers.append(
+                "HUGGINGFACE_HUB_TOKEN is not set. Real TRIBE analysis will fail without valid Hugging Face access."
+            )
+        if not runner.has_install():
+            blockers.append(
+                "The tribev2 package is not installed in the API environment."
+            )
+    else:
+        if not settings.gemini_api_key:
+            blockers.append(
+                "GEMINI_API_KEY is not set. Content analysis cannot call the configured remote backend."
+            )
     if runner.model_error():
         blockers.append(f"Model error: {runner.model_error()}")
-    if settings.tribe_device == "auto":
+    if analysis_backend == "tribe" and settings.tribe_device == "auto":
         notes.append(
             "Device selection is automatic and defaults to CUDA when available, otherwise CPU."
         )
-    else:
+    elif analysis_backend == "tribe":
         notes.append(f"TRIBE_DEVICE is pinned to {settings.tribe_device}.")
+    else:
+        notes.append("Content analysis runs against the configured remote backend.")
     if platform.machine().lower() == "arm64":
         notes.append("Apple Silicon is supported as a baseline, but CPU inference may be slow.")
     return HealthResponse(
         ok=not blockers,
+        analysisBackend=analysis_backend,
         pythonVersion=platform.python_version(),
         ffmpegAvailable=ffmpeg_available,
         ffprobeAvailable=ffprobe_available,
         huggingFaceTokenPresent=bool(settings.huggingface_hub_token),
+        geminiApiKeyPresent=bool(settings.gemini_api_key),
         selectedDevice=runner.selected_device(),
         modelStatus=runner.model_status(),
         modelRepo=runner.MODEL_REPO if hasattr(runner, "MODEL_REPO") else "facebook/tribev2",
@@ -74,6 +88,7 @@ def health(context: APIContext = Depends(get_context)) -> HealthResponse:
 @router.post("/upload", response_model=UploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_video(
     file: UploadFile = File(...),
+    convexUploadId: str | None = Form(default=None),
     context: APIContext = Depends(get_context),
 ) -> UploadResponse:
     if not file.filename or not file.filename.lower().endswith(".mp4"):
@@ -110,6 +125,11 @@ async def upload_video(
     )
     response = UploadResponse(uploadId=paths.upload_id, video=video)
     storage.write_upload_metadata(response)
+    context.convex_sync.attach_upload_local_id(
+        convex_upload_id=convexUploadId,
+        local_upload_id=paths.upload_id,
+        duration_sec=metadata.duration_sec,
+    )
     return response
 
 
@@ -126,7 +146,12 @@ def analyze_video(
         raise HTTPException(status_code=404, detail="Upload not found.") from exc
     paths = storage.create_analysis_paths()
     record = storage.init_analysis_record(paths.analysis_id)
-    jobs.enqueue(paths.analysis_id, request.uploadId)
+    context.convex_sync.update_scan_status(
+        convex_scan_id=request.convexScanId,
+        status="queued",
+        local_analysis_id=paths.analysis_id,
+    )
+    jobs.enqueue(paths.analysis_id, request.uploadId, request.convexScanId)
     return record
 
 
@@ -207,15 +232,35 @@ def trim_analysis(
         raise HTTPException(status_code=404, detail="Analysis payload missing.") from exc
 
     all_cuts = payload.deadspaceCuts
+    all_cuts = payload.cutPlan or payload.deadspaceCuts
     if not all_cuts:
         raise HTTPException(
             status_code=409,
             detail="This analysis has no deadspace cuts to apply.",
         )
 
-    # Bounds-check cut indices. Default: apply every detected cut.
-    if request.cutIndices is None:
-        selected_cuts = list(all_cuts)
+    # Bounds-check cut indices. Default: apply every default-selected cut.
+    if request.cutIds is not None:
+        selected_cuts = []
+        seen_ids: set[str] = set()
+        cuts_by_id = {cut.id: cut for cut in all_cuts}
+        for cut_id in request.cutIds:
+            cut = cuts_by_id.get(cut_id)
+            if cut is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid cut id {cut_id}.",
+                )
+            if cut_id in seen_ids:
+                continue
+            seen_ids.add(cut_id)
+            selected_cuts.append(cut)
+        if not selected_cuts:
+            raise HTTPException(status_code=400, detail="At least one cut must be selected.")
+    elif request.cutIndices is None:
+        selected_cuts = [cut for cut in all_cuts if cut.defaultSelected]
+        if not selected_cuts:
+            selected_cuts = list(all_cuts)
     else:
         selected_cuts = []
         seen: set[int] = set()
@@ -259,8 +304,23 @@ def trim_analysis(
     updated_diagnostics = payload.diagnostics.model_copy(
         update={"trimmedDurationSec": round(new_duration, 2)}
     )
+    updated_exports = [
+        *payload.exports,
+        ExportArtifact(
+            exportId=uuid4().hex,
+            createdAt=datetime.now(UTC),
+            trimmedVideoUrl=storage.to_storage_url(analysis_paths.trimmed_video_path),
+            selectedCutIds=[cut.id for cut in selected_cuts],
+            removedSeconds=round(payload.video.durationSec - new_duration, 2),
+            trimmedDurationSec=round(new_duration, 2),
+        ),
+    ]
     updated_payload = payload.model_copy(
-        update={"artifacts": updated_artifacts, "diagnostics": updated_diagnostics}
+        update={
+            "artifacts": updated_artifacts,
+            "diagnostics": updated_diagnostics,
+            "exports": updated_exports,
+        }
     )
     storage.write_analysis_payload(analysis_id, updated_payload)
     # Also refresh the record so GET /api/analysis/{id} returns the updated

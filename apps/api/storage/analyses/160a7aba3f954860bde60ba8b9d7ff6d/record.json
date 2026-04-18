@@ -1,0 +1,8 @@
+{
+  "analysisId": "160a7aba3f954860bde60ba8b9d7ff6d",
+  "status": "failed",
+  "createdAt": "2026-04-18T09:40:06.774936Z",
+  "updatedAt": "2026-04-18T09:40:06.962200Z",
+  "error": "Content analysis backend request failed: Client error '400 Bad Request' for url 'https://generativelanguage.googleapis.com/upload/v1beta/files?key=your_google_ai_studio_key_here'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400",
+  "payload": null
+}

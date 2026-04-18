@@ -22,6 +22,8 @@
     "concurrently": "^9.1.2"
   },
   "dependencies": {
+    "@convex-dev/auth": "^0.0.91",
+    "convex": "^1.35.1",
     "huggingface-cli": "^0.0.1-security"
   }
 }

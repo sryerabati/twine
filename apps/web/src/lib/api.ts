@@ -2,6 +2,7 @@ import type {
   AnalysisResponse,
   CompareResponse,
   HealthResponse,
+  TrimResponse,
   UploadResponse,
 } from "@/lib/contracts";
 
@@ -20,28 +21,50 @@ export async function fetchHealth(): Promise<HealthResponse> {
   return request<HealthResponse>("/api/health", { cache: "no-store" });
 }
 
-export async function uploadVideo(file: File): Promise<UploadResponse> {
+export async function uploadVideo(
+  file: File,
+  convexUploadId?: string,
+): Promise<UploadResponse> {
   const formData = new FormData();
   formData.append("file", file);
+  if (convexUploadId) {
+    formData.append("convexUploadId", convexUploadId);
+  }
   return request<UploadResponse>("/api/upload", {
     method: "POST",
     body: formData,
   });
 }
 
-export async function startAnalysis(uploadId: string): Promise<AnalysisResponse> {
+export async function startAnalysis(
+  uploadId: string,
+  convexScanId?: string,
+): Promise<AnalysisResponse> {
   return request<AnalysisResponse>("/api/analyze", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ uploadId }),
+    body: JSON.stringify({ uploadId, convexScanId }),
   });
 }
 
 export async function fetchAnalysis(analysisId: string): Promise<AnalysisResponse> {
   return request<AnalysisResponse>(`/api/analysis/${analysisId}`, {
     cache: "no-store",
+  });
+}
+
+export async function trimAnalysis(
+  analysisId: string,
+  cutIds?: string[],
+): Promise<TrimResponse> {
+  return request<TrimResponse>(`/api/analysis/${analysisId}/trim`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ cutIds }),
   });
 }
 

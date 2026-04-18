@@ -1,10 +1,11 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AnalysisView } from "@/components/analysis-view";
 
 vi.mock("@/lib/api", () => ({
   fetchAnalysis: vi.fn(),
+  trimAnalysis: vi.fn(),
 }));
 
 describe("AnalysisView", () => {
@@ -81,7 +82,68 @@ describe("AnalysisView", () => {
               suggestion: "Keep it.",
             },
           ],
-          deadspaceCuts: [],
+          deadspaceCuts: [
+            {
+              id: "deadspace-1",
+              type: "deadspace",
+              start: 2,
+              end: 3,
+              reason: "Quiet stretch.",
+              defaultSelected: true,
+              recommendedAction: "Cut the deadspace.",
+            },
+          ],
+          lowValueCuts: [
+            {
+              id: "low-value-1",
+              type: "low_value",
+              start: 5,
+              end: 6,
+              reason: "Low-value setup.",
+              defaultSelected: false,
+              recommendedAction: "Optionally cut this setup beat.",
+            },
+          ],
+          cutPlan: [
+            {
+              id: "deadspace-1",
+              type: "deadspace",
+              start: 2,
+              end: 3,
+              reason: "Quiet stretch.",
+              defaultSelected: true,
+              recommendedAction: "Cut the deadspace.",
+            },
+            {
+              id: "low-value-1",
+              type: "low_value",
+              start: 5,
+              end: 6,
+              reason: "Low-value setup.",
+              defaultSelected: false,
+              recommendedAction: "Optionally cut this setup beat.",
+            },
+          ],
+          actionBoard: {
+            keep: ["Strong open"],
+            fixNow: ["Trim the deadspace"],
+            testNext: ["Test a tighter title"],
+            exportPlan: ["Default export keeps deadspace cuts selected."],
+          },
+          timelineSegments: [
+            {
+              id: "segment-deadspace-1",
+              type: "deadspace",
+              label: "Deadspace cut",
+              start: 2,
+              end: 3,
+              severity: "high",
+              reason: "Quiet stretch.",
+              recommendedAction: "Cut the deadspace.",
+              cutId: "deadspace-1",
+            },
+          ],
+          exports: [],
           scores: {
             hookScore: 81,
             pacingScore: 70,
@@ -97,19 +159,22 @@ describe("AnalysisView", () => {
             overallRecommendation: "Keep the opening spike.",
           },
           artifacts: {
-            rawPredictionsUrl: "/storage/a.npy",
+            rawPredictionsUrl: null,
+            providerRawJsonUrl: "/storage/provider.json",
             processedJsonUrl: "/storage/a.json",
             cutListJsonUrl: "/storage/cuts.json",
             eventsCsvUrl: "/storage/events.csv",
             segmentsJsonUrl: "/storage/segments.json",
+            trimmedVideoUrl: null,
           },
           diagnostics: {
-            device: "cpu",
+            device: "remote",
             modelRepo: "facebook/tribev2",
             modelCommit: "72399081ed3f1040c4d996cefb2864a4c46f5b8e",
             transcriptWordCount: 12,
             sceneChangeCount: 2,
             deadspaceSeconds: 0,
+            trimmedDurationSec: null,
             warnings: [],
           },
         },
@@ -118,11 +183,20 @@ describe("AnalysisView", () => {
     render(<AnalysisView analysisId="analysis-1" pollIntervalMs={5} />);
 
     expect(await screen.findByText(/Processing analysis/i)).toBeInTheDocument();
-    expect(await screen.findByText(/Activation timeline/i)).toBeInTheDocument();
-    expect(screen.getByText(/Strong open/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/^Action board$/i)).toBeInTheDocument();
+      expect(screen.getByText(/Trim the deadspace/i)).toBeInTheDocument();
+      expect(screen.getByText(/^Cut plan$/i)).toBeInTheDocument();
+      expect(screen.getByText(/^Optional AI trims$/i)).toBeInTheDocument();
+    });
+    expect(screen.getAllByText(/Strong open/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: /Download provider response JSON/i })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Download raw predictions/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/TRIBE/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Gemini/i)).not.toBeInTheDocument();
   });
 
-  it("renders actionable failed-analysis text", async () => {
+  it("renders a provider-neutral failed-analysis message", async () => {
     const { fetchAnalysis } = await import("@/lib/api");
     vi.mocked(fetchAnalysis).mockResolvedValue({
       analysisId: "analysis-2",
@@ -134,6 +208,8 @@ describe("AnalysisView", () => {
     });
 
     render(<AnalysisView analysisId="analysis-2" />);
-    expect(await screen.findByText(/Hugging Face dependencies/i)).toBeInTheDocument();
+    expect(await screen.findByText(/The backend returned an actionable error/i)).toBeInTheDocument();
+    expect(screen.queryByText(/TRIBE/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Hugging Face/i)).not.toBeInTheDocument();
   });
 });

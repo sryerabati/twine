@@ -1810,6 +1810,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "numpy" },
     { name = "opencv-python-headless" },
     { name = "pandas" },
@@ -1821,7 +1822,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "httpx" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
 ]
@@ -1829,6 +1829,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115.12,<1.0.0" },
+    { name = "httpx", specifier = ">=0.28.1,<1.0.0" },
     { name = "numpy", specifier = ">=2.2.6,<3.0.0" },
     { name = "opencv-python-headless", specifier = ">=4.12.0.88,<5.0.0" },
     { name = "pandas", specifier = ">=2.2.3,<3.0.0" },
@@ -1840,7 +1841,6 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "httpx", specifier = ">=0.28.1,<1.0.0" },
     { name = "pytest", specifier = ">=8.3.5,<9.0.0" },
     { name = "pytest-asyncio", specifier = ">=0.26.0,<1.0.0" },
 ]

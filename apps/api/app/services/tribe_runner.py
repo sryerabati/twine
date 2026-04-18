@@ -7,7 +7,7 @@ import os
 import subprocess
 import sys
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -43,10 +43,16 @@ class SegmentSnapshot:
 
 @dataclass
 class TribeRunResult:
-    preds: np.ndarray
+    preds: np.ndarray | None
     events: pd.DataFrame
     segments: list[SegmentSnapshot]
     device: str
+    provider: str = "tribe"
+    modelRepo: str = MODEL_REPO
+    modelCommit: str = MODEL_COMMIT
+    providerRaw: dict[str, Any] | None = None
+    proxyAnalysis: dict[str, Any] | None = None
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -128,6 +134,9 @@ class TribeRunner:
                 for index, segment in enumerate(segments)
             ],
             device=self.selected_device(),
+            provider="tribe",
+            modelRepo=self.MODEL_REPO,
+            modelCommit=self.MODEL_COMMIT,
         )
 
     def load_model(self) -> Any:

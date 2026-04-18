@@ -7,7 +7,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-heading-display);
+  --font-sans: var(--font-manrope);
   --font-mono: var(--font-ibm-plex-mono);
   --font-heading: var(--font-heading-display);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -49,38 +49,38 @@
 }
 
 :root {
-  --background: oklch(0.11 0.015 248);
-  --foreground: oklch(0.96 0.02 95);
-  --card: oklch(0.16 0.02 252);
-  --card-foreground: oklch(0.97 0.015 90);
-  --popover: oklch(0.13 0.018 252);
-  --popover-foreground: oklch(0.97 0.015 90);
-  --primary: oklch(0.74 0.17 58);
-  --primary-foreground: oklch(0.14 0.02 252);
-  --secondary: oklch(0.24 0.02 252);
-  --secondary-foreground: oklch(0.95 0.015 90);
-  --muted: oklch(0.2 0.014 250);
-  --muted-foreground: oklch(0.75 0.015 90);
-  --accent: oklch(0.68 0.16 198);
-  --accent-foreground: oklch(0.12 0.02 252);
-  --destructive: oklch(0.66 0.22 24);
-  --border: oklch(0.28 0.02 252);
-  --input: oklch(0.22 0.02 252);
-  --ring: oklch(0.74 0.17 58);
-  --chart-1: oklch(0.74 0.17 58);
-  --chart-2: oklch(0.68 0.16 198);
-  --chart-3: oklch(0.78 0.13 142);
-  --chart-4: oklch(0.65 0.19 18);
-  --chart-5: oklch(0.88 0.05 95);
+  --background: oklch(0.985 0.012 92);
+  --foreground: oklch(0.26 0.022 40);
+  --card: oklch(0.995 0.007 92);
+  --card-foreground: oklch(0.26 0.022 40);
+  --popover: oklch(0.995 0.007 92);
+  --popover-foreground: oklch(0.26 0.022 40);
+  --primary: oklch(0.71 0.162 48);
+  --primary-foreground: oklch(0.98 0.01 95);
+  --secondary: oklch(0.95 0.015 89);
+  --secondary-foreground: oklch(0.34 0.02 42);
+  --muted: oklch(0.96 0.012 90);
+  --muted-foreground: oklch(0.51 0.018 45);
+  --accent: oklch(0.82 0.085 196);
+  --accent-foreground: oklch(0.24 0.02 40);
+  --destructive: oklch(0.67 0.216 26);
+  --border: oklch(0.89 0.018 87);
+  --input: oklch(0.91 0.014 88);
+  --ring: oklch(0.71 0.162 48);
+  --chart-1: oklch(0.71 0.162 48);
+  --chart-2: oklch(0.77 0.101 198);
+  --chart-3: oklch(0.73 0.113 149);
+  --chart-4: oklch(0.7 0.17 22);
+  --chart-5: oklch(0.48 0.032 49);
   --radius: 0.625rem;
-  --sidebar: oklch(0.13 0.02 252);
-  --sidebar-foreground: oklch(0.95 0.02 90);
-  --sidebar-primary: oklch(0.74 0.17 58);
-  --sidebar-primary-foreground: oklch(0.12 0.02 252);
-  --sidebar-accent: oklch(0.2 0.014 250);
-  --sidebar-accent-foreground: oklch(0.95 0.015 90);
-  --sidebar-border: oklch(0.28 0.02 252);
-  --sidebar-ring: oklch(0.74 0.17 58);
+  --sidebar: oklch(0.99 0.009 92);
+  --sidebar-foreground: oklch(0.26 0.022 40);
+  --sidebar-primary: oklch(0.71 0.162 48);
+  --sidebar-primary-foreground: oklch(0.98 0.01 95);
+  --sidebar-accent: oklch(0.95 0.015 89);
+  --sidebar-accent-foreground: oklch(0.34 0.02 42);
+  --sidebar-border: oklch(0.89 0.018 87);
+  --sidebar-ring: oklch(0.71 0.162 48);
 }
 
 @layer base {
@@ -89,6 +89,9 @@
   }
   body {
     @apply bg-background text-foreground;
+    background-image:
+      radial-gradient(circle at top left, rgba(244, 137, 74, 0.08), transparent 24%),
+      radial-gradient(circle at top right, rgba(87, 182, 193, 0.08), transparent 22%);
   }
   html {
     @apply font-sans;
@@ -108,9 +111,9 @@
 
   .bg-hero {
     background:
-      radial-gradient(circle at top left, color-mix(in srgb, var(--color-primary) 26%, transparent), transparent 40%),
-      radial-gradient(circle at top right, color-mix(in srgb, var(--color-accent) 22%, transparent), transparent 35%),
-      linear-gradient(180deg, color-mix(in srgb, var(--color-background) 78%, black), var(--color-background));
+      radial-gradient(circle at top left, color-mix(in srgb, var(--color-primary) 16%, transparent), transparent 36%),
+      radial-gradient(circle at top right, color-mix(in srgb, var(--color-accent) 18%, transparent), transparent 35%),
+      linear-gradient(180deg, var(--color-background), color-mix(in srgb, var(--color-background) 84%, white));
   }
 
   .text-balance {
@@ -118,6 +121,16 @@
   }
 
   .surface {
-    @apply border border-border/80 bg-card/70 backdrop-blur-xl;
+    @apply border border-border/80 bg-card/75 backdrop-blur-xl;
+  }
+}
+
+@keyframes float-brain {
+  0%,
+  100% {
+    transform: translateY(0px) rotateX(8deg) rotateY(-6deg);
+  }
+  50% {
+    transform: translateY(-8px) rotateX(10deg) rotateY(6deg);
   }
 }

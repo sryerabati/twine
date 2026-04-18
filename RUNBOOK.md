@@ -10,6 +10,14 @@ npm run dev
 
 The frontend proxies `/api/*` and `/storage/*` to the backend automatically during local development.
 
+To use the Gemini fallback locally, put this in the repo-root `.env` before startup:
+
+```dotenv
+ANALYSIS_BACKEND=gemini
+GEMINI_API_KEY=your_google_ai_studio_key_here
+GEMINI_MODEL=gemini-2.5-pro
+```
+
 If you want to start the backend directly with the launcher surface:
 
 macOS:
@@ -41,6 +49,8 @@ touch storage/cache/.gitkeep
 ```
 
 ## Re-download model files
+
+This applies only when `ANALYSIS_BACKEND=tribe`.
 
 1. Clear `storage/cache`.
 2. Run the launcher `download` command again.
@@ -98,10 +108,18 @@ Expected pattern:
 - first dimension = number of kept analysis windows
 - second dimension = number of cortical vertices
 
+When `ANALYSIS_BACKEND=gemini`, inspect the provider response instead:
+
+```bash
+cat storage/analyses/<analysisId>/provider-response.json
+```
+
 ## Debug failed analyses
 
 1. Check `GET /api/health`.
-2. Confirm `HUGGINGFACE_HUB_TOKEN` is set.
+2. Confirm the active backend has its credential set:
+   - `HUGGINGFACE_HUB_TOKEN` for `ANALYSIS_BACKEND=tribe`
+   - `GEMINI_API_KEY` for `ANALYSIS_BACKEND=gemini`
 3. Confirm `ffmpeg` and `ffprobe` are available.
 4. Inspect `storage/uploads/<uploadId>/`.
 5. Inspect `storage/analyses/<analysisId>/record.json`.

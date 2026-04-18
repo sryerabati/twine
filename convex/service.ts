@@ -85,6 +85,7 @@ export const attachScanSummary = internalMutation({
     retentionEstimate: v.optional(v.number()),
     deadspaceSeconds: v.optional(v.number()),
     trimmedDurationSec: v.optional(v.number()),
+    overallRecommendation: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const scan = await ctx.db.get(args.scanId);
@@ -98,6 +99,7 @@ export const attachScanSummary = internalMutation({
       retentionEstimate: args.retentionEstimate,
       deadspaceSeconds: args.deadspaceSeconds,
       trimmedDurationSec: args.trimmedDurationSec,
+      overviewRecommendation: args.overallRecommendation,
       updatedAt: Date.now(),
     });
   },

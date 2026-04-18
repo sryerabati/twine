@@ -1,8 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Download, LoaderCircle, MoveRight } from "lucide-react";
+import type { RefObject } from "react";
+import { useEffect, useRef, useState } from "react";
+import {
+  AlertTriangle,
+  Check,
+  Download,
+  LoaderCircle,
+  Scissors,
+} from "lucide-react";
 import {
   CartesianGrid,
   Legend,
@@ -14,26 +21,49 @@ import {
   YAxis,
 } from "recharts";
 
+import { BrainScanViewer } from "@/components/brain-scan-viewer";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { AnalysisPayload, AnalysisResponse } from "@/lib/contracts";
-import { fetchAnalysis } from "@/lib/api";
-import { formatSeconds } from "@/lib/format";
+import { fetchAnalysis, trimAnalysis } from "@/lib/api";
+import type {
+  AnalysisPayload,
+  AnalysisResponse,
+  DeadspaceCut,
+  TimelineSegment,
+} from "@/lib/contracts";
+import { formatDateTime, formatSeconds } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 type AnalysisViewProps = {
   analysisId: string;
   pollIntervalMs?: number;
+  initialSelectedCutIds?: string[];
+  onPersistSelectedCuts?: (selectedCutIds: string[]) => Promise<void> | void;
+  onPersistExport?: (
+    selectedCutIds: string[],
+    latestExportUrl: string,
+  ) => Promise<void> | void;
 };
 
 export function AnalysisView({
   analysisId,
   pollIntervalMs = 2500,
+  initialSelectedCutIds,
+  onPersistSelectedCuts,
+  onPersistExport,
 }: AnalysisViewProps) {
   const [response, setResponse] = useState<AnalysisResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selectedCutIdsByAnalysis, setSelectedCutIdsByAnalysis] = useState<
+    Record<string, string[]>
+  >({});
+  const [trimPending, setTrimPending] = useState(false);
+  const [trimError, setTrimError] = useState<string | null>(null);
+  const [activeTimeSec, setActiveTimeSec] = useState(0);
+  const [previewTimeSec, setPreviewTimeSec] = useState<number | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -46,6 +76,8 @@ export function AnalysisView({
           return;
         }
         setResponse(next);
+        setError(null);
+
         if (next.status === "queued" || next.status === "running") {
           timer = setTimeout(load, pollIntervalMs);
         }
@@ -65,27 +97,101 @@ export function AnalysisView({
     };
   }, [analysisId, pollIntervalMs]);
 
+  async function reloadAnalysis() {
+    const next = await fetchAnalysis(analysisId);
+    setResponse(next);
+  }
+
+  async function handleToggleCut(cutId: string) {
+    if (response?.status !== "completed" || !response.payload) {
+      return;
+    }
+    const currentSelectedCutIds = deriveSelectedCutIds(
+      response,
+      initialSelectedCutIds,
+      selectedCutIdsByAnalysis,
+    );
+    const next = currentSelectedCutIds.includes(cutId)
+      ? currentSelectedCutIds.filter((value) => value !== cutId)
+      : [...currentSelectedCutIds, cutId];
+    setSelectedCutIdsByAnalysis((current) => ({
+      ...current,
+      [response.analysisId]: next,
+    }));
+    setTrimError(null);
+    try {
+      await onPersistSelectedCuts?.(next);
+    } catch (persistError) {
+      setTrimError(
+        persistError instanceof Error
+          ? persistError.message
+          : "Could not save the selected cut plan.",
+      );
+    }
+  }
+
+  async function handleExport() {
+    if (!selectedCutIds.length) {
+      setTrimError("Select at least one cut before exporting.");
+      return;
+    }
+
+    setTrimPending(true);
+    setTrimError(null);
+
+    try {
+      await onPersistSelectedCuts?.(selectedCutIds);
+      const result = await trimAnalysis(analysisId, selectedCutIds);
+      await onPersistExport?.(selectedCutIds, result.trimmedVideoUrl);
+      await reloadAnalysis();
+    } catch (exportError) {
+      setTrimError(
+        exportError instanceof Error ? exportError.message : "Trim export failed.",
+      );
+    } finally {
+      setTrimPending(false);
+    }
+  }
+
+  const selectedCutIds = deriveSelectedCutIds(
+    response,
+    initialSelectedCutIds,
+    selectedCutIdsByAnalysis,
+  );
+
   if (error) {
     return <AnalysisError message={error} />;
   }
 
   if (!response || response.status === "queued" || response.status === "running") {
-    const status = response?.status === "running" ? "running" : "queued";
-    return <AnalysisLoading analysisId={analysisId} status={status} />;
-  }
-
-  if (response.status === "failed" || !response.payload) {
     return (
-      <AnalysisError
-        message={
-          response.error ??
-          "Analysis failed before a payload was written. Check the backend logs and health endpoint."
-        }
+      <AnalysisLoading
+        analysisId={analysisId}
+        status={response?.status === "running" ? "running" : "queued"}
       />
     );
   }
 
-  return <CompletedAnalysis payload={response.payload} />;
+  if (response.status === "failed" || !response.payload) {
+    return <AnalysisError message={formatAnalysisError(response.error)} />;
+  }
+
+  return (
+    <CompletedAnalysis
+      activeTimeSec={activeTimeSec}
+      analysisId={analysisId}
+      payload={response.payload}
+      previewTimeSec={previewTimeSec}
+      selectedCutIds={selectedCutIds}
+      trimError={trimError}
+      trimPending={trimPending}
+      videoRef={videoRef}
+      onActiveTimeChange={setActiveTimeSec}
+      onExport={handleExport}
+      onPreviewTimeChange={setPreviewTimeSec}
+      onToggleCut={handleToggleCut}
+    />
+  );
 }
 
 function AnalysisLoading({
@@ -96,122 +202,177 @@ function AnalysisLoading({
   status: "queued" | "running";
 }) {
   return (
-    <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-10 lg:px-10">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">
-            Analysis workspace
-          </p>
-          <h1 className="mt-2 font-heading text-4xl tracking-tight">Processing {analysisId.slice(0, 8)}</h1>
+    <div className="space-y-6">
+      <div className="rounded-[2rem] border border-border/70 bg-white/90 p-8 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">
+              Analysis workspace
+            </p>
+            <h1 className="mt-2 text-4xl font-semibold tracking-tight">Processing analysis</h1>
+            <p className="mt-3 text-sm text-muted-foreground">
+              Waiting for FastAPI to finish the action board, timeline segments, and cut plan for
+              analysis `{analysisId.slice(0, 8)}`.
+            </p>
+          </div>
+          <Badge variant="secondary" className="rounded-full bg-primary/10 text-primary">
+            <LoaderCircle className="mr-2 size-4 animate-spin" />
+            {status === "queued" ? "Queued" : "Running"}
+          </Badge>
         </div>
-        <Badge variant="secondary">
-          <LoaderCircle className="mr-2 size-4 animate-spin" />
-          {status === "queued" ? "Queued" : "Running"}
-        </Badge>
       </div>
+
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <div className="surface rounded-[2rem] p-6">
-          <Skeleton className="h-72 w-full rounded-[1.5rem]" />
-          <Skeleton className="mt-6 h-56 w-full rounded-[1.5rem]" />
+        <div className="rounded-[2rem] border border-border/70 bg-white/88 p-6 shadow-[0_20px_70px_rgba(15,23,42,0.06)]">
+          <Skeleton className="h-72 w-full rounded-[1.6rem]" />
+          <Skeleton className="mt-6 h-64 w-full rounded-[1.6rem]" />
         </div>
-        <div className="surface rounded-[2rem] p-6">
+        <div className="rounded-[2rem] border border-border/70 bg-white/88 p-6 shadow-[0_20px_70px_rgba(15,23,42,0.06)]">
           <Skeleton className="h-8 w-40" />
-          <Skeleton className="mt-4 h-24 w-full rounded-[1.4rem]" />
-          <Skeleton className="mt-4 h-24 w-full rounded-[1.4rem]" />
-          <Skeleton className="mt-4 h-24 w-full rounded-[1.4rem]" />
+          <Skeleton className="mt-4 h-28 w-full rounded-[1.4rem]" />
+          <Skeleton className="mt-4 h-28 w-full rounded-[1.4rem]" />
+          <Skeleton className="mt-4 h-28 w-full rounded-[1.4rem]" />
         </div>
       </div>
-    </main>
+    </div>
   );
 }
 
 function AnalysisError({ message }: { message: string }) {
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-6 py-12 lg:px-10">
-      <div className="surface rounded-[2rem] p-8">
-        <Badge variant="secondary" className="bg-destructive/15 text-destructive">
-          Analysis failed
-        </Badge>
-        <h1 className="mt-4 font-heading text-4xl tracking-tight">The backend returned an actionable error.</h1>
-        <p className="mt-4 max-w-3xl text-lg text-muted-foreground">{message}</p>
-        <div className="mt-8 flex gap-3">
-          <Link href="/" className={cn(buttonVariants({ variant: "default" }))}>
-            Back to upload
-          </Link>
-          <Link href="/runbook" className={cn(buttonVariants({ variant: "outline" }))}>
-            Open runbook
-          </Link>
-        </div>
+    <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 rounded-[2rem] border border-border/70 bg-white/90 p-8 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
+      <Badge variant="secondary" className="w-fit rounded-full bg-destructive/10 text-destructive">
+        Analysis failed
+      </Badge>
+      <div>
+        <h1 className="text-4xl font-semibold tracking-tight">The backend returned an actionable error.</h1>
+        <p className="mt-4 max-w-3xl text-base leading-7 text-muted-foreground">{message}</p>
       </div>
-    </main>
+      <div className="flex flex-wrap gap-3">
+        <Link href="/app" className={cn(buttonVariants({ variant: "default" }))}>
+          Back to app
+        </Link>
+        <Link href="/runbook" className={cn(buttonVariants({ variant: "outline" }))}>
+          Open runbook
+        </Link>
+      </div>
+    </div>
   );
 }
 
-function CompletedAnalysis({ payload }: { payload: AnalysisPayload }) {
-  const chartData = useMemo(
-    () =>
-      payload.brainResponse.timeSeries.map((point) => ({
-        t: Number(point.stimulusTimeSec.toFixed(2)),
-        activation: point.globalActivation,
-        motion: point.motionScore,
-        audio: point.audioEnergy,
-      })),
-    [payload.brainResponse.timeSeries],
-  );
+function CompletedAnalysis({
+  activeTimeSec,
+  analysisId,
+  payload,
+  previewTimeSec,
+  selectedCutIds,
+  trimError,
+  trimPending,
+  videoRef,
+  onActiveTimeChange,
+  onExport,
+  onPreviewTimeChange,
+  onToggleCut,
+}: {
+  activeTimeSec: number;
+  analysisId: string;
+  payload: AnalysisPayload;
+  previewTimeSec: number | null;
+  selectedCutIds: string[];
+  trimError: string | null;
+  trimPending: boolean;
+  videoRef: RefObject<HTMLVideoElement | null>;
+  onActiveTimeChange: (time: number) => void;
+  onExport: () => Promise<void>;
+  onPreviewTimeChange: (time: number | null) => void;
+  onToggleCut: (cutId: string) => Promise<void>;
+}) {
+  const focusTimeSec = previewTimeSec ?? activeTimeSec;
+  const chartData = payload.brainResponse.timeSeries.map((point) => ({
+    t: Number(point.stimulusTimeSec.toFixed(2)),
+    activation: point.globalActivation,
+    motion: point.motionScore,
+    audio: point.audioEnergy,
+  }));
+  const latestExport = payload.exports[payload.exports.length - 1] ?? null;
+
+  function jumpToTime(time: number) {
+    if (videoRef.current) {
+      videoRef.current.currentTime = time;
+      videoRef.current.play().catch(() => {
+        videoRef.current?.pause();
+      });
+    }
+    onActiveTimeChange(time);
+  }
 
   return (
-    <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-10 lg:px-10">
-      <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+    <div className="space-y-8">
+      <section className="grid gap-6 lg:grid-cols-[1.12fr_0.88fr]">
         <div>
-          <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">
-            Single analysis
-          </p>
-          <h1 className="mt-3 font-heading text-5xl tracking-tight">{payload.video.filename}</h1>
-          <p className="mt-4 max-w-3xl text-lg text-muted-foreground">
-            Visualizes predicted average-subject cortical response over time. Timeline markers and viral
-            estimates are application heuristics layered on top.
+          <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Scan workspace</p>
+          <h1 className="mt-3 text-5xl font-semibold tracking-tight">{payload.video.filename}</h1>
+          <p className="mt-4 max-w-3xl text-base leading-7 text-muted-foreground">
+            The saved workspace pairs a live video review with a branded 3D brain-style scan,
+            structured actions, and a cut plan that keeps deadspace trims preselected by default.
           </p>
         </div>
-        <div className="surface rounded-[2rem] p-6">
-          <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Scores</p>
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
+
+        <div className="rounded-[2rem] border border-border/70 bg-white/90 p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
+          <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Scoreboard</p>
+          <div className="mt-4 grid grid-cols-2 gap-3">
             <ScoreChip label="Hook" value={payload.scores.hookScore} />
             <ScoreChip label="Pacing" value={payload.scores.pacingScore} />
             <ScoreChip label="Retention" value={payload.scores.retentionEstimate} />
-            <ScoreChip label="Viral estimate" value={payload.scores.viralPotential} />
+            <ScoreChip label="Viral" value={payload.scores.viralPotential} />
           </div>
-          <Separator className="my-5" />
-          <div className="flex flex-wrap gap-2">
+          <div className="mt-5 flex flex-wrap gap-2">
             <Badge variant="secondary">Confidence {payload.scores.confidence}</Badge>
             <Badge variant="secondary">{payload.diagnostics.device}</Badge>
-            <Badge variant="secondary">
-              Lag {payload.brainResponse.meshInfo.lagCompensationSec}s
-            </Badge>
+            <Badge variant="secondary">{payload.cutPlan.length} total cuts</Badge>
           </div>
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <div className="surface rounded-[2rem] p-6">
-          <video
-            className="aspect-video w-full rounded-[1.5rem] border border-border/70 bg-black"
-            controls
-            preload="metadata"
-            src={payload.video.sourceUrl}
+      <section className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
+        <div className="space-y-6">
+          <div className="rounded-[2rem] border border-border/70 bg-white/90 p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
+            <video
+              ref={videoRef}
+              className="aspect-video w-full rounded-[1.5rem] border border-border/70 bg-black"
+              controls
+              preload="metadata"
+              src={payload.video.sourceUrl}
+              onTimeUpdate={(event) => onActiveTimeChange(event.currentTarget.currentTime)}
+            />
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Badge variant="secondary">Duration {formatSeconds(payload.video.durationSec)}</Badge>
+              <Badge variant="secondary">Words {payload.diagnostics.transcriptWordCount}</Badge>
+              <Badge variant="secondary">Scenes {payload.diagnostics.sceneChangeCount}</Badge>
+            </div>
+          </div>
+
+          <BrainScanViewer
+            points={payload.brainResponse.timeSeries}
+            currentTimeSec={focusTimeSec}
+            title="3D brain scan"
+            description="Hover a timeline row or scrub the video to drive the current signal view."
           />
-          <div className="mt-6">
-            <div className="flex items-center justify-between">
+
+          <div className="rounded-[2rem] border border-border/70 bg-white/90 p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
+            <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-sm font-medium">Activation timeline</p>
+                <p className="text-sm font-semibold text-foreground">Activation timeline</p>
                 <p className="text-sm text-muted-foreground">
-                  Global response plus motion and audio context for edit decisions.
+                  Global activation with motion and audio context across the full clip.
                 </p>
               </div>
+              <Badge variant="secondary">{analysisId.slice(0, 8)}</Badge>
             </div>
             <div className="mt-4 h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData}>
-                  <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                  <CartesianGrid stroke="rgba(15,23,42,0.08)" vertical={false} />
                   <XAxis
                     dataKey="t"
                     tickLine={false}
@@ -222,8 +383,8 @@ function CompletedAnalysis({ payload }: { payload: AnalysisPayload }) {
                   <Tooltip
                     contentStyle={{
                       borderRadius: 18,
-                      borderColor: "rgba(255,255,255,0.12)",
-                      backgroundColor: "rgba(14, 20, 32, 0.92)",
+                      borderColor: "rgba(15,23,42,0.08)",
+                      backgroundColor: "rgba(255,255,255,0.96)",
                     }}
                   />
                   <Legend />
@@ -255,156 +416,360 @@ function CompletedAnalysis({ payload }: { payload: AnalysisPayload }) {
               </ResponsiveContainer>
             </div>
           </div>
-          <Separator className="my-6" />
-          <div>
-            <p className="text-sm font-medium">Hemisphere heat-strip</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              64-bin left/right downsampled cortical summaries per timestep.
-            </p>
-            <HeatStrip payload={payload} />
-          </div>
         </div>
 
-        <div className="flex flex-col gap-6">
-          <section className="surface rounded-[2rem] p-6">
-            <p className="text-sm font-medium">Recommendation</p>
-            <p className="mt-3 text-lg text-muted-foreground">
+        <div className="space-y-6">
+          <section className="rounded-[2rem] border border-border/70 bg-white/90 p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
+            <p className="text-sm font-semibold text-foreground">Action board</p>
+            <div className="mt-4 grid gap-3">
+              <ActionColumn title="Keep" items={payload.actionBoard.keep} />
+              <ActionColumn title="Fix now" items={payload.actionBoard.fixNow} />
+              <ActionColumn title="Test next" items={payload.actionBoard.testNext} />
+              <ActionColumn title="Export plan" items={payload.actionBoard.exportPlan} />
+            </div>
+          </section>
+
+          <section className="rounded-[2rem] border border-border/70 bg-white/90 p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
+            <p className="text-sm font-semibold text-foreground">Recommendation</p>
+            <p className="mt-3 text-base leading-7 text-muted-foreground">
               {payload.summary.overallRecommendation}
             </p>
-            <div className="mt-5 grid gap-4">
+            <Separator className="my-5" />
+            <div className="grid gap-4 md:grid-cols-2">
               <InfoList title="Strengths" items={payload.summary.strengths} />
               <InfoList title="Weaknesses" items={payload.summary.weaknesses} />
             </div>
           </section>
 
-          <section className="surface rounded-[2rem] p-6">
-            <p className="text-sm font-medium">Markers</p>
-            <div className="mt-4 flex flex-col gap-3">
-              {payload.markers.map((marker) => (
-                <div
-                  key={`${marker.type}-${marker.t}`}
-                  className="rounded-[1.4rem] border border-border/70 bg-background/50 p-4"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <Badge variant="secondary">{marker.type.replaceAll("_", " ")}</Badge>
-                      <span className="text-sm text-muted-foreground">{formatSeconds(marker.t)}</span>
-                    </div>
-                    <Badge variant="secondary">{marker.severity}</Badge>
-                  </div>
-                  <p className="mt-3 text-sm text-muted-foreground">{marker.explanation}</p>
-                  <p className="mt-2 text-sm">{marker.suggestion}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="surface rounded-[2rem] p-6">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium">Deadspace cuts</p>
-              <Link
-                href={`/compare?a=${payload.analysisId}&b=${payload.analysisId}`}
-                className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
-              >
-                Explore compare
-                <MoveRight data-icon="inline-end" />
-              </Link>
-            </div>
-            <div className="mt-4 flex flex-col gap-3">
-              {payload.deadspaceCuts.length ? (
-                payload.deadspaceCuts.map((cut) => (
-                  <div
-                    key={`${cut.start}-${cut.end}`}
-                    className="rounded-[1.4rem] border border-border/70 bg-background/50 p-4"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Badge variant="secondary">
-                        {formatSeconds(cut.start)} – {formatSeconds(cut.end)}
-                      </Badge>
-                    </div>
-                    <p className="mt-3 text-sm text-muted-foreground">{cut.reason}</p>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  No cut range crossed the deterministic deadspace threshold.
+          <section className="rounded-[2rem] border border-border/70 bg-white/90 p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-foreground">Export workspace</p>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  Deadspace cuts stay selected by default. Add AI low-value trims only when you
+                  want a more aggressive export.
                 </p>
-              )}
+              </div>
+              <Badge variant="secondary">{selectedCutIds.length} selected</Badge>
             </div>
-          </section>
 
-          <section className="surface rounded-[2rem] p-6">
-            <p className="text-sm font-medium">Diagnostics and export</p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Badge variant="secondary">Words {payload.diagnostics.transcriptWordCount}</Badge>
-              <Badge variant="secondary">Scenes {payload.diagnostics.sceneChangeCount}</Badge>
-              <Badge variant="secondary">
-                Deadspace {formatSeconds(payload.diagnostics.deadspaceSeconds)}
-              </Badge>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Button onClick={() => void onExport()} disabled={trimPending || !selectedCutIds.length}>
+                {trimPending ? (
+                  <>
+                    <LoaderCircle data-icon="inline-start" className="animate-spin" />
+                    Exporting trim
+                  </>
+                ) : (
+                  <>
+                    <Scissors data-icon="inline-start" />
+                    Export selected trim
+                  </>
+                )}
+              </Button>
+              {latestExport ? (
+                <a
+                  href={latestExport.trimmedVideoUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={cn(buttonVariants({ variant: "outline" }))}
+                >
+                  <Download data-icon="inline-start" />
+                  Latest export
+                </a>
+              ) : null}
             </div>
-            <div className="mt-5 flex flex-col gap-2">
-              <ExportLink href={payload.artifacts.processedJsonUrl} label="Download processed JSON" />
+
+            {trimError ? (
+              <div className="mt-4 flex items-start gap-2 rounded-[1.25rem] border border-destructive/20 bg-destructive/8 p-4 text-sm text-destructive">
+                <AlertTriangle className="mt-0.5 size-4" />
+                <span>{trimError}</span>
+              </div>
+            ) : null}
+
+            <Separator className="my-5" />
+            <div className="flex flex-col gap-2">
+              <ExportLink href={payload.artifacts.processedJsonUrl} label="Download analysis JSON" />
               <ExportLink href={payload.artifacts.cutListJsonUrl} label="Download cut list JSON" />
               <ExportLink href={payload.artifacts.eventsCsvUrl} label="Download event CSV" />
-              <ExportLink href={payload.artifacts.rawPredictionsUrl} label="Download raw predictions" />
+              {payload.artifacts.providerRawJsonUrl ? (
+                <ExportLink
+                  href={payload.artifacts.providerRawJsonUrl}
+                  label="Download provider response JSON"
+                />
+              ) : null}
+              {payload.artifacts.rawPredictionsUrl ? (
+                <ExportLink href={payload.artifacts.rawPredictionsUrl} label="Download raw predictions" />
+              ) : null}
             </div>
+
+            {payload.exports.length ? (
+              <>
+                <Separator className="my-5" />
+                <div className="space-y-3">
+                  <p className="text-sm font-semibold text-foreground">Past exports</p>
+                  {payload.exports
+                    .slice()
+                    .reverse()
+                    .map((exportItem) => (
+                      <div
+                        key={exportItem.exportId}
+                        className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="font-medium text-foreground">
+                              Trimmed to {formatSeconds(exportItem.trimmedDurationSec)}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              Removed {formatSeconds(exportItem.removedSeconds)} • {formatDateTime(exportItem.createdAt)}
+                            </p>
+                          </div>
+                          <a
+                            href={exportItem.trimmedVideoUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+                          >
+                            Open
+                          </a>
+                        </div>
+                        <p className="mt-3 text-sm text-muted-foreground">
+                          Cut set: {exportItem.selectedCutIds.join(", ")}
+                        </p>
+                      </div>
+                    ))}
+                </div>
+              </>
+            ) : null}
           </section>
         </div>
       </section>
-    </main>
+
+      <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+        <section className="rounded-[2rem] border border-border/70 bg-white/90 p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Cut plan</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Default deadspace trims are selected already; optional AI trims are review-only
+                until you choose them.
+              </p>
+            </div>
+            <Badge variant="secondary">{selectedCutIds.length} active</Badge>
+          </div>
+
+          <div className="mt-5 space-y-3">
+            {payload.deadspaceCuts.length ? (
+              payload.deadspaceCuts.map((cut) => (
+                <SelectableCutCard
+                  key={cut.id}
+                  cut={cut}
+                  selected={selectedCutIds.includes(cut.id)}
+                  title="Default deadspace trim"
+                  onToggle={onToggleCut}
+                />
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No deterministic deadspace cut crossed the threshold on this scan.
+              </p>
+            )}
+          </div>
+
+          <Separator className="my-6" />
+          <div>
+            <p className="text-sm font-semibold text-foreground">Optional AI trims</p>
+            <div className="mt-4 space-y-3">
+              {payload.lowValueCuts.length ? (
+                payload.lowValueCuts.map((cut) => (
+                  <SelectableCutCard
+                    key={cut.id}
+                    cut={cut}
+                    selected={selectedCutIds.includes(cut.id)}
+                    title="AI suggestion"
+                    onToggle={onToggleCut}
+                  />
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No extra low-value sections were suggested by the AI on this run.
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-[2rem] border border-border/70 bg-white/90 p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
+          <p className="text-sm font-semibold text-foreground">Timeline segments</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Hover a row to sync the 3D scan. Click a row to jump the video.
+          </p>
+
+          <div className="mt-5 space-y-3">
+            {payload.timelineSegments.length ? (
+              payload.timelineSegments.map((segment) => (
+                <TimelineRow
+                  key={segment.id}
+                  segment={segment}
+                  selected={
+                    segment.cutId ? selectedCutIds.includes(segment.cutId) : false
+                  }
+                  onHover={onPreviewTimeChange}
+                  onJump={jumpToTime}
+                />
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                The backend returned no timeline segments for this analysis.
+              </p>
+            )}
+          </div>
+        </section>
+      </section>
+    </div>
   );
 }
 
 function ScoreChip({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-[1.4rem] border border-border/70 bg-background/50 p-4">
+    <div className="rounded-[1.3rem] border border-border/70 bg-background/70 p-4">
       <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">{label}</p>
-      <p className="mt-2 font-heading text-4xl tracking-tight">{value}</p>
+      <p className="mt-2 text-3xl font-semibold tracking-tight">{value}</p>
+    </div>
+  );
+}
+
+function ActionColumn({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4">
+      <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">{title}</p>
+      <div className="mt-3 flex flex-col gap-2">
+        {items.length ? (
+          items.map((item) => (
+            <div key={item} className="flex items-start gap-2 text-sm text-muted-foreground">
+              <Check className="mt-0.5 size-4 text-primary" />
+              <span>{item}</span>
+            </div>
+          ))
+        ) : (
+          <p className="text-sm text-muted-foreground">No items in this lane.</p>
+        )}
+      </div>
     </div>
   );
 }
 
 function InfoList({ title, items }: { title: string; items: string[] }) {
   return (
-    <div>
+    <div className="rounded-[1.3rem] border border-border/70 bg-background/70 p-4">
       <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">{title}</p>
-      <ul className="mt-3 flex flex-col gap-2">
+      <div className="mt-3 flex flex-col gap-2">
         {items.map((item) => (
-          <li key={item} className="text-sm text-muted-foreground">
+          <p key={item} className="text-sm text-muted-foreground">
             {item}
-          </li>
+          </p>
         ))}
-      </ul>
+      </div>
     </div>
   );
 }
 
-function HeatStrip({ payload }: { payload: AnalysisPayload }) {
-  const columns = payload.brainResponse.timeSeries.length;
+function SelectableCutCard({
+  cut,
+  selected,
+  title,
+  onToggle,
+}: {
+  cut: DeadspaceCut;
+  selected: boolean;
+  title: string;
+  onToggle: (cutId: string) => Promise<void>;
+}) {
   return (
-    <div className="mt-4 overflow-x-auto rounded-[1.4rem] border border-border/70 bg-background/40 p-4">
-      <div
-        className="grid gap-1"
-        style={{ gridTemplateColumns: `repeat(${columns}, minmax(18px, 1fr))` }}
-      >
-        {payload.brainResponse.timeSeries.map((point) => (
-          <div key={`left-${point.stimulusTimeSec}`} className="flex flex-col gap-1">
-            <div
-              className="h-12 rounded-full"
-              style={{ backgroundColor: `color-mix(in srgb, var(--color-chart-1) ${Math.round(point.leftHemisphereActivation * 100)}%, transparent)` }}
-            />
-            <div
-              className="h-12 rounded-full"
-              style={{ backgroundColor: `color-mix(in srgb, var(--color-chart-2) ${Math.round(point.rightHemisphereActivation * 100)}%, transparent)` }}
-            />
+    <button
+      type="button"
+      className={cn(
+        "w-full rounded-[1.45rem] border p-4 text-left transition-colors",
+        selected
+          ? "border-primary/40 bg-primary/8"
+          : "border-border/70 bg-background/70 hover:border-primary/30",
+      )}
+      onClick={() => void onToggle(cut.id)}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">{title}</p>
+          <p className="mt-2 font-semibold text-foreground">
+            {formatSeconds(cut.start)} to {formatSeconds(cut.end)}
+          </p>
+        </div>
+        <span
+          className={cn(
+            "rounded-full px-3 py-1 text-xs font-medium",
+            selected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+          )}
+        >
+          {selected ? "Selected" : "Optional"}
+        </span>
+      </div>
+      <p className="mt-3 text-sm text-muted-foreground">{cut.reason}</p>
+      <p className="mt-2 text-sm text-foreground">{cut.recommendedAction}</p>
+    </button>
+  );
+}
+
+function TimelineRow({
+  segment,
+  selected,
+  onHover,
+  onJump,
+}: {
+  segment: TimelineSegment;
+  selected: boolean;
+  onHover: (time: number | null) => void;
+  onJump: (time: number) => void;
+}) {
+  const midpoint = segment.start + (segment.end - segment.start) / 2;
+
+  return (
+    <button
+      type="button"
+      className="w-full rounded-[1.45rem] border border-border/70 bg-background/70 p-4 text-left transition-colors hover:border-primary/30"
+      onMouseEnter={() => onHover(midpoint)}
+      onMouseLeave={() => onHover(null)}
+      onClick={() => onJump(segment.start)}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary">{segment.label}</Badge>
+            <Badge variant="secondary">
+              {formatSeconds(segment.start)} to {formatSeconds(segment.end)}
+            </Badge>
+            {selected ? (
+              <Badge variant="secondary" className="bg-primary/10 text-primary">
+                selected cut
+              </Badge>
+            ) : null}
           </div>
-        ))}
+          <p className="mt-3 font-medium text-foreground">{segment.reason}</p>
+        </div>
+        <span
+          className={cn(
+            "rounded-full px-3 py-1 text-xs font-medium",
+            segment.severity === "high"
+              ? "bg-rose-100 text-rose-700"
+              : segment.severity === "medium"
+                ? "bg-amber-100 text-amber-800"
+                : "bg-sky-100 text-sky-700",
+          )}
+        >
+          {segment.severity}
+        </span>
       </div>
-      <div className="mt-3 flex items-center justify-between text-xs uppercase tracking-[0.2em] text-muted-foreground">
-        <span>Left hemisphere</span>
-        <span>Right hemisphere</span>
-      </div>
-    </div>
+      <p className="mt-2 text-sm text-muted-foreground">{segment.recommendedAction}</p>
+    </button>
   );
 }
 
@@ -420,4 +785,31 @@ function ExportLink({ href, label }: { href: string; label: string }) {
       {label}
     </a>
   );
+}
+
+function deriveSelectedCutIds(
+  response: AnalysisResponse | null,
+  initialSelectedCutIds: string[] | undefined,
+  selectedCutIdsByAnalysis: Record<string, string[]>,
+) {
+  if (response?.status !== "completed" || !response.payload) {
+    return [];
+  }
+
+  return (
+    selectedCutIdsByAnalysis[response.analysisId] ??
+    (initialSelectedCutIds && initialSelectedCutIds.length > 0
+      ? initialSelectedCutIds
+      : response.payload.cutPlan.filter((cut) => cut.defaultSelected).map((cut) => cut.id))
+  );
+}
+
+function formatAnalysisError(message: string | null | undefined) {
+  if (!message) {
+    return "Analysis failed before a payload was written. Check the backend logs and health endpoint.";
+  }
+  if (/tribe|gemini|hugging face|llama/i.test(message)) {
+    return "The selected content-analysis backend could not finish this upload. Check the runbook and local health status, then try again.";
+  }
+  return message;
 }

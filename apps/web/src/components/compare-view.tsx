@@ -124,7 +124,7 @@ export function CompareView({
       <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-6 py-12 lg:px-10">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">A/B compare</p>
+            <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Content Compare</p>
             <h1 className="mt-2 font-heading text-5xl tracking-tight">Generating compare summary</h1>
           </div>
         </div>
@@ -170,7 +170,7 @@ function CompletedCompare({
     <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-10 lg:px-10">
       <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
         <div>
-          <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">A/B compare</p>
+          <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Content Compare</p>
           <h1 className="mt-3 font-heading text-5xl tracking-tight">
             Winner: {compare.winner === "tie" ? "Tie" : `Version ${compare.winner}`}
           </h1>

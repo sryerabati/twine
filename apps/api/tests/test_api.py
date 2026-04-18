@@ -46,7 +46,9 @@ def test_health_endpoint_reports_missing_token_and_unloaded_model(
     assert response.status_code == 200
     payload = response.json()
     assert payload["ok"] is False
+    assert payload["analysisBackend"] == "tribe"
     assert payload["huggingFaceTokenPresent"] is False
+    assert payload["geminiApiKeyPresent"] is False
     assert any("HUGGINGFACE_HUB_TOKEN" in blocker for blocker in payload["blockers"])
     assert any("tribev2 package" in blocker for blocker in payload["blockers"])
 
@@ -73,7 +75,11 @@ def test_analyze_and_compare_complete_with_stubbed_runner(
     assert loaded_b["status"] == "completed"
     assert loaded_a["payload"]["brainResponse"]["timeSeries"]
     assert loaded_a["payload"]["markers"]
+    assert loaded_a["payload"]["actionBoard"]["fixNow"]
+    assert loaded_a["payload"]["timelineSegments"]
+    assert loaded_a["payload"]["cutPlan"]
     assert loaded_a["payload"]["artifacts"]["processedJsonUrl"].startswith("/storage/")
+    assert loaded_a["payload"]["artifacts"]["providerRawJsonUrl"] is None
 
     compare = client.post(
         "/api/compare",

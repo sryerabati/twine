@@ -31,6 +31,7 @@ class AnalysisPaths:
     record_path: Path
     payload_path: Path
     preds_path: Path
+    provider_raw_path: Path
     events_path: Path
     segments_path: Path
     cuts_path: Path
@@ -84,6 +85,7 @@ class StorageService:
             record_path=directory / "record.json",
             payload_path=directory / "payload.json",
             preds_path=directory / "preds.npy",
+            provider_raw_path=directory / "provider-response.json",
             events_path=directory / "events.csv",
             segments_path=directory / "segments.json",
             cuts_path=directory / "cut-list.json",
@@ -99,6 +101,7 @@ class StorageService:
             record_path=directory / "record.json",
             payload_path=directory / "payload.json",
             preds_path=directory / "preds.npy",
+            provider_raw_path=directory / "provider-response.json",
             events_path=directory / "events.csv",
             segments_path=directory / "segments.json",
             cuts_path=directory / "cut-list.json",
@@ -162,7 +165,7 @@ class StorageService:
     def write_analysis_payload(self, analysis_id: str, payload: AnalysisPayload) -> None:
         paths = self.analysis_paths(analysis_id)
         dump_json(paths.payload_path, payload.model_dump(mode="json"))
-        dump_json(paths.cuts_path, [cut.model_dump(mode="json") for cut in payload.deadspaceCuts])
+        dump_json(paths.cuts_path, [cut.model_dump(mode="json") for cut in payload.cutPlan])
 
     def read_analysis_payload(self, analysis_id: str) -> AnalysisPayload:
         path = self.analysis_paths(analysis_id).payload_path
@@ -176,10 +179,24 @@ class StorageService:
     def write_preds(self, analysis_id: str, preds: np.ndarray) -> None:
         np.save(self.analysis_paths(analysis_id).preds_path, preds)
 
-    def artifacts_for(self, analysis_id: str) -> dict[str, str]:
+    def write_provider_raw(self, analysis_id: str, payload: dict[str, Any]) -> None:
+        dump_json(self.analysis_paths(analysis_id).provider_raw_path, payload)
+
+    def artifacts_for(
+        self,
+        analysis_id: str,
+        *,
+        include_raw_predictions: bool = True,
+        include_provider_raw: bool = False,
+    ) -> dict[str, str | None]:
         paths = self.analysis_paths(analysis_id)
         artifacts = {
-            "rawPredictionsUrl": self.to_storage_url(paths.preds_path),
+            "rawPredictionsUrl": self.to_storage_url(paths.preds_path)
+            if include_raw_predictions
+            else None,
+            "providerRawJsonUrl": self.to_storage_url(paths.provider_raw_path)
+            if include_provider_raw
+            else None,
             "processedJsonUrl": self.to_storage_url(paths.payload_path),
             "cutListJsonUrl": self.to_storage_url(paths.cuts_path),
             "eventsCsvUrl": self.to_storage_url(paths.events_path),

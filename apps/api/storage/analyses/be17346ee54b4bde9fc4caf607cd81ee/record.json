@@ -1,0 +1,8 @@
+{
+  "analysisId": "be17346ee54b4bde9fc4caf607cd81ee",
+  "status": "failed",
+  "createdAt": "2026-04-18T09:41:24.461884Z",
+  "updatedAt": "2026-04-18T09:41:31.569920Z",
+  "error": "Content analysis backend request failed: Client error '429 Too Many Requests' for url 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=AIzaSyD45dSMQzasO21xXTcmpIgO49cH7p3Dhlk'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/429",
+  "payload": null
+}
