@@ -30,6 +30,20 @@ class StubMediaService:
     def generate_thumbnail(self, source_path: Path, output_path: Path) -> None:
         output_path.write_bytes(b"fake-thumbnail")
 
+    def trim_deadspace(
+        self,
+        source_path: Path,
+        output_path: Path,
+        cuts: list[tuple[float, float]],
+        total_duration_sec: float,
+    ) -> float:
+        # Tests don't exercise real ffmpeg; write a placeholder file and return
+        # a plausible duration so the contract is exercised.
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"fake-trimmed-mp4")
+        removed = sum(max(0.0, end - start) for start, end in cuts)
+        return max(0.0, total_duration_sec - removed)
+
     def analyze_media(
         self,
         source_path: Path,

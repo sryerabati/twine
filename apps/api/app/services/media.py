@@ -89,6 +89,155 @@ class MediaService:
         if result.returncode != 0:
             raise MediaInspectionError(result.stderr.strip() or "ffmpeg thumbnail failed")
 
+    def trim_deadspace(
+        self,
+        source_path: Path,
+        output_path: Path,
+        cuts: list[tuple[float, float]],
+        total_duration_sec: float,
+    ) -> float:
+        """Remove the given cut ranges from the source MP4.
+
+        Returns the new duration in seconds. If no cuts apply, the source is copied.
+        All ffmpeg invocations use argument lists, never shell strings, so user-controlled
+        values cannot inject shell commands. Numeric inputs are coerced to float before
+        reaching ffmpeg.
+        """
+        if total_duration_sec <= 0:
+            raise MediaInspectionError("Source duration must be positive.")
+
+        keep_ranges = self._invert_cuts(cuts, total_duration_sec)
+        if not keep_ranges:
+            raise MediaInspectionError(
+                "The requested cuts would remove the entire clip. Nothing to export."
+            )
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # If nothing to cut, still produce a clean output by copying streams.
+        if len(keep_ranges) == 1 and abs(keep_ranges[0][0]) < 1e-3 and abs(keep_ranges[0][1] - total_duration_sec) < 1e-3:
+            cmd = [
+                self.settings.ffmpeg_bin,
+                "-y",
+                "-i",
+                str(source_path),
+                "-c",
+                "copy",
+                "-movflags",
+                "+faststart",
+                str(output_path),
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            if result.returncode != 0:
+                raise MediaInspectionError(
+                    result.stderr.strip() or "ffmpeg passthrough copy failed"
+                )
+            return float(total_duration_sec)
+
+        # Build a filter_complex that trims each keep range and concats them.
+        filter_parts: list[str] = []
+        concat_labels: list[str] = []
+        for index, (start, end) in enumerate(keep_ranges):
+            start_f = float(start)
+            end_f = float(end)
+            # atrim uses PTS-relative timestamps; the setpts/asetpts reset PTS so concat works.
+            filter_parts.append(
+                f"[0:v]trim=start={start_f:.3f}:end={end_f:.3f},setpts=PTS-STARTPTS[v{index}]"
+            )
+            filter_parts.append(
+                f"[0:a]atrim=start={start_f:.3f}:end={end_f:.3f},asetpts=PTS-STARTPTS[a{index}]"
+            )
+            concat_labels.append(f"[v{index}][a{index}]")
+
+        concat_filter = (
+            "".join(concat_labels)
+            + f"concat=n={len(keep_ranges)}:v=1:a=1[outv][outa]"
+        )
+        filter_complex = ";".join(filter_parts + [concat_filter])
+
+        cmd = [
+            self.settings.ffmpeg_bin,
+            "-y",
+            "-i",
+            str(source_path),
+            "-filter_complex",
+            filter_complex,
+            "-map",
+            "[outv]",
+            "-map",
+            "[outa]",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "22",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "160k",
+            "-movflags",
+            "+faststart",
+            str(output_path),
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        if result.returncode != 0:
+            # Don't leak full ffmpeg stderr to the API response; keep it in logs only.
+            raise MediaInspectionError(
+                "ffmpeg trim failed. Check backend logs for the full ffmpeg output."
+            )
+
+        new_duration = sum(end - start for start, end in keep_ranges)
+        return float(new_duration)
+
+    @staticmethod
+    def _invert_cuts(
+        cuts: list[tuple[float, float]],
+        total_duration_sec: float,
+    ) -> list[tuple[float, float]]:
+        """Convert a list of cut ranges into keep ranges, clamped and merged.
+
+        Guarantees:
+        - every returned range is strictly inside [0, total_duration_sec]
+        - returned ranges are non-overlapping and in ascending order
+        - ranges shorter than 50ms are dropped to avoid ffmpeg artifacts
+        """
+        if total_duration_sec <= 0:
+            return []
+
+        # Clamp and sanitize cuts
+        clamped: list[tuple[float, float]] = []
+        for start, end in cuts:
+            start_f = max(0.0, min(float(start), total_duration_sec))
+            end_f = max(0.0, min(float(end), total_duration_sec))
+            if end_f - start_f <= 0.05:
+                continue
+            clamped.append((start_f, end_f))
+
+        if not clamped:
+            return [(0.0, total_duration_sec)]
+
+        # Merge overlapping cuts
+        clamped.sort(key=lambda item: item[0])
+        merged: list[tuple[float, float]] = [clamped[0]]
+        for start, end in clamped[1:]:
+            last_start, last_end = merged[-1]
+            if start <= last_end:
+                merged[-1] = (last_start, max(last_end, end))
+            else:
+                merged.append((start, end))
+
+        # Invert: keep ranges = gaps between cuts + any leading/trailing portion
+        keep: list[tuple[float, float]] = []
+        cursor = 0.0
+        for cut_start, cut_end in merged:
+            if cut_start - cursor > 0.05:
+                keep.append((cursor, cut_start))
+            cursor = cut_end
+        if total_duration_sec - cursor > 0.05:
+            keep.append((cursor, total_duration_sec))
+        return keep
+
     def analyze_media(
         self,
         source_path: Path,
