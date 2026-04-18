@@ -192,6 +192,21 @@ export type CompareResponse = {
   }>;
 };
 
+export type ScanType = "single" | "compare";
+
+export type SavedCompareResult = {
+  winner: "A" | "B" | "tie";
+  winnerReason: string;
+  recommendation: string;
+  summary: string[];
+  slices: Array<{
+    label: string;
+    winner: "A" | "B" | "tie";
+    aScore: number;
+    bScore: number;
+  }>;
+};
+
 export type TrimRequest = {
   cutIndices?: number[] | null;
   cutIds?: string[] | null;
@@ -215,10 +230,17 @@ export type CurrentUser = {
 
 export type SavedScanSummary = {
   _id: string;
+  scanType?: ScanType;
+  title: string | null;
+  filename: string;
+  secondaryFilename: string | null;
   uploadId: string;
+  secondaryUploadId: string | null;
   localUploadId: string | null;
   status: AnalysisStatus;
   localAnalysisId: string | null;
+  secondaryLocalAnalysisId: string | null;
+  compareResult: SavedCompareResult | null;
   viralPotential: number | null;
   hookScore: number | null;
   pacingScore: number | null;
@@ -233,7 +255,6 @@ export type SavedScanSummary = {
   errorMessage: string | null;
   createdAt: number;
   updatedAt: number;
-  filename: string;
 };
 
 export type SavedScanRecord = SavedScanSummary;

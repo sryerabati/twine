@@ -32,6 +32,26 @@ const schema = defineSchema({
   scans: defineTable({
     userId: v.id("users"),
     uploadId: v.id("uploads"),
+    scanType: v.optional(v.union(v.literal("single"), v.literal("compare"))),
+    displayName: v.optional(v.string()),
+    secondaryUploadId: v.optional(v.id("uploads")),
+    secondaryLocalAnalysisId: v.optional(v.string()),
+    compareResult: v.optional(
+      v.object({
+        winner: v.union(v.literal("A"), v.literal("B"), v.literal("tie")),
+        winnerReason: v.string(),
+        recommendation: v.string(),
+        summary: v.array(v.string()),
+        slices: v.array(
+          v.object({
+            label: v.string(),
+            winner: v.union(v.literal("A"), v.literal("B"), v.literal("tie")),
+            aScore: v.number(),
+            bScore: v.number(),
+          }),
+        ),
+      }),
+    ),
     status: v.union(
       v.literal("queued"),
       v.literal("running"),
