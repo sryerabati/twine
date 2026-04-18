@@ -20,6 +20,12 @@ const SCAN_STATUS = v.union(
   v.literal("failed"),
 );
 
+function assertServiceCanMutateSingleScan(scan: { scanType?: "single" | "compare" }) {
+  if (scan.scanType === "compare") {
+    throw new Error("Compare scans cannot be mutated through the FastAPI bridge.");
+  }
+}
+
 /**
  * Attach FastAPI's local upload id to a pending upload row.
  */
@@ -58,6 +64,7 @@ export const updateScanStatus = internalMutation({
     if (scan === null) {
       throw new Error("Scan not found.");
     }
+    assertServiceCanMutateSingleScan(scan);
     const patch: Record<string, unknown> = {
       status: args.status,
       updatedAt: Date.now(),
@@ -92,6 +99,7 @@ export const attachScanSummary = internalMutation({
     if (scan === null) {
       throw new Error("Scan not found.");
     }
+    assertServiceCanMutateSingleScan(scan);
     await ctx.db.patch(args.scanId, {
       viralPotential: args.viralPotential,
       hookScore: args.hookScore,

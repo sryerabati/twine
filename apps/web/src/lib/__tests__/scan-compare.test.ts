@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const convexServer = vi.hoisted(() => ({
   mutation: vi.fn((definition) => definition),
   query: vi.fn((definition) => definition),
+  internalMutation: vi.fn((definition) => definition),
 }));
 
 const auth = vi.hoisted(() => ({
@@ -13,6 +14,7 @@ vi.mock("../../../../../convex/_generated/server", () => convexServer);
 vi.mock("@convex-dev/auth/server", () => auth);
 
 let scansModule: typeof import("../../../../../convex/scans");
+let serviceModule: typeof import("../../../../../convex/service");
 
 function makeMutationCtx(db: {
   get: ReturnType<typeof vi.fn>;
@@ -33,6 +35,7 @@ describe("compare scan handlers", () => {
     vi.spyOn(Date, "now").mockReturnValue(1700000000000);
     auth.getAuthUserId.mockResolvedValue("user_1");
     scansModule ??= await import("../../../../../convex/scans");
+    serviceModule ??= await import("../../../../../convex/service");
   });
 
   it("trims compare titles on write and omits blank titles from the stored row", async () => {
@@ -284,34 +287,24 @@ describe("compare scan handlers", () => {
     ).rejects.toThrow("running");
   });
 
-  it("keeps compare scans out of the recent scan list", async () => {
-    const paginate = vi.fn().mockResolvedValue({
-      page: [
-        {
-          _id: "scan_compare_1",
-          userId: "user_1",
-          uploadId: "upload_compare",
-          scanType: "compare",
-          secondaryUploadId: "upload_compare_2",
-          status: "completed",
-          createdAt: 1700000000000,
-          updatedAt: 1700000000000,
-        },
-        {
-          _id: "scan_single_1",
-          userId: "user_1",
-          uploadId: "upload_single",
-          scanType: "single",
-          status: "completed",
-          createdAt: 1700000000000,
-          updatedAt: 1700000000000,
-        },
-      ],
-      continueCursor: null,
-      isDone: true,
+  it("uses the single-scan index for shared list queries", async () => {
+    const take = vi.fn().mockResolvedValue([
+      {
+        _id: "scan_single_1",
+        userId: "user_1",
+        uploadId: "upload_single",
+        scanType: "single",
+        status: "completed",
+        createdAt: 1700000000000,
+        updatedAt: 1700000000000,
+      },
+    ]);
+    const eq = vi.fn(() => ({ eq, order, take }));
+    const order = vi.fn(() => ({ take }));
+    const withIndex = vi.fn((indexName: string, builder: (q: never) => never) => {
+      builder({ eq } as never);
+      return { order };
     });
-    const order = vi.fn(() => ({ paginate }));
-    const withIndex = vi.fn(() => ({ order }));
     const query = vi.fn(() => ({ withIndex }));
     const get = vi.fn(async (id: string) => {
       if (id === "upload_single") {
@@ -330,85 +323,64 @@ describe("compare scan handlers", () => {
 
     const result = await scansModule.listRecentMine.handler(ctx, {});
 
+    expect(withIndex).toHaveBeenCalledWith(
+      "by_userId_scanType_createdAt",
+      expect.any(Function),
+    );
+    expect(eq).toHaveBeenNthCalledWith(1, "userId", "user_1");
+    expect(eq).toHaveBeenNthCalledWith(2, "scanType", "single");
+    expect(order).toHaveBeenCalledWith("desc");
+    expect(take).toHaveBeenCalledWith(50);
     expect(result).toHaveLength(1);
     expect(result[0]._id).toBe("scan_single_1");
     expect(result[0].filename).toBe("single.mp4");
     expect(get).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps paging until enough single scans are collected", async () => {
-    const pages = [
-      {
-        page: Array.from({ length: 20 }, (_, index) => ({
-          _id: `scan_compare_page1_${index}`,
-          userId: "user_1",
-          uploadId: `upload_compare_page1_${index}`,
-          scanType: "compare" as const,
-          secondaryUploadId: `upload_compare_page1_${index}_b`,
-          status: "completed" as const,
-          createdAt: 1700000000000 - index,
-          updatedAt: 1700000000000 - index,
-        })),
-        continueCursor: "cursor-2",
-        isDone: false,
-      },
-      {
-        page: [
-          {
-            _id: "scan_single_1",
-            userId: "user_1",
-            uploadId: "upload_single_1",
-            scanType: "single" as const,
-            status: "completed" as const,
-            createdAt: 1699999999000,
-            updatedAt: 1699999999000,
-          },
-          {
-            _id: "scan_single_2",
-            userId: "user_1",
-            uploadId: "upload_single_2",
-            scanType: "single" as const,
-            status: "completed" as const,
-            createdAt: 1699999998000,
-            updatedAt: 1699999998000,
-          },
-        ],
-        continueCursor: null,
-        isDone: true,
-      },
-    ];
-    const paginate = vi.fn().mockResolvedValueOnce(pages[0]).mockResolvedValueOnce(pages[1]);
-    const order = vi.fn(() => ({ paginate }));
-    const withIndex = vi.fn(() => ({ order }));
-    const query = vi.fn(() => ({ withIndex }));
-    const get = vi.fn(async (id: string) => {
-      if (id === "upload_single_1") {
-        return {
-          _id: "upload_single_1",
-          userId: "user_1",
-          filename: "single-1.mp4",
-          localUploadId: "local_single_1",
-        };
-      }
-      if (id === "upload_single_2") {
-        return {
-          _id: "upload_single_2",
-          userId: "user_1",
-          filename: "single-2.mp4",
-          localUploadId: "local_single_2",
-        };
-      }
-      return null;
+  it("rejects compare status rewrites from the service bridge", async () => {
+    const get = vi.fn().mockResolvedValue({
+      _id: "scan_6",
+      userId: "user_1",
+      scanType: "compare",
+      status: "queued",
+      secondaryUploadId: "upload_2",
     });
-    const insert = vi.fn();
     const patch = vi.fn();
-    const ctx = { db: { get, insert, patch, query } } as never;
+    const ctx = makeMutationCtx({ get, insert: vi.fn(), patch, query: vi.fn() });
 
-    const result = await scansModule.listMine.handler(ctx, {});
+    await expect(
+      serviceModule.updateScanStatus.handler(ctx, {
+        scanId: "scan_6",
+        status: "running",
+        localAnalysisId: "analysis_a",
+      }),
+    ).rejects.toThrow("FastAPI bridge");
+    expect(patch).not.toHaveBeenCalled();
+  });
 
-    expect(result).toHaveLength(2);
-    expect(result.map((scan) => scan._id)).toEqual(["scan_single_1", "scan_single_2"]);
-    expect(paginate).toHaveBeenCalledTimes(2);
-    expect(get).toHaveBeenCalledTimes(2);
+  it("rejects compare summary writes from the service bridge", async () => {
+    const get = vi.fn().mockResolvedValue({
+      _id: "scan_7",
+      userId: "user_1",
+      scanType: "compare",
+      status: "running",
+      secondaryUploadId: "upload_2",
+    });
+    const patch = vi.fn();
+    const ctx = makeMutationCtx({ get, insert: vi.fn(), patch, query: vi.fn() });
+
+    await expect(
+      serviceModule.attachScanSummary.handler(ctx, {
+        scanId: "scan_7",
+        viralPotential: 1,
+        hookScore: 2,
+        pacingScore: 3,
+        retentionEstimate: 4,
+        deadspaceSeconds: 5,
+        trimmedDurationSec: 6,
+        overallRecommendation: "Use B",
+      }),
+    ).rejects.toThrow("FastAPI bridge");
+    expect(patch).not.toHaveBeenCalled();
   });
 });

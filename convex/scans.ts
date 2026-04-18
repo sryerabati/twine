@@ -111,25 +111,15 @@ async function summarizeScan(ctx: QueryCtx, row: Doc<"scans">): Promise<ScanSumm
 }
 
 async function listMineScans(ctx: QueryCtx, userId: string) {
-  const pageSize = 20;
-  const scanRows: Doc<"scans">[] = [];
-  let cursor: string | null = null;
-  let isDone = false;
+  const rows = await ctx.db
+    .query("scans")
+    .withIndex("by_userId_scanType_createdAt", (q) =>
+      q.eq("userId", userId as never).eq("scanType", "single" as never),
+    )
+    .order("desc")
+    .take(50);
 
-  while (!isDone && scanRows.length < 50) {
-    const page = await ctx.db
-      .query("scans")
-      .withIndex("by_userId_createdAt", (q) => q.eq("userId", userId as never))
-      .order("desc")
-      .paginate({ cursor, numItems: pageSize });
-
-    const singleRows = page.page.filter((row) => row.scanType !== "compare");
-    scanRows.push(...singleRows);
-    cursor = page.continueCursor;
-    isDone = page.isDone;
-  }
-
-  return await Promise.all(scanRows.slice(0, 50).map(async (row) => summarizeScan(ctx, row)));
+  return await Promise.all(rows.map(async (row) => summarizeScan(ctx, row)));
 }
 
 /**

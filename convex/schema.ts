@@ -74,6 +74,7 @@ const schema = defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
+    .index("by_userId_scanType_createdAt", ["userId", "scanType", "createdAt"])
     .index("by_userId_createdAt", ["userId", "createdAt"])
     .index("by_localAnalysisId", ["localAnalysisId"])
     .index("by_userId_status", ["userId", "status"]),
