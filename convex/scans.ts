@@ -33,6 +33,27 @@ type ScanSummary = {
   updatedAt: number;
 };
 
+type CompareScanState = Pick<
+  Doc<"scans">,
+  "scanType" | "secondaryUploadId" | "localAnalysisId" | "secondaryLocalAnalysisId"
+>;
+
+export function assertCompareScanTarget(scan: Pick<Doc<"scans">, "scanType" | "secondaryUploadId">) {
+  if (scan.scanType !== "compare") {
+    throw new Error("Scan must be a compare scan.");
+  }
+  if (scan.secondaryUploadId == null) {
+    throw new Error("Compare scan must include a secondary upload.");
+  }
+}
+
+export function assertCompareScanReadyToFinalize(scan: CompareScanState) {
+  assertCompareScanTarget(scan);
+  if (!scan.localAnalysisId || !scan.secondaryLocalAnalysisId) {
+    throw new Error("Compare scan must have both analysis IDs before finalizing.");
+  }
+}
+
 async function summarizeScan(ctx: QueryCtx, row: Doc<"scans">): Promise<ScanSummary> {
   const [primaryUpload, secondaryUpload] = await Promise.all([
     ctx.db.get(row.uploadId),
@@ -189,6 +210,7 @@ export const attachCompareAnalysisIds = mutation({
     if (scan === null || scan.userId !== userId) {
       throw new Error("Scan not found.");
     }
+    assertCompareScanTarget(scan);
 
     await ctx.db.patch(args.scanId, {
       localAnalysisId: args.analysisIdA,
@@ -225,6 +247,7 @@ export const saveCompareResult = mutation({
     if (scan === null || scan.userId !== userId) {
       throw new Error("Scan not found.");
     }
+    assertCompareScanReadyToFinalize(scan);
 
     await ctx.db.patch(args.scanId, {
       status: "completed",

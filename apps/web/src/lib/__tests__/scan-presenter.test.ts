@@ -24,6 +24,13 @@ describe("scan-presenter", () => {
       } as never),
     ).toBe("clip.mp4");
 
+    expect(
+      getScanTitle({
+        title: "   ",
+        filename: "clip.mp4",
+      } as never),
+    ).toBe("clip.mp4");
+
     expect(isCompareScan({ scanType: undefined } as never)).toBe(false);
   });
 });
