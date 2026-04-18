@@ -1,0 +1,24 @@
+{
+  "name": "claudehackosu26",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "concurrently -c auto \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:web": "npm run dev --workspace web",
+    "dev:api": "sh -c 'cd apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port ${API_PORT:-8000}'",
+    "build": "npm run check:api && npm run build:web",
+    "build:web": "npm run build --workspace web",
+    "check:api": "cd apps/api && python3.11 -m py_compile $(find app -name '*.py' | sort)",
+    "lint": "npm run lint:web && npm run check:api",
+    "lint:web": "npm run lint --workspace web",
+    "test": "npm run test:api && npm run test:web",
+    "test:api": "cd apps/api && uv run pytest",
+    "test:web": "npm run test --workspace web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
