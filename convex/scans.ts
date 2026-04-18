@@ -38,6 +38,11 @@ type CompareScanState = Pick<
   "scanType" | "secondaryUploadId" | "localAnalysisId" | "secondaryLocalAnalysisId"
 >;
 
+function normalizeCompareTitle(title: string): string | null {
+  const normalizedTitle = title.trim();
+  return normalizedTitle.length > 0 ? normalizedTitle : null;
+}
+
 export function assertCompareScanTarget(scan: Pick<Doc<"scans">, "scanType" | "secondaryUploadId">) {
   if (scan.scanType !== "compare") {
     throw new Error("Scan must be a compare scan.");
@@ -63,7 +68,7 @@ async function summarizeScan(ctx: QueryCtx, row: Doc<"scans">): Promise<ScanSumm
   return {
     _id: row._id,
     scanType: row.scanType,
-    title: row.displayName ?? null,
+    title: row.displayName ? normalizeCompareTitle(row.displayName) : null,
     filename: primaryUpload?.filename ?? "untitled.mp4",
     secondaryFilename: secondaryUpload?.filename ?? null,
     uploadId: row.uploadId,
@@ -97,7 +102,9 @@ async function listMineScans(ctx: QueryCtx, userId: string) {
     .order("desc")
     .take(50);
 
-  return await Promise.all(rows.map(async (row) => summarizeScan(ctx, row)));
+  return await Promise.all(
+    rows.filter((row) => row.scanType !== "compare").map(async (row) => summarizeScan(ctx, row)),
+  );
 }
 
 /**
@@ -160,12 +167,13 @@ export const createPendingCompareScan = mutation({
     }
 
     const now = Date.now();
+    const normalizedTitle = normalizeCompareTitle(args.title);
     return await ctx.db.insert("scans", {
       userId,
       uploadId: args.primaryUploadId,
       secondaryUploadId: args.secondaryUploadId,
       scanType: "compare",
-      displayName: args.title,
+      ...(normalizedTitle ? { displayName: normalizedTitle } : {}),
       status: "queued",
       createdAt: now,
       updatedAt: now,

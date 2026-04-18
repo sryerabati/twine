@@ -1,37 +1,195 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  assertCompareScanReadyToFinalize,
-  assertCompareScanTarget,
-} from "../../../../../convex/scans";
+const convexServer = vi.hoisted(() => ({
+  mutation: vi.fn((definition) => definition),
+  query: vi.fn((definition) => definition),
+}));
 
-describe("compare scan invariants", () => {
-  it("rejects non-compare scans when attaching compare analyses", () => {
-    expect(() =>
-      assertCompareScanTarget({
+const auth = vi.hoisted(() => ({
+  getAuthUserId: vi.fn(),
+}));
+
+vi.mock("../../../../../convex/_generated/server", () => convexServer);
+vi.mock("@convex-dev/auth/server", () => auth);
+
+let scansModule: typeof import("../../../../../convex/scans");
+
+function makeMutationCtx(db: {
+  get: ReturnType<typeof vi.fn>;
+  insert: ReturnType<typeof vi.fn>;
+  patch: ReturnType<typeof vi.fn>;
+  query: ReturnType<typeof vi.fn>;
+}) {
+  return { db } as never;
+}
+
+describe("compare scan handlers", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000);
+    auth.getAuthUserId.mockResolvedValue("user_1");
+    scansModule ??= await import("../../../../../convex/scans");
+  });
+
+  it("trims compare titles on write and omits blank titles from the stored row", async () => {
+    const get = vi.fn(async (id: string) => {
+      if (id === "upload_1") {
+        return { _id: "upload_1", userId: "user_1" };
+      }
+      if (id === "upload_2") {
+        return { _id: "upload_2", userId: "user_1" };
+      }
+      return null;
+    });
+    const insert = vi.fn().mockResolvedValue("scan_1");
+    const patch = vi.fn();
+    const query = vi.fn();
+    const ctx = makeMutationCtx({ get, insert, patch, query });
+
+    await scansModule.createPendingCompareScan.handler(ctx, {
+      primaryUploadId: "upload_1",
+      secondaryUploadId: "upload_2",
+      title: "  Compare A  ",
+    });
+
+    expect(insert).toHaveBeenCalledWith(
+      "scans",
+      expect.objectContaining({
+        userId: "user_1",
+        uploadId: "upload_1",
+        secondaryUploadId: "upload_2",
+        scanType: "compare",
+        status: "queued",
+        displayName: "Compare A",
+        createdAt: 1700000000000,
+        updatedAt: 1700000000000,
+      }),
+    );
+
+    await scansModule.createPendingCompareScan.handler(ctx, {
+      primaryUploadId: "upload_1",
+      secondaryUploadId: "upload_2",
+      title: "   ",
+    });
+
+    expect(insert).toHaveBeenLastCalledWith(
+      "scans",
+      expect.objectContaining({
+        userId: "user_1",
+        uploadId: "upload_1",
+        secondaryUploadId: "upload_2",
+        scanType: "compare",
+        status: "queued",
+        createdAt: 1700000000000,
+        updatedAt: 1700000000000,
+      }),
+    );
+    expect(insert.mock.calls[1][1]).not.toHaveProperty("displayName");
+  });
+
+  it("rejects non-compare rows when attaching compare analyses", async () => {
+    const get = vi.fn().mockResolvedValue({
+      _id: "scan_1",
+      userId: "user_1",
+      scanType: "single",
+    });
+    const insert = vi.fn();
+    const patch = vi.fn();
+    const query = vi.fn();
+    const ctx = makeMutationCtx({ get, insert, patch, query });
+
+    await expect(
+      scansModule.attachCompareAnalysisIds.handler(ctx, {
+        scanId: "scan_1",
+        analysisIdA: "analysis_a",
+        analysisIdB: "analysis_b",
+      }),
+    ).rejects.toThrow("compare scan");
+  });
+
+  it("rejects compare scans that are missing analysis ids before finalization", async () => {
+    const get = vi.fn().mockResolvedValue({
+      _id: "scan_2",
+      userId: "user_1",
+      scanType: "compare",
+      secondaryUploadId: "upload_2",
+      localAnalysisId: "analysis_a",
+      secondaryLocalAnalysisId: null,
+    });
+    const insert = vi.fn();
+    const patch = vi.fn();
+    const query = vi.fn();
+    const ctx = makeMutationCtx({ get, insert, patch, query });
+
+    await expect(
+      scansModule.saveCompareResult.handler(ctx, {
+        scanId: "scan_2",
+        winner: "A",
+        winnerReason: "Better hooks",
+        recommendation: "Use A",
+        summary: ["A"],
+        slices: [
+          {
+            label: "Hooks",
+            winner: "A",
+            aScore: 10,
+            bScore: 8,
+          },
+        ],
+      }),
+    ).rejects.toThrow("analysis IDs");
+  });
+
+  it("keeps compare scans out of the recent scan list", async () => {
+    const rows = [
+      {
+        _id: "scan_compare_1",
+        userId: "user_1",
+        uploadId: "upload_compare",
+        scanType: "compare",
+        secondaryUploadId: "upload_compare_2",
+        status: "completed",
+        createdAt: 1700000000000,
+        updatedAt: 1700000000000,
+      },
+      {
+        _id: "scan_single_1",
+        userId: "user_1",
+        uploadId: "upload_single",
         scanType: "single",
-        secondaryUploadId: "upload_2",
-      } as never),
-    ).toThrow("compare scan");
-  });
+        status: "completed",
+        createdAt: 1700000000000,
+        updatedAt: 1700000000000,
+      },
+    ];
+    const take = vi.fn().mockResolvedValue(rows);
+    const order = vi.fn(() => ({ take }));
+    const withIndex = vi.fn(() => ({ order }));
+    const query = vi.fn(() => ({ withIndex }));
+    const get = vi.fn(async (id: string) => {
+      if (id === "upload_single") {
+        return {
+          _id: "upload_single",
+          userId: "user_1",
+          filename: "single.mp4",
+          localUploadId: "local_single",
+        };
+      }
+      return null;
+    });
+    const insert = vi.fn();
+    const patch = vi.fn();
+    const ctx = { db: { get, insert, patch, query } } as never;
 
-  it("rejects compare scans without a secondary upload", () => {
-    expect(() =>
-      assertCompareScanTarget({
-        scanType: "compare",
-        secondaryUploadId: undefined,
-      } as never),
-    ).toThrow("secondary upload");
-  });
+    const result = await scansModule.listRecentMine.handler(ctx, {});
 
-  it("rejects compare scans that are missing analysis ids before finalization", () => {
-    expect(() =>
-      assertCompareScanReadyToFinalize({
-        scanType: "compare",
-        secondaryUploadId: "upload_2",
-        localAnalysisId: "analysis_a",
-        secondaryLocalAnalysisId: undefined,
-      } as never),
-    ).toThrow("analysis IDs");
+    expect(result).toHaveLength(1);
+    expect(result[0]._id).toBe("scan_single_1");
+    expect(result[0].filename).toBe("single.mp4");
+    expect(get).toHaveBeenCalledTimes(1);
   });
 });
