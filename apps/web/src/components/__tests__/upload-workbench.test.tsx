@@ -193,13 +193,13 @@ describe("UploadWorkbench", () => {
 
     await waitFor(() => {
       expect(createPendingUpload).toHaveBeenCalledTimes(2);
-      expect(api.uploadVideo.mock.calls.length).toBeGreaterThanOrEqual(2);
+      expect(vi.mocked(api.uploadVideo).mock.calls.length).toBeGreaterThanOrEqual(2);
       expect(createPendingCompareScan).toHaveBeenCalledWith({
         primaryUploadId: "convex-upload-1",
         secondaryUploadId: "convex-upload-2",
         title: "intro-cut vs alt-cut",
       });
-      expect(api.startAnalysis.mock.calls.length).toBeGreaterThanOrEqual(2);
+      expect(vi.mocked(api.startAnalysis).mock.calls.length).toBeGreaterThanOrEqual(2);
       const attachArgs = attachCompareAnalysisIds.mock.calls[0]?.[0] as
         | {
             scanId: string;

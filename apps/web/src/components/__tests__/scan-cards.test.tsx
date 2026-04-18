@@ -4,31 +4,43 @@ import { describe, expect, it } from "vitest";
 import { SavedScanCards } from "@/components/scan-cards";
 import type { SavedScanSummary } from "@/lib/contracts";
 
-const baseScan = {
+const baseScan: Omit<
+  SavedScanSummary,
+  "_id" | "filename" | "secondaryFilename" | "scanType"
+> = {
   status: "completed",
   createdAt: Date.now(),
   updatedAt: Date.now(),
   title: null,
+  uploadId: "upload-1",
+  secondaryUploadId: null,
+  localUploadId: null,
+  localAnalysisId: null,
+  secondaryLocalAnalysisId: null,
+  compareResult: null,
   overviewRecommendation: "Ship the strongest cut.",
   hookScore: 82,
   pacingScore: 77,
+  retentionEstimate: 74,
   viralPotential: 69,
   deadspaceSeconds: 12,
+  trimmedDurationSec: null,
+  analysisUrl: null,
   selectedCutIds: [],
   latestExportUrl: null,
   lastExportedAt: null,
   errorMessage: null,
-} as const;
+};
 
 describe("SavedScanCards", () => {
   it("renders compare scans as a single saved item with compare routing", () => {
-    const compareScan = {
+    const compareScan: SavedScanSummary = {
       ...baseScan,
       _id: "scan-compare-1",
       scanType: "compare",
       filename: "cut-a.mp4",
       secondaryFilename: "cut-b.mp4",
-    } as SavedScanSummary;
+    };
 
     render(<SavedScanCards scans={[compareScan]} title="Saved scans" />);
 
@@ -41,12 +53,12 @@ describe("SavedScanCards", () => {
   });
 
   it("renders single scans with the scan route", () => {
-    const singleScan = {
+    const singleScan: SavedScanSummary = {
       ...baseScan,
       _id: "scan-single-1",
       filename: "clip.mp4",
       secondaryFilename: null,
-    } as SavedScanSummary;
+    };
 
     render(<SavedScanCards scans={[singleScan]} title="Saved scans" />);
 

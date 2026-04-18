@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useRef, useState } from "react";
-import type { DragEvent } from "react";
+import type { ChangeEvent, DragEvent, MouseEvent } from "react";
 import { Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -98,7 +98,7 @@ export function UploadDropzone({
         type="file"
         accept={accept}
         className="sr-only"
-        onChange={(event) => {
+        onChange={(event: ChangeEvent<HTMLInputElement>) => {
           commitFile(event.target.files?.[0]);
           event.currentTarget.value = "";
         }}
@@ -116,7 +116,7 @@ export function UploadDropzone({
         </span>
       </div>
 
-        <div className="mt-5 rounded-[1.6rem] border border-dashed border-white/10 bg-black/20 p-5">
+      <div className="mt-5 rounded-[1.6rem] border border-dashed border-white/10 bg-black/20 p-5">
         {file ? (
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -127,7 +127,7 @@ export function UploadDropzone({
               type="button"
               variant="outline"
               size="sm"
-              onClick={(event) => {
+              onClick={(event: MouseEvent<HTMLButtonElement>) => {
                 event.stopPropagation();
                 openPicker();
               }}
@@ -155,7 +155,7 @@ export function UploadDropzone({
               type="button"
               variant="outline"
               size="sm"
-              onClick={(event) => {
+              onClick={(event: MouseEvent<HTMLButtonElement>) => {
                 event.stopPropagation();
                 openPicker();
               }}

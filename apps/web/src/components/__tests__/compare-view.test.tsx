@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { CompareView } from "@/components/compare-view";
+import type { AnalysisResponse } from "@/lib/contracts";
 
 vi.mock("@/lib/api", () => ({
   fetchAnalysis: vi.fn(),
@@ -38,7 +39,7 @@ describe("CompareView", () => {
 
   it("renders compare summary after both analyses complete", async () => {
     const { compareAnalyses, fetchAnalysis } = await import("@/lib/api");
-    const completed = {
+    const completed: Omit<AnalysisResponse, "analysisId"> = {
       status: "completed",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -168,7 +169,13 @@ describe("CompareView", () => {
 
     vi.mocked(fetchAnalysis)
       .mockResolvedValueOnce({ analysisId: "analysis-a", ...completed })
-      .mockResolvedValueOnce({ analysisId: "analysis-b", ...completed, payload: { ...completed.payload, analysisId: "analysis-b" } });
+      .mockResolvedValueOnce({
+        analysisId: "analysis-b",
+        ...completed,
+        payload: completed.payload
+          ? { ...completed.payload, analysisId: "analysis-b" }
+          : null,
+      });
     vi.mocked(compareAnalyses).mockResolvedValue({
       analysisIdA: "analysis-a",
       analysisIdB: "analysis-b",

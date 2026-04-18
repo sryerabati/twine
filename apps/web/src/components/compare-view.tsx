@@ -59,12 +59,14 @@ export function CompareView({
 
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const primaryAnalysisId = analysisIdA;
+    const secondaryAnalysisId = analysisIdB;
 
     async function load() {
       try {
         const [nextA, nextB] = await Promise.all([
-          fetchAnalysis(analysisIdA),
-          fetchAnalysis(analysisIdB),
+          fetchAnalysis(primaryAnalysisId),
+          fetchAnalysis(secondaryAnalysisId),
         ]);
         if (!active) {
           return;
@@ -88,7 +90,7 @@ export function CompareView({
           return;
         }
 
-        const comparePayload = await compareAnalyses(analysisIdA, analysisIdB);
+        const comparePayload = await compareAnalyses(primaryAnalysisId, secondaryAnalysisId);
         if (!active) {
           return;
         }

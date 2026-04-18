@@ -44,12 +44,14 @@ export function CompareScanDetailClient({
 
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const primaryAnalysisId = scan.localAnalysisId;
+    const secondaryAnalysisId = scan.secondaryLocalAnalysisId;
 
     async function load() {
       try {
         const [nextA, nextB] = await Promise.all([
-          fetchAnalysis(scan.localAnalysisId!),
-          fetchAnalysis(scan.secondaryLocalAnalysisId!),
+          fetchAnalysis(primaryAnalysisId),
+          fetchAnalysis(secondaryAnalysisId),
         ]);
         if (!active) {
           return;
@@ -73,10 +75,7 @@ export function CompareScanDetailClient({
           return;
         }
 
-        const comparePayload = await compareAnalyses(
-          scan.localAnalysisId,
-          scan.secondaryLocalAnalysisId,
-        );
+        const comparePayload = await compareAnalyses(primaryAnalysisId, secondaryAnalysisId);
         await saveCompareResult({
           scanId,
           winner: comparePayload.winner,
