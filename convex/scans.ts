@@ -43,6 +43,21 @@ function normalizeCompareTitle(title: string): string | null {
   return normalizedTitle.length > 0 ? normalizedTitle : null;
 }
 
+function assertCompareScanState(scan: {
+  scanType?: Doc<"scans">["scanType"];
+  secondaryUploadId?: Doc<"scans">["secondaryUploadId"];
+  status: Doc<"scans">["status"];
+}, expectedStatus: "queued" | "running") {
+  assertCompareScanTarget(scan);
+  if (scan.status !== expectedStatus) {
+    throw new Error(
+      expectedStatus === "queued"
+        ? "Compare scan must be queued before attaching analyses."
+        : "Compare scan must be running before saving results.",
+    );
+  }
+}
+
 export function assertCompareScanTarget(scan: Pick<Doc<"scans">, "scanType" | "secondaryUploadId">) {
   if (scan.scanType !== "compare") {
     throw new Error("Scan must be a compare scan.");
@@ -96,18 +111,25 @@ async function summarizeScan(ctx: QueryCtx, row: Doc<"scans">): Promise<ScanSumm
 }
 
 async function listMineScans(ctx: QueryCtx, userId: string) {
-  const rows = await ctx.db
-    .query("scans")
-    .withIndex("by_userId_createdAt", (q) => q.eq("userId", userId as never))
-    .order("desc")
-    .collect();
+  const pageSize = 20;
+  const scanRows: Doc<"scans">[] = [];
+  let cursor: string | null = null;
+  let isDone = false;
 
-  return await Promise.all(
-    rows
-      .filter((row) => row.scanType !== "compare")
-      .slice(0, 50)
-      .map(async (row) => summarizeScan(ctx, row)),
-  );
+  while (!isDone && scanRows.length < 50) {
+    const page = await ctx.db
+      .query("scans")
+      .withIndex("by_userId_createdAt", (q) => q.eq("userId", userId as never))
+      .order("desc")
+      .paginate({ cursor, numItems: pageSize });
+
+    const singleRows = page.page.filter((row) => row.scanType !== "compare");
+    scanRows.push(...singleRows);
+    cursor = page.continueCursor;
+    isDone = page.isDone;
+  }
+
+  return await Promise.all(scanRows.slice(0, 50).map(async (row) => summarizeScan(ctx, row)));
 }
 
 /**
@@ -221,7 +243,7 @@ export const attachCompareAnalysisIds = mutation({
     if (scan === null || scan.userId !== userId) {
       throw new Error("Scan not found.");
     }
-    assertCompareScanTarget(scan);
+    assertCompareScanState(scan, "queued");
 
     await ctx.db.patch(args.scanId, {
       localAnalysisId: args.analysisIdA,
@@ -258,6 +280,7 @@ export const saveCompareResult = mutation({
     if (scan === null || scan.userId !== userId) {
       throw new Error("Scan not found.");
     }
+    assertCompareScanState(scan, "running");
     assertCompareScanReadyToFinalize(scan);
 
     await ctx.db.patch(args.scanId, {

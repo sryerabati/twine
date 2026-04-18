@@ -117,6 +117,7 @@ describe("compare scan handlers", () => {
       userId: "user_1",
       scanType: "compare",
       secondaryUploadId: "upload_2",
+      status: "queued",
     });
     const insert = vi.fn();
     const patch = vi.fn();
@@ -147,6 +148,7 @@ describe("compare scan handlers", () => {
       secondaryUploadId: "upload_2",
       localAnalysisId: "analysis_a",
       secondaryLocalAnalysisId: null,
+      status: "running",
     });
     const insert = vi.fn();
     const patch = vi.fn();
@@ -180,6 +182,7 @@ describe("compare scan handlers", () => {
       secondaryUploadId: "upload_2",
       localAnalysisId: "analysis_a",
       secondaryLocalAnalysisId: "analysis_b",
+      status: "running",
     });
     const insert = vi.fn();
     const patch = vi.fn();
@@ -225,30 +228,89 @@ describe("compare scan handlers", () => {
     });
   });
 
+  it("rejects compare analysis attachment on completed rows", async () => {
+    const get = vi.fn().mockResolvedValue({
+      _id: "scan_4",
+      userId: "user_1",
+      scanType: "compare",
+      secondaryUploadId: "upload_2",
+      status: "completed",
+    });
+    const insert = vi.fn();
+    const patch = vi.fn();
+    const query = vi.fn();
+    const ctx = makeMutationCtx({ get, insert, patch, query });
+
+    await expect(
+      scansModule.attachCompareAnalysisIds.handler(ctx, {
+        scanId: "scan_4",
+        analysisIdA: "analysis_a",
+        analysisIdB: "analysis_b",
+      }),
+    ).rejects.toThrow("queued");
+  });
+
+  it("rejects compare result finalization on completed rows", async () => {
+    const get = vi.fn().mockResolvedValue({
+      _id: "scan_5",
+      userId: "user_1",
+      scanType: "compare",
+      secondaryUploadId: "upload_2",
+      localAnalysisId: "analysis_a",
+      secondaryLocalAnalysisId: "analysis_b",
+      status: "completed",
+    });
+    const insert = vi.fn();
+    const patch = vi.fn();
+    const query = vi.fn();
+    const ctx = makeMutationCtx({ get, insert, patch, query });
+
+    await expect(
+      scansModule.saveCompareResult.handler(ctx, {
+        scanId: "scan_5",
+        winner: "A",
+        winnerReason: "Already done",
+        recommendation: "Use A",
+        summary: ["A"],
+        slices: [
+          {
+            label: "Hooks",
+            winner: "A",
+            aScore: 9,
+            bScore: 8,
+          },
+        ],
+      }),
+    ).rejects.toThrow("running");
+  });
+
   it("keeps compare scans out of the recent scan list", async () => {
-    const rows = [
-      {
-        _id: "scan_compare_1",
-        userId: "user_1",
-        uploadId: "upload_compare",
-        scanType: "compare",
-        secondaryUploadId: "upload_compare_2",
-        status: "completed",
-        createdAt: 1700000000000,
-        updatedAt: 1700000000000,
-      },
-      {
-        _id: "scan_single_1",
-        userId: "user_1",
-        uploadId: "upload_single",
-        scanType: "single",
-        status: "completed",
-        createdAt: 1700000000000,
-        updatedAt: 1700000000000,
-      },
-    ];
-    const collect = vi.fn().mockResolvedValue(rows);
-    const order = vi.fn(() => ({ collect }));
+    const paginate = vi.fn().mockResolvedValue({
+      page: [
+        {
+          _id: "scan_compare_1",
+          userId: "user_1",
+          uploadId: "upload_compare",
+          scanType: "compare",
+          secondaryUploadId: "upload_compare_2",
+          status: "completed",
+          createdAt: 1700000000000,
+          updatedAt: 1700000000000,
+        },
+        {
+          _id: "scan_single_1",
+          userId: "user_1",
+          uploadId: "upload_single",
+          scanType: "single",
+          status: "completed",
+          createdAt: 1700000000000,
+          updatedAt: 1700000000000,
+        },
+      ],
+      continueCursor: null,
+      isDone: true,
+    });
+    const order = vi.fn(() => ({ paginate }));
     const withIndex = vi.fn(() => ({ order }));
     const query = vi.fn(() => ({ withIndex }));
     const get = vi.fn(async (id: string) => {
@@ -272,5 +334,81 @@ describe("compare scan handlers", () => {
     expect(result[0]._id).toBe("scan_single_1");
     expect(result[0].filename).toBe("single.mp4");
     expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps paging until enough single scans are collected", async () => {
+    const pages = [
+      {
+        page: Array.from({ length: 20 }, (_, index) => ({
+          _id: `scan_compare_page1_${index}`,
+          userId: "user_1",
+          uploadId: `upload_compare_page1_${index}`,
+          scanType: "compare" as const,
+          secondaryUploadId: `upload_compare_page1_${index}_b`,
+          status: "completed" as const,
+          createdAt: 1700000000000 - index,
+          updatedAt: 1700000000000 - index,
+        })),
+        continueCursor: "cursor-2",
+        isDone: false,
+      },
+      {
+        page: [
+          {
+            _id: "scan_single_1",
+            userId: "user_1",
+            uploadId: "upload_single_1",
+            scanType: "single" as const,
+            status: "completed" as const,
+            createdAt: 1699999999000,
+            updatedAt: 1699999999000,
+          },
+          {
+            _id: "scan_single_2",
+            userId: "user_1",
+            uploadId: "upload_single_2",
+            scanType: "single" as const,
+            status: "completed" as const,
+            createdAt: 1699999998000,
+            updatedAt: 1699999998000,
+          },
+        ],
+        continueCursor: null,
+        isDone: true,
+      },
+    ];
+    const paginate = vi.fn().mockResolvedValueOnce(pages[0]).mockResolvedValueOnce(pages[1]);
+    const order = vi.fn(() => ({ paginate }));
+    const withIndex = vi.fn(() => ({ order }));
+    const query = vi.fn(() => ({ withIndex }));
+    const get = vi.fn(async (id: string) => {
+      if (id === "upload_single_1") {
+        return {
+          _id: "upload_single_1",
+          userId: "user_1",
+          filename: "single-1.mp4",
+          localUploadId: "local_single_1",
+        };
+      }
+      if (id === "upload_single_2") {
+        return {
+          _id: "upload_single_2",
+          userId: "user_1",
+          filename: "single-2.mp4",
+          localUploadId: "local_single_2",
+        };
+      }
+      return null;
+    });
+    const insert = vi.fn();
+    const patch = vi.fn();
+    const ctx = { db: { get, insert, patch, query } } as never;
+
+    const result = await scansModule.listMine.handler(ctx, {});
+
+    expect(result).toHaveLength(2);
+    expect(result.map((scan) => scan._id)).toEqual(["scan_single_1", "scan_single_2"]);
+    expect(paginate).toHaveBeenCalledTimes(2);
+    expect(get).toHaveBeenCalledTimes(2);
   });
 });
