@@ -22,9 +22,9 @@ const monoFont = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Cortent",
+  title: "VibeCheck",
   description:
-    "Cortent is a clean creator SaaS with a brain-style scan viewer, structured action board, saved scan history, and deadspace-first export workflow.",
+    "VibeCheck scans creative signal, compares cuts, and tells you what to ship next.",
 };
 
 export default function RootLayout({

@@ -1,7 +1,5 @@
 import Link from "next/link";
-import { ArrowUpRight, ScanEye } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -14,44 +12,20 @@ export function BrandShell({
 }) {
   return (
     <div
-      className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(244,137,74,0.12),transparent_26%),radial-gradient(circle_at_top_right,rgba(87,182,193,0.12),transparent_24%),linear-gradient(180deg,#fcfbf7,#f4efe4_54%,#fbfaf7)]"
+      className="min-h-screen bg-[radial-gradient(circle_at_72%_18%,rgba(255,194,214,0.12),transparent_20%),radial-gradient(circle_at_18%_88%,rgba(198,108,149,0.1),transparent_26%),linear-gradient(180deg,#07070c_0%,#0d0b14_52%,#130f18_100%)]"
       data-compact={compact ? "true" : "false"}
     >
-      <header className="sticky top-0 z-20 border-b border-border/70 bg-white/78 backdrop-blur-xl">
+      <header className="sticky top-0 z-20 border-b border-white/8 bg-black/30 backdrop-blur-2xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 lg:px-10">
-          <div className="flex items-center gap-4">
-            <Link href="/" className="flex items-center gap-3">
-              <span className="flex size-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
-                <ScanEye className="size-5" />
-              </span>
-              <div>
-                <p className="text-sm font-semibold tracking-[0.22em] uppercase text-foreground">Cortent</p>
-                <p className="text-xs text-muted-foreground">Clean creator scan workspace</p>
-              </div>
-            </Link>
-            <Badge variant="secondary" className="hidden rounded-full bg-primary/10 text-primary md:inline-flex">
-              Public SaaS preview
-            </Badge>
-          </div>
+          <Link href="/" className="text-sm font-semibold uppercase tracking-[0.32em] text-primary">
+            VibeCheck
+          </Link>
           <nav className="flex items-center gap-2">
+            <Link href="/app" className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}>
+              Login
+            </Link>
             <Link href="/app" className={cn(buttonVariants({ variant: "default", size: "sm" }))}>
-              Open app
-            </Link>
-            <Link href="/compare" className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}>
-              Compare
-            </Link>
-            <Link
-              href="/runbook"
-              className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
-            >
-              Runbook
-            </Link>
-            <Link
-              href="/app/library"
-              className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
-            >
-              Library
-              <ArrowUpRight data-icon="inline-end" />
+              Open dashboard
             </Link>
           </nav>
         </div>
