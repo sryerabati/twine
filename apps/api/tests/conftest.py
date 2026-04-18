@@ -14,6 +14,7 @@ from app.core.config import Settings
 from app.core.context import APIContext
 from app.main import create_app
 from app.services.analysis_engine import AnalysisEngine
+from app.services.convex_sync import ConvexSyncService
 from app.services.jobs import AnalysisJobService
 from app.services.media import MediaFeatures, VideoMetadata
 from app.services.storage import StorageService
@@ -107,11 +108,22 @@ class StubRunner:
 
 
 class ImmediateJobService:
-    def __init__(self, storage: StorageService, runner: StubRunner, engine: AnalysisEngine) -> None:
-        self._delegate = AnalysisJobService(storage, runner, engine)
+    def __init__(
+        self,
+        storage: StorageService,
+        runner: StubRunner,
+        engine: AnalysisEngine,
+        convex: ConvexSyncService,
+    ) -> None:
+        self._delegate = AnalysisJobService(storage, runner, engine, convex)
 
-    def enqueue(self, analysis_id: str, upload_id: str) -> None:
-        self._delegate.run_now(analysis_id, upload_id)
+    def enqueue(
+        self,
+        analysis_id: str,
+        upload_id: str,
+        convex_scan_id: str | None = None,
+    ) -> None:
+        self._delegate.run_now(analysis_id, upload_id, convex_scan_id)
 
 
 @pytest.fixture
@@ -126,6 +138,12 @@ def test_settings(tmp_path: Path) -> Settings:
         huggingface_hub_token=None,
         ffmpeg_bin="ffmpeg",
         ffprobe_bin="ffprobe",
+        # Existing tests pre-date Convex integration; keep them working by not
+        # forcing Convex IDs. Tests that exercise Convex behavior set this
+        # explicitly or use the real ConvexSyncService with a mock transport.
+        require_convex_ids=False,
+        convex_site_url=None,
+        convex_service_secret=None,
     )
 
 
@@ -143,7 +161,8 @@ def test_context(test_settings: Settings) -> APIContext:
     )
     runner = StubRunner()
     engine = AnalysisEngine(storage, media)
-    jobs = ImmediateJobService(storage, runner, engine)
+    convex = ConvexSyncService(test_settings)
+    jobs = ImmediateJobService(storage, runner, engine, convex)
     return APIContext(
         settings=test_settings,
         storage=storage,
@@ -151,6 +170,7 @@ def test_context(test_settings: Settings) -> APIContext:
         runner=runner,
         engine=engine,
         jobs=jobs,
+        convex=convex,
     )
 
 

@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.core.config import Settings
 from app.core.context import APIContext
 from app.services.analysis_engine import AnalysisEngine
+from app.services.convex_sync import ConvexSyncService
 from app.services.media import MediaFeatures, VideoMetadata
 from app.services.storage import StorageService
 from app.services.tribe_runner import (
@@ -162,6 +163,7 @@ def make_context(
     )
     runner = StubRunner(install_present=install_present)
     engine = AnalysisEngine(storage, media)
+    convex = ConvexSyncService(settings)
     return APIContext(
         settings=settings,
         storage=storage,
@@ -169,6 +171,7 @@ def make_context(
         runner=runner,
         engine=engine,
         jobs=None,
+        convex=convex,
     )
 
 

@@ -8,6 +8,7 @@ from app.core.config import get_settings
 from app.core.context import APIContext
 from app.routers.api import router
 from app.services.analysis_engine import AnalysisEngine
+from app.services.convex_sync import ConvexSyncService
 from app.services.jobs import AnalysisJobService
 from app.services.media import MediaService
 from app.services.storage import StorageService
@@ -20,7 +21,8 @@ def build_context(settings=None) -> APIContext:
     media = MediaService(resolved_settings)
     runner = TribeRunner(resolved_settings)
     engine = AnalysisEngine(storage, media)
-    jobs = AnalysisJobService(storage, runner, engine)
+    convex = ConvexSyncService(resolved_settings)
+    jobs = AnalysisJobService(storage, runner, engine, convex)
     return APIContext(
         settings=resolved_settings,
         storage=storage,
@@ -28,6 +30,7 @@ def build_context(settings=None) -> APIContext:
         runner=runner,
         engine=engine,
         jobs=jobs,
+        convex=convex,
     )
 
 

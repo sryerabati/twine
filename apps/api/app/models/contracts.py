@@ -33,10 +33,13 @@ class VideoAsset(BaseModel):
 class UploadResponse(BaseModel):
     uploadId: str
     video: VideoAsset
+    convexUploadId: str | None = None
 
 
 class AnalyzeRequest(BaseModel):
     uploadId: str
+    convexScanId: str | None = None
+    convexUploadId: str | None = None
 
 
 class HemisphereHeatmap(BaseModel):

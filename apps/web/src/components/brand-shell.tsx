@@ -33,6 +33,12 @@ export function BrandShell({
             >
               Runbook
             </Link>
+            <Link
+              href="/history"
+              className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
+            >
+              History
+            </Link>
             {!compact ? (
               <a
                 href="https://github.com/facebookresearch/tribev2"

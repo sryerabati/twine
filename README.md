@@ -65,6 +65,7 @@ Both macOS and native Windows need:
 - `uv`
 - `ffmpeg` and `ffprobe` on `PATH`
 - a Hugging Face account with access to `facebook/tribev2` and the gated upstream dependencies it pulls in
+- a Convex account (free tier is sufficient) to back the login and scan-history features
 
 Windows note:
 
@@ -143,6 +144,46 @@ py -3.11 apps\api\scripts\run_tribe_windows.py serve
 
 By default this starts the API on `http://127.0.0.1:8000` using `API_PORT` from `.env`.
 
+### 4b. Provision Convex (first run only)
+
+Login and scan history are backed by Convex. Provision a deployment before starting the website for the first time:
+
+macOS:
+
+```bash
+cd apps/web
+npx convex dev
+```
+
+Windows PowerShell:
+
+```powershell
+cd apps\web
+npx convex dev
+```
+
+On first run Convex prompts you to sign in, creates a dev deployment, writes `NEXT_PUBLIC_CONVEX_URL` and `CONVEX_SITE_URL` into `apps/web/.env.local`, and then keeps watching `apps/web/convex/` for schema and function changes. Leave this process running in its own terminal alongside the backend and the web dev server.
+
+Generate and register the shared service secret the FastAPI backend uses to write back to Convex:
+
+macOS:
+
+```bash
+openssl rand -hex 32
+# copy the output, then:
+npx convex env set CONVEX_SERVICE_SECRET <paste>
+```
+
+Windows PowerShell:
+
+```powershell
+# any 64-char hex string works; one option:
+-join ((1..64) | ForEach-Object { '{0:x}' -f (Get-Random -Maximum 16) })
+npx convex env set CONVEX_SERVICE_SECRET <paste>
+```
+
+Mirror the same value and `REQUIRE_CONVEX_IDS=true` into the repo-root `.env` so FastAPI can authenticate its writes and enforce the Convex-ID contract. See `.env.example` for the full set of required keys.
+
 ### 5. Run the website locally
 
 Open a second terminal at the repo root.
@@ -204,6 +245,10 @@ This runs one MP4 through the same upload, thumbnail, analysis, artifact, and sc
 - `TRIBE_DEVICE` – `auto`, `cpu`, `cuda`, or optional manual `mps`
 - `TRIBE_MAX_VIDEO_SECONDS` – upload duration cap for the MVP
 - `HUGGINGFACE_HUB_TOKEN` – required for real TRIBE model access
+- `NEXT_PUBLIC_CONVEX_URL` – Convex deployment URL, auto-populated by `npx convex dev`
+- `CONVEX_SITE_URL` – Convex `.convex.site` URL used by Convex Auth for JWT validation
+- `CONVEX_SERVICE_SECRET` – shared secret FastAPI uses to write back to Convex; must match the value set via `npx convex env set`
+- `REQUIRE_CONVEX_IDS` – when `true`, FastAPI rejects upload/analyze calls that omit the Convex-minted IDs (recommended)
 
 ## Known limitations
 

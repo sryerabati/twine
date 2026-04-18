@@ -3,7 +3,7 @@ from __future__ import annotations
 import platform
 import shutil
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 
 from app.core.context import APIContext
 from app.models.contracts import (
@@ -74,14 +74,31 @@ def health(context: APIContext = Depends(get_context)) -> HealthResponse:
 @router.post("/upload", response_model=UploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_video(
     file: UploadFile = File(...),
+    convex_upload_id: str | None = Form(default=None, alias="convexUploadId"),
     context: APIContext = Depends(get_context),
 ) -> UploadResponse:
+    settings = context.settings
+
+    # If Convex integration is required, every upload MUST come with an id.
+    if settings.require_convex_ids and not convex_upload_id:
+        raise HTTPException(
+            status_code=400,
+            detail="convexUploadId is required. Log in and let the app create a pending upload first.",
+        )
+    # Light syntactic validation: Convex ids are short alphanumeric strings.
+    # We don't know the exact format across Convex deployments, so cap length
+    # and reject control characters rather than enforcing a regex.
+    if convex_upload_id is not None:
+        if len(convex_upload_id) > 64 or any(
+            ord(ch) < 0x20 or ord(ch) > 0x7E for ch in convex_upload_id
+        ):
+            raise HTTPException(status_code=400, detail="Invalid convexUploadId.")
+
     if not file.filename or not file.filename.lower().endswith(".mp4"):
         raise HTTPException(status_code=400, detail="Only MP4 uploads are supported in v1.")
 
     storage = context.storage
     media = context.media
-    settings = context.settings
     paths = await storage.save_upload(file)
     if paths.source_path.stat().st_size > settings.max_upload_bytes:
         storage.delete_upload(paths.upload_id)
@@ -108,8 +125,21 @@ async def upload_video(
         height=metadata.height,
         size_bytes=metadata.size_bytes,
     )
-    response = UploadResponse(uploadId=paths.upload_id, video=video)
+    response = UploadResponse(
+        uploadId=paths.upload_id,
+        video=video,
+        convexUploadId=convex_upload_id,
+    )
     storage.write_upload_metadata(response)
+
+    # Mirror the FastAPI upload id back to the pending Convex row.
+    if convex_upload_id:
+        context.convex.attach_upload_local_id(
+            convex_upload_id=convex_upload_id,
+            local_upload_id=paths.upload_id,
+            duration_sec=metadata.duration_sec,
+        )
+
     return response
 
 
@@ -120,13 +150,40 @@ def analyze_video(
 ) -> AnalysisResponse:
     storage = context.storage
     jobs = context.jobs
+    settings = context.settings
+
+    if settings.require_convex_ids and not request.convexScanId:
+        raise HTTPException(
+            status_code=400,
+            detail="convexScanId is required. Log in and let the app create a pending scan first.",
+        )
+    if request.convexScanId is not None:
+        if len(request.convexScanId) > 64 or any(
+            ord(ch) < 0x20 or ord(ch) > 0x7E for ch in request.convexScanId
+        ):
+            raise HTTPException(status_code=400, detail="Invalid convexScanId.")
+
     try:
         storage.read_upload_metadata(request.uploadId)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Upload not found.") from exc
     paths = storage.create_analysis_paths()
     record = storage.init_analysis_record(paths.analysis_id)
-    jobs.enqueue(paths.analysis_id, request.uploadId)
+
+    # Push initial queued state before kicking off the worker so the history
+    # page sees the scan immediately.
+    if request.convexScanId:
+        context.convex.update_scan_status(
+            convex_scan_id=request.convexScanId,
+            status="queued",
+            local_analysis_id=paths.analysis_id,
+        )
+
+    jobs.enqueue(
+        paths.analysis_id,
+        request.uploadId,
+        convex_scan_id=request.convexScanId,
+    )
     return record
 
 

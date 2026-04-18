@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { startTransition, useEffect, useMemo, useState } from "react";
+import { useMutation } from "convex/react";
 import { Film, GitCompareArrows, LoaderCircle, Upload } from "lucide-react";
 
+import { api } from "@/convex/_generated/api";
 import { HealthBanner } from "@/components/health-banner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,6 +37,14 @@ export function UploadWorkbench({
   const [compareA, setCompareA] = useState<FileState>(emptyFileState);
   const [compareB, setCompareB] = useState<FileState>(emptyFileState);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // Convex mutations: create durable pending rows BEFORE we hit FastAPI so the
+  // user's history always reflects the attempt, even if the backend call fails.
+  // FastAPI is configured with REQUIRE_CONVEX_IDS=true, so missing IDs will
+  // hard-fail on the server; we mirror that by aborting the flow here if the
+  // Convex mutation throws (e.g., unauthenticated, validation, network).
+  const createPendingUpload = useMutation(api.uploads.createPendingUpload);
+  const createPendingScan = useMutation(api.scans.createPendingScan);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,9 +88,23 @@ export function UploadWorkbench({
     setActionError(null);
     setSingle({ file: single.file, status: "uploading" });
     try {
-      const upload = await uploadVideo(single.file);
+      // 1) Register the pending upload in Convex first. This persists the
+      //    attempt under the current user's account before any bytes move.
+      const convexUploadId = await createPendingUpload({
+        filename: single.file.name,
+        contentType: single.file.type || "video/mp4",
+        sizeBytes: single.file.size,
+      });
+      // 2) Send the file to FastAPI, threading the Convex ID through so the
+      //    backend can link its local row to the Convex record.
+      const upload = await uploadVideo(single.file, convexUploadId);
       setSingle({ file: single.file, status: "analyzing" });
-      const analysis = await startAnalysis(upload.uploadId);
+      // 3) Create the pending scan row in Convex, tied to the same upload.
+      const convexScanId = await createPendingScan({
+        uploadId: convexUploadId,
+      });
+      // 4) Kick off analysis on FastAPI with the Convex scan ID.
+      const analysis = await startAnalysis(upload.uploadId, convexScanId);
       startTransition(() => onSingleReady(analysis.analysisId));
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "Upload failed.");
@@ -96,15 +120,35 @@ export function UploadWorkbench({
     setCompareA({ file: compareA.file, status: "uploading" });
     setCompareB({ file: compareB.file, status: "uploading" });
     try {
+      // Create two distinct Convex upload rows — one per file. Each cut gets
+      // its own row in history so A/B runs aren't conflated with single cuts.
+      const [convexUploadIdA, convexUploadIdB] = await Promise.all([
+        createPendingUpload({
+          filename: compareA.file.name,
+          contentType: compareA.file.type || "video/mp4",
+          sizeBytes: compareA.file.size,
+        }),
+        createPendingUpload({
+          filename: compareB.file.name,
+          contentType: compareB.file.type || "video/mp4",
+          sizeBytes: compareB.file.size,
+        }),
+      ]);
       const [uploadA, uploadB] = await Promise.all([
-        uploadVideo(compareA.file),
-        uploadVideo(compareB.file),
+        uploadVideo(compareA.file, convexUploadIdA),
+        uploadVideo(compareB.file, convexUploadIdB),
       ]);
       setCompareA({ file: compareA.file, status: "analyzing" });
       setCompareB({ file: compareB.file, status: "analyzing" });
+      // One scan per cut. The compare summary is derived app-side from both
+      // analyses; no third scan row is created for the comparison itself.
+      const [convexScanIdA, convexScanIdB] = await Promise.all([
+        createPendingScan({ uploadId: convexUploadIdA }),
+        createPendingScan({ uploadId: convexUploadIdB }),
+      ]);
       const [analysisA, analysisB] = await Promise.all([
-        startAnalysis(uploadA.uploadId),
-        startAnalysis(uploadB.uploadId),
+        startAnalysis(uploadA.uploadId, convexScanIdA),
+        startAnalysis(uploadB.uploadId, convexScanIdB),
       ]);
       startTransition(() => onCompareReady(analysisA.analysisId, analysisB.analysisId));
     } catch (error) {

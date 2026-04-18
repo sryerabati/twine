@@ -1,12 +1,12 @@
 import { AuthGate } from "@/components/auth/auth-gate";
 import { BrandShell } from "@/components/brand-shell";
-import { LandingClient } from "@/components/landing-client";
+import { HistoryView } from "@/components/history/history-view";
 
-export default function Home() {
+export default function HistoryPage() {
   return (
     <BrandShell>
       <AuthGate>
-        <LandingClient />
+        <HistoryView />
       </AuthGate>
     </BrandShell>
   );

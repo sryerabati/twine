@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
+import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
+
 import "./globals.css";
+import { ConvexClientProvider } from "./ConvexClientProvider";
 
 const headingFont = Space_Grotesk({
   variable: "--font-heading-display",
@@ -25,13 +28,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${headingFont.variable} ${monoFont.variable} dark h-full antialiased`}
-    >
-      <body className="min-h-full bg-background text-foreground flex flex-col">
-        {children}
-      </body>
-    </html>
+    <ConvexAuthNextjsServerProvider>
+      <html
+        lang="en"
+        className={`${headingFont.variable} ${monoFont.variable} dark h-full antialiased`}
+      >
+        <body className="min-h-full bg-background text-foreground flex flex-col">
+          <ConvexClientProvider>{children}</ConvexClientProvider>
+        </body>
+      </html>
+    </ConvexAuthNextjsServerProvider>
   );
 }

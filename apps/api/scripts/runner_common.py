@@ -30,6 +30,7 @@ from app.core.context import APIContext
 from app.main import create_app
 from app.models.contracts import UploadResponse
 from app.services.analysis_engine import AnalysisEngine
+from app.services.convex_sync import ConvexSyncService
 from app.services.jobs import AnalysisJobService
 from app.services.media import MediaInspectionError, MediaService
 from app.services.storage import StorageService
@@ -66,7 +67,8 @@ def get_runtime_context() -> APIContext:
     media = MediaService(settings)
     runner = TribeRunner(settings)
     engine = AnalysisEngine(storage, media)
-    jobs = AnalysisJobService(storage, runner, engine)
+    convex = ConvexSyncService(settings)
+    jobs = AnalysisJobService(storage, runner, engine, convex)
     return APIContext(
         settings=settings,
         storage=storage,
@@ -74,6 +76,7 @@ def get_runtime_context() -> APIContext:
         runner=runner,
         engine=engine,
         jobs=jobs,
+        convex=convex,
     )
 
 
@@ -224,7 +227,7 @@ def command_analyze(context: APIContext, os_name: str, video_path: Path) -> dict
 
     analysis_paths = storage.create_analysis_paths()
     storage.init_analysis_record(analysis_paths.analysis_id)
-    AnalysisJobService(storage, runner, engine).run_now(
+    AnalysisJobService(storage, runner, engine, context.convex).run_now(
         analysis_paths.analysis_id,
         upload_paths.upload_id,
     )

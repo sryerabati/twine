@@ -20,22 +20,31 @@ export async function fetchHealth(): Promise<HealthResponse> {
   return request<HealthResponse>("/api/health", { cache: "no-store" });
 }
 
-export async function uploadVideo(file: File): Promise<UploadResponse> {
+export async function uploadVideo(
+  file: File,
+  convexUploadId: string,
+): Promise<UploadResponse> {
   const formData = new FormData();
   formData.append("file", file);
+  // FastAPI reads this field and, when REQUIRE_CONVEX_IDS=true, 400s if absent.
+  // Field name is camelCase to match the backend router's expected key.
+  formData.append("convexUploadId", convexUploadId);
   return request<UploadResponse>("/api/upload", {
     method: "POST",
     body: formData,
   });
 }
 
-export async function startAnalysis(uploadId: string): Promise<AnalysisResponse> {
+export async function startAnalysis(
+  uploadId: string,
+  convexScanId: string,
+): Promise<AnalysisResponse> {
   return request<AnalysisResponse>("/api/analyze", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ uploadId }),
+    body: JSON.stringify({ uploadId, convexScanId }),
   });
 }
 

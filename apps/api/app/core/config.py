@@ -47,6 +47,21 @@ class Settings(BaseSettings):
     ffprobe_bin: str = Field(default="ffprobe", alias="FFPROBE_BIN")
     analysis_poll_interval_ms: int = Field(default=2500, alias="TRIBE_POLL_INTERVAL_MS")
 
+    # --- Convex sync bridge ---
+    # `convex_site_url` is the .convex.site origin where HTTP routes are mounted.
+    # `convex_service_secret` authenticates FastAPI -> Convex writes.
+    # Both are optional at startup so tests and local-only runs still work; the
+    # ConvexSyncService itself enforces they are set whenever a sync is attempted.
+    convex_site_url: str | None = Field(default=None, alias="CONVEX_SITE_URL")
+    convex_service_secret: str | None = Field(
+        default=None, alias="CONVEX_SERVICE_SECRET"
+    )
+    # When True, /api/upload and /api/analyze require Convex IDs in their request
+    # bodies. Defaults to True so the demo enforces per-user scan history.
+    # Set `REQUIRE_CONVEX_IDS=false` to run the backend standalone (for tests or
+    # local experimentation without Convex).
+    require_convex_ids: bool = Field(default=True, alias="REQUIRE_CONVEX_IDS")
+
     @property
     def storage_root(self) -> Path:
         return self.uploads_dir.parent

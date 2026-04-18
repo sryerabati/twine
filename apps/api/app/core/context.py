@@ -5,6 +5,7 @@ from typing import Protocol
 
 from app.core.config import Settings
 from app.services.analysis_engine import AnalysisEngine
+from app.services.convex_sync import ConvexSyncService
 from app.services.media import MediaService
 from app.services.storage import StorageService
 from app.services.tribe_runner import TribeRunner
@@ -23,3 +24,4 @@ class APIContext:
     runner: TribeRunner
     engine: AnalysisEngine
     jobs: JobQueue
+    convex: ConvexSyncService

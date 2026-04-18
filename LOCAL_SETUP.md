@@ -13,6 +13,7 @@ Both platforms need:
 - `git`
 - `ffmpeg` with `ffprobe`
 - Hugging Face access to `facebook/tribev2` and the upstream gated dependencies
+- a Convex account for login and scan-history persistence (free tier works)
 
 macOS notes:
 
@@ -134,6 +135,53 @@ Windows PowerShell:
 py -3.11 apps\api\scripts\run_tribe_windows.py serve
 ```
 
+## Provision Convex
+
+The web app's login and scan-history features run on Convex. The Convex deployment must be live before the website can boot.
+
+From `apps/web`, start the Convex dev process in its own terminal:
+
+macOS:
+
+```bash
+cd apps/web
+npx convex dev
+```
+
+Windows PowerShell:
+
+```powershell
+cd apps\web
+npx convex dev
+```
+
+First run behavior:
+
+- prompts for Convex login
+- creates a dev deployment
+- writes `NEXT_PUBLIC_CONVEX_URL` and `CONVEX_SITE_URL` into `apps/web/.env.local`
+- watches `apps/web/convex/` for schema and function changes
+
+Leave the process running alongside the backend and the web dev server.
+
+Set the shared service secret once per deployment so the FastAPI `ConvexSyncService` can authenticate its writes:
+
+macOS:
+
+```bash
+openssl rand -hex 32
+npx convex env set CONVEX_SERVICE_SECRET <paste>
+```
+
+Windows PowerShell:
+
+```powershell
+-join ((1..64) | ForEach-Object { '{0:x}' -f (Get-Random -Maximum 16) })
+npx convex env set CONVEX_SERVICE_SECRET <paste>
+```
+
+Mirror the same value and `REQUIRE_CONVEX_IDS=true` into the repo-root `.env`.
+
 ## Environment variables
 
 ```bash
@@ -150,12 +198,19 @@ TRIBE_POLL_INTERVAL_MS=2500
 HUGGINGFACE_HUB_TOKEN=
 FFMPEG_BIN=ffmpeg
 FFPROBE_BIN=ffprobe
+NEXT_PUBLIC_CONVEX_URL=
+CONVEX_SITE_URL=
+CONVEX_SERVICE_SECRET=
+REQUIRE_CONVEX_IDS=true
 ```
 
 Notes:
 
 - Keep `TRIBE_DEVICE=auto` on this Mac baseline unless you explicitly want to experiment with `mps`.
 - CUDA is the recommended faster path, but the app should still run locally without it.
+- `NEXT_PUBLIC_CONVEX_URL` and `CONVEX_SITE_URL` are populated automatically by `npx convex dev` into `apps/web/.env.local`; keep them empty in the repo-root `.env` unless you want to pin a specific deployment.
+- `CONVEX_SERVICE_SECRET` must match the value set with `npx convex env set` on the Convex side.
+- Leave `REQUIRE_CONVEX_IDS=true` except for intentional bypass smoke tests.
 
 ## Run the website locally
 
@@ -201,6 +256,9 @@ That shortcut starts both services together, but the cross-platform setup flow i
    - `segments.json`
    - `cut-list.json`
 6. The analysis page renders timeline, heat-strip, scores, markers, and export links.
+7. `apps/web/convex/_generated/` exists (created by the running `npx convex dev`).
+8. Signing up from the landing page succeeds and `/history` renders an empty list.
+9. Uploading a clip adds a row in `/history` that transitions `queued` → `running` → `completed`.
 
 ## Troubleshooting
 
@@ -222,3 +280,11 @@ That shortcut starts both services together, but the cross-platform setup flow i
   - This is expected on CPU or Apple Silicon; CUDA is faster
 - Storage/path permission issues
   - Confirm the repo has write access to `storage/uploads`, `storage/analyses`, and `storage/cache`
+- `NEXT_PUBLIC_CONVEX_URL is not set` in the browser console
+  - Run `npx convex dev` in `apps/web` and keep it running; restart `npm run dev:web` after the first deploy so the new `.env.local` is picked up
+- FastAPI returns `convex_upload_id is required` (or similar)
+  - `REQUIRE_CONVEX_IDS=true` is working as intended; confirm the frontend is authenticated and that `npx convex dev` is live so the client can mint IDs before hitting `/api/upload`
+- `ConvexSyncService` write failures in the backend log
+  - Confirm `CONVEX_SERVICE_SECRET` matches on both sides (`npx convex env get CONVEX_SERVICE_SECRET` vs the repo-root `.env`) and restart the backend after any change
+- History page stays empty after a completed scan
+  - Check the backend log for lifecycle hook errors in `jobs.py`; confirm the scan's `convexScanId` was included in the `/api/analyze` request payload
