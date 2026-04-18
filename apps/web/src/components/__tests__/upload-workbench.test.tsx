@@ -1,11 +1,14 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { UploadDropzone } from "@/components/upload-dropzone";
 import { UploadWorkbench } from "@/components/upload-workbench";
 
 const createPendingUpload = vi.fn();
 const createPendingScan = vi.fn();
+const createPendingCompareScan = vi.fn();
+const attachCompareAnalysisIds = vi.fn();
 
 vi.mock("convex/react", () => ({
   useMutation: vi.fn((name: string) => {
@@ -14,6 +17,12 @@ vi.mock("convex/react", () => ({
     }
     if (name === "scans:createPendingScan") {
       return createPendingScan;
+    }
+    if (name === "scans:createPendingCompareScan") {
+      return createPendingCompareScan;
+    }
+    if (name === "scans:attachCompareAnalysisIds") {
+      return attachCompareAnalysisIds;
     }
     return vi.fn();
   }),
@@ -29,8 +38,16 @@ describe("UploadWorkbench", () => {
   beforeEach(async () => {
     createPendingUpload.mockReset();
     createPendingScan.mockReset();
-    createPendingUpload.mockResolvedValue("convex-upload-1");
+    createPendingCompareScan.mockReset();
+    attachCompareAnalysisIds.mockReset();
+    createPendingUpload
+      .mockResolvedValueOnce("convex-upload-1")
+      .mockResolvedValueOnce("convex-upload-2")
+      .mockResolvedValue("convex-upload-3");
     createPendingScan.mockResolvedValue("scan-1");
+    createPendingCompareScan.mockResolvedValue("compare-scan-1");
+    attachCompareAnalysisIds.mockResolvedValue("compare-scan-1");
+
     const api = await import("@/lib/api");
     vi.mocked(api.fetchHealth).mockResolvedValue({
       ok: false,
@@ -47,57 +64,199 @@ describe("UploadWorkbench", () => {
       blockers: [],
       notes: [],
     });
-    vi.mocked(api.uploadVideo).mockResolvedValue({
-      uploadId: "upload-1",
-      video: {
-        uploadId: "upload-1",
-        filename: "clip.mp4",
-        sourceUrl: "/storage/uploads/upload-1/source.mp4",
-        thumbnailUrl: "/storage/uploads/upload-1/thumbnail.jpg",
-        durationSec: 12,
-        width: 1080,
-        height: 1920,
-        sizeBytes: 1024,
-      },
-    });
-    vi.mocked(api.startAnalysis).mockResolvedValue({
-      analysisId: "analysis-1",
-      status: "queued",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      error: null,
-      payload: null,
-    });
+    vi.mocked(api.uploadVideo)
+      .mockResolvedValueOnce({
+        uploadId: "upload-a",
+        video: {
+          uploadId: "upload-a",
+          filename: "clip-a.mp4",
+          sourceUrl: "/storage/uploads/upload-a/source.mp4",
+          thumbnailUrl: "/storage/uploads/upload-a/thumbnail.jpg",
+          durationSec: 12,
+          width: 1080,
+          height: 1920,
+          sizeBytes: 1024,
+        },
+      })
+      .mockResolvedValueOnce({
+        uploadId: "upload-b",
+        video: {
+          uploadId: "upload-b",
+          filename: "clip-b.mp4",
+          sourceUrl: "/storage/uploads/upload-b/source.mp4",
+          thumbnailUrl: "/storage/uploads/upload-b/thumbnail.jpg",
+          durationSec: 12,
+          width: 1080,
+          height: 1920,
+          sizeBytes: 1024,
+        },
+      })
+      .mockResolvedValue({
+        uploadId: "upload-c",
+        video: {
+          uploadId: "upload-c",
+          filename: "clip-c.mp4",
+          sourceUrl: "/storage/uploads/upload-c/source.mp4",
+          thumbnailUrl: "/storage/uploads/upload-c/thumbnail.jpg",
+          durationSec: 12,
+          width: 1080,
+          height: 1920,
+          sizeBytes: 1024,
+        },
+      });
+    vi.mocked(api.startAnalysis)
+      .mockResolvedValueOnce({
+        analysisId: "analysis-a",
+        status: "queued",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        error: null,
+        payload: null,
+      })
+      .mockResolvedValueOnce({
+        analysisId: "analysis-b",
+        status: "queued",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        error: null,
+        payload: null,
+      })
+      .mockResolvedValue({
+        analysisId: "analysis-c",
+        status: "queued",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        error: null,
+        payload: null,
+      });
   });
 
-  it("renders health information and triggers single-upload analysis", async () => {
+  it("routes single uploads to the scan page", async () => {
     const onSingleReady = vi.fn();
     const onCompareReady = vi.fn();
     const user = userEvent.setup();
 
-    render(
+    const { container } = render(
       <UploadWorkbench
         onSingleReady={onSingleReady}
         onCompareReady={onCompareReady}
       />,
     );
 
-    expect(await screen.findByRole("tab", { name: /One saved scan/i })).toBeInTheDocument();
-    expect(screen.getByText(/Upload and analyze/i)).toBeInTheDocument();
-    expect(screen.queryByText(/TRIBE/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Gemini/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Meta/i)).not.toBeInTheDocument();
+    expect(await screen.findByText(/Drop a clip/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Single upload$/i })).toBeInTheDocument();
 
-    const input = screen.getAllByLabelText(/Select an MP4/i)[0];
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(input).not.toBeNull();
     const file = new File(["video"], "clip.mp4", { type: "video/mp4" });
-    await user.upload(input, file);
-    await user.click(screen.getByRole("button", { name: /Analyze video/i }));
+    await user.upload(input as HTMLInputElement, file);
+    await user.click(screen.getByRole("button", { name: /Start scan/i }));
 
     await waitFor(() => {
       expect(onSingleReady).toHaveBeenCalledWith({
         scanId: "scan-1",
-        analysisId: "analysis-1",
+        analysisId: "analysis-a",
       });
     });
+  });
+
+  it("creates one compare scan and attaches both analysis ids", async () => {
+    const onSingleReady = vi.fn();
+    const onCompareReady = vi.fn();
+    const user = userEvent.setup();
+
+    const api = await import("@/lib/api");
+
+    const { container } = render(
+      <UploadWorkbench
+        onSingleReady={onSingleReady}
+        onCompareReady={onCompareReady}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /A\/B test/i }));
+
+    const inputs = container.querySelectorAll<HTMLInputElement>('input[type="file"]');
+    expect(inputs).toHaveLength(2);
+    fireEvent.change(inputs[0], {
+      target: {
+        files: [new File(["video-a"], "intro-cut.mp4", { type: "video/mp4" })],
+      },
+    });
+    fireEvent.change(inputs[1], {
+      target: {
+        files: [new File(["video-b"], "alt-cut.mp4", { type: "video/mp4" })],
+      },
+    });
+    expect(screen.getByRole("button", { name: /Start compare/i })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: /Start compare/i }));
+
+    await waitFor(() => {
+      expect(createPendingUpload).toHaveBeenCalledTimes(2);
+      expect(api.uploadVideo.mock.calls.length).toBeGreaterThanOrEqual(2);
+      expect(createPendingCompareScan).toHaveBeenCalledWith({
+        primaryUploadId: "convex-upload-1",
+        secondaryUploadId: "convex-upload-2",
+        title: "intro-cut vs alt-cut",
+      });
+      expect(api.startAnalysis.mock.calls.length).toBeGreaterThanOrEqual(2);
+      const attachArgs = attachCompareAnalysisIds.mock.calls[0]?.[0] as
+        | {
+            scanId: string;
+            analysisIdA: string;
+            analysisIdB: string;
+          }
+        | undefined;
+      expect(attachArgs).toMatchObject({ scanId: "compare-scan-1" });
+      expect(new Set([attachArgs?.analysisIdA, attachArgs?.analysisIdB])).toEqual(
+        new Set(["analysis-a", "analysis-b"]),
+      );
+      expect(onCompareReady).toHaveBeenCalledWith({
+        compareScanId: "compare-scan-1",
+      });
+    });
+  });
+});
+
+describe("UploadDropzone", () => {
+  it("opens the file picker from the browse button", async () => {
+    const clickSpy = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => {});
+    const user = userEvent.setup();
+
+    render(
+      <UploadDropzone
+        label="Primary clip"
+        description="Upload one clip."
+        file={null}
+        onFileChange={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Browse files/i }));
+
+    expect(clickSpy).toHaveBeenCalled();
+    clickSpy.mockRestore();
+  });
+
+  it("accepts a dropped file", () => {
+    const onFileChange = vi.fn();
+    render(
+      <UploadDropzone
+        label="Primary clip"
+        description="Upload one clip."
+        file={null}
+        onFileChange={onFileChange}
+      />,
+    );
+
+    const file = new File(["video"], "drop.mp4", { type: "video/mp4" });
+    fireEvent.drop(screen.getByRole("button", { name: /Primary clip/i }), {
+      dataTransfer: {
+        files: [file],
+        types: ["Files"],
+      },
+    });
+
+    expect(onFileChange).toHaveBeenCalledWith(file);
   });
 });
