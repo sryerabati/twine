@@ -111,6 +111,7 @@ class ArtifactLinks(BaseModel):
     cutListJsonUrl: str
     eventsCsvUrl: str
     segmentsJsonUrl: str
+    trimmedVideoUrl: str | None = None
 
 
 class Diagnostics(BaseModel):
@@ -120,6 +121,7 @@ class Diagnostics(BaseModel):
     transcriptWordCount: int
     sceneChangeCount: int
     deadspaceSeconds: float
+    trimmedDurationSec: float | None = None
     warnings: list[str]
 
 
@@ -161,6 +163,21 @@ class HealthResponse(BaseModel):
 class CompareRequest(BaseModel):
     analysisIdA: str
     analysisIdB: str
+
+
+class TrimRequest(BaseModel):
+    """Request to trim a video using a subset of detected deadspace cuts."""
+
+    cutIndices: list[int] | None = None
+
+
+class TrimResponse(BaseModel):
+    analysisId: str
+    trimmedVideoUrl: str
+    originalDurationSec: float
+    trimmedDurationSec: float
+    removedSeconds: float
+    appliedCuts: list[DeadspaceCut]
 
 
 class CompareSlice(BaseModel):

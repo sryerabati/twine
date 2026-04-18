@@ -12,6 +12,8 @@ from app.models.contracts import (
     CompareRequest,
     CompareResponse,
     HealthResponse,
+    TrimRequest,
+    TrimResponse,
     UploadResponse,
 )
 from app.services.media import MediaInspectionError
@@ -170,3 +172,108 @@ def compare_analyses(
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="One or both analyses were not found.") from exc
     return engine.compare(analysis_a, analysis_b)
+
+
+@router.post("/analysis/{analysis_id}/trim", response_model=TrimResponse)
+def trim_analysis(
+    analysis_id: str,
+    request: TrimRequest,
+    context: APIContext = Depends(get_context),
+) -> TrimResponse:
+    """Produce a trimmed MP4 that removes the selected deadspace cuts.
+
+    Security notes:
+    - analysis_id is validated as a clean hex id by StorageService (blocks path traversal).
+    - ffmpeg is invoked with an argument list, never a shell string.
+    - cutIndices are bounds-checked against the stored cut list.
+    - ffmpeg stderr is not leaked to the client response.
+    """
+    storage = context.storage
+    media = context.media
+
+    try:
+        record = storage.read_analysis_record(analysis_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Analysis not found.") from exc
+    if record.status != "completed":
+        raise HTTPException(
+            status_code=409,
+            detail="Analysis must be completed before trimming.",
+        )
+
+    try:
+        payload = storage.read_analysis_payload(analysis_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Analysis payload missing.") from exc
+
+    all_cuts = payload.deadspaceCuts
+    if not all_cuts:
+        raise HTTPException(
+            status_code=409,
+            detail="This analysis has no deadspace cuts to apply.",
+        )
+
+    # Bounds-check cut indices. Default: apply every detected cut.
+    if request.cutIndices is None:
+        selected_cuts = list(all_cuts)
+    else:
+        selected_cuts = []
+        seen: set[int] = set()
+        for index in request.cutIndices:
+            if not isinstance(index, int) or index < 0 or index >= len(all_cuts):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid cut index {index}.",
+                )
+            if index in seen:
+                continue
+            seen.add(index)
+            selected_cuts.append(all_cuts[index])
+        if not selected_cuts:
+            raise HTTPException(status_code=400, detail="At least one cut must be selected.")
+
+    # Locate the source video via the upload metadata tied to this analysis.
+    try:
+        upload_paths = storage.upload_paths(payload.video.uploadId)
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=410,
+            detail="Source upload is no longer available on disk.",
+        ) from exc
+
+    analysis_paths = storage.analysis_paths(analysis_id)
+    try:
+        new_duration = media.trim_deadspace(
+            source_path=upload_paths.source_path,
+            output_path=analysis_paths.trimmed_video_path,
+            cuts=[(cut.start, cut.end) for cut in selected_cuts],
+            total_duration_sec=payload.video.durationSec,
+        )
+    except MediaInspectionError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    # Patch the payload so later reads surface the trimmed artifact.
+    updated_artifacts = payload.artifacts.model_copy(
+        update={"trimmedVideoUrl": storage.to_storage_url(analysis_paths.trimmed_video_path)}
+    )
+    updated_diagnostics = payload.diagnostics.model_copy(
+        update={"trimmedDurationSec": round(new_duration, 2)}
+    )
+    updated_payload = payload.model_copy(
+        update={"artifacts": updated_artifacts, "diagnostics": updated_diagnostics}
+    )
+    storage.write_analysis_payload(analysis_id, updated_payload)
+    # Also refresh the record so GET /api/analysis/{id} returns the updated
+    # payload without needing a cache bust. The record is the source of truth
+    # that the getter returns to clients.
+    refreshed_record = record.model_copy(update={"payload": updated_payload})
+    storage.write_analysis_record(refreshed_record)
+
+    return TrimResponse(
+        analysisId=analysis_id,
+        trimmedVideoUrl=updated_artifacts.trimmedVideoUrl or "",
+        originalDurationSec=round(payload.video.durationSec, 2),
+        trimmedDurationSec=round(new_duration, 2),
+        removedSeconds=round(payload.video.durationSec - new_duration, 2),
+        appliedCuts=selected_cuts,
+    )

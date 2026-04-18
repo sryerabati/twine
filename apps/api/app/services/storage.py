@@ -34,6 +34,7 @@ class AnalysisPaths:
     events_path: Path
     segments_path: Path
     cuts_path: Path
+    trimmed_video_path: Path
 
 
 class StorageService:
@@ -86,9 +87,11 @@ class StorageService:
             events_path=directory / "events.csv",
             segments_path=directory / "segments.json",
             cuts_path=directory / "cut-list.json",
+            trimmed_video_path=directory / "trimmed.mp4",
         )
 
     def analysis_paths(self, analysis_id: str) -> AnalysisPaths:
+        self._validate_analysis_id(analysis_id)
         directory = self.settings.results_dir / analysis_id
         return AnalysisPaths(
             analysis_id=analysis_id,
@@ -99,9 +102,19 @@ class StorageService:
             events_path=directory / "events.csv",
             segments_path=directory / "segments.json",
             cuts_path=directory / "cut-list.json",
+            trimmed_video_path=directory / "trimmed.mp4",
         )
 
+    @staticmethod
+    def _validate_analysis_id(analysis_id: str) -> None:
+        """Reject anything that is not a clean hex id to prevent path traversal."""
+        if not analysis_id or not all(ch in "0123456789abcdef" for ch in analysis_id.lower()):
+            raise FileNotFoundError(f"Analysis {analysis_id!r} not found")
+        if len(analysis_id) > 64:
+            raise FileNotFoundError(f"Analysis {analysis_id!r} not found")
+
     def upload_paths(self, upload_id: str) -> UploadPaths:
+        self._validate_analysis_id(upload_id)
         directory = self.settings.uploads_dir / upload_id
         source_candidates = sorted(directory.glob("source.*"))
         if not source_candidates:
@@ -165,13 +178,16 @@ class StorageService:
 
     def artifacts_for(self, analysis_id: str) -> dict[str, str]:
         paths = self.analysis_paths(analysis_id)
-        return {
+        artifacts = {
             "rawPredictionsUrl": self.to_storage_url(paths.preds_path),
             "processedJsonUrl": self.to_storage_url(paths.payload_path),
             "cutListJsonUrl": self.to_storage_url(paths.cuts_path),
             "eventsCsvUrl": self.to_storage_url(paths.events_path),
             "segmentsJsonUrl": self.to_storage_url(paths.segments_path),
         }
+        if paths.trimmed_video_path.exists():
+            artifacts["trimmedVideoUrl"] = self.to_storage_url(paths.trimmed_video_path)
+        return artifacts
 
     def to_storage_url(self, path: Path) -> str:
         relative = path.relative_to(self.settings.storage_root)

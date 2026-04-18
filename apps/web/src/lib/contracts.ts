@@ -110,6 +110,7 @@ export type AnalysisPayload = {
     cutListJsonUrl: string;
     eventsCsvUrl: string;
     segmentsJsonUrl: string;
+    trimmedVideoUrl: string | null;
   };
   diagnostics: {
     device: string;
@@ -118,6 +119,7 @@ export type AnalysisPayload = {
     transcriptWordCount: number;
     sceneChangeCount: number;
     deadspaceSeconds: number;
+    trimmedDurationSec: number | null;
     warnings: string[];
   };
 };
@@ -144,4 +146,17 @@ export type CompareResponse = {
     aScore: number;
     bScore: number;
   }>;
+};
+
+export type TrimRequest = {
+  cutIndices?: number[] | null;
+};
+
+export type TrimResponse = {
+  analysisId: string;
+  trimmedVideoUrl: string;
+  originalDurationSec: number;
+  trimmedDurationSec: number;
+  removedSeconds: number;
+  appliedCuts: DeadspaceCut[];
 };
