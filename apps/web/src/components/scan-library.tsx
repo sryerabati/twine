@@ -10,12 +10,11 @@ export function ScanLibrary() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[2rem] border border-border/70 bg-white/90 p-8 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
+      <section className="rounded-[1.75rem] border border-white/10 bg-card/75 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.28)] backdrop-blur">
         <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Scan library</p>
-        <h1 className="mt-3 text-5xl font-semibold tracking-tight">Past scans and exports</h1>
-        <p className="mt-4 max-w-2xl text-base leading-7 text-muted-foreground">
-          This is the durable SaaS history layer. Scans are user-owned in Convex, so you can reopen
-          completed analysis workspaces, keep selected trim plans, and jump back into the export flow.
+        <h1 className="mt-3 text-3xl font-semibold tracking-tight">Saved scans and compare runs</h1>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
+          Reopen single scans or compare results from the same history.
         </p>
       </section>
 
@@ -23,7 +22,7 @@ export function ScanLibrary() {
         scans={scans ?? []}
         loading={scans === undefined}
         emptyTitle="Your library is empty"
-        emptyBody="Create a scan from the dashboard to start building a reusable history of structured recommendations and exports."
+        emptyBody="Create a scan from the dashboard to start building a reusable history."
       />
     </div>
   );

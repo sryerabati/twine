@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useQuery } from "convex/react";
-import { ArrowUpRight, Library, LogOut, ScanEye, Sparkles } from "lucide-react";
+import { LogOut, ScanEye } from "lucide-react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import type { CurrentUser } from "@/lib/contracts";
@@ -13,31 +13,31 @@ import { cn } from "@/lib/utils";
 const navigation = [
   { href: "/app", label: "Dashboard" },
   { href: "/app/library", label: "Library" },
-  { href: "/compare", label: "Compare" },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { signOut } = useAuthActions();
   const currentUser = useQuery("users:currentUser" as never, {}) as CurrentUser | null | undefined;
+  const userLabel = currentUser?.name?.trim() || currentUser?.email || "Workspace";
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(244,137,74,0.12),transparent_24%),radial-gradient(circle_at_top_right,rgba(87,182,193,0.12),transparent_24%),linear-gradient(180deg,#fcfbf7,#f4efe4_48%,#fbfaf7)]">
-      <header className="sticky top-0 z-30 border-b border-border/70 bg-white/80 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-6 py-4 lg:px-10">
-          <div className="flex items-center gap-6">
+    <div className="flex min-h-screen flex-col bg-[radial-gradient(circle_at_top_left,rgba(244,114,182,0.16),transparent_26%),radial-gradient(circle_at_top_right,rgba(251,191,36,0.08),transparent_18%),linear-gradient(180deg,#0a0910_0%,#09070d_48%,#050507_100%)] text-foreground">
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-black/55 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-4">
             <Link href="/" className="flex items-center gap-3">
-              <span className="flex size-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
+              <span className="flex size-10 items-center justify-center rounded-2xl border border-white/10 bg-[linear-gradient(135deg,rgba(244,114,182,0.95),rgba(236,72,153,0.62))] text-white shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_18px_42px_rgba(236,72,153,0.24)]">
                 <ScanEye className="size-5" />
               </span>
-              <div>
-                <p className="text-sm font-semibold tracking-[0.22em] text-foreground uppercase">
-                  Cortent
+              <div className="leading-tight">
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/90">
+                  VibeCheck
                 </p>
-                <p className="text-xs text-muted-foreground">Content, viewed like a brain scan.</p>
+                <p className="text-xs text-white/55">Command deck for saved scans</p>
               </div>
             </Link>
-            <nav className="hidden items-center gap-2 md:flex">
+            <nav className="hidden items-center gap-1 md:flex">
               {navigation.map((item) => {
                 const active =
                   item.href === "/app" ? pathname === item.href : pathname.startsWith(item.href);
@@ -48,6 +48,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     href={item.href}
                     className={cn(
                       buttonVariants({ variant: active ? "default" : "ghost", size: "sm" }),
+                      "rounded-full",
                     )}
                   >
                     {item.label}
@@ -57,19 +58,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </nav>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {currentUser?.email ? (
-              <div className="hidden rounded-full border border-border/70 bg-white/80 px-4 py-2 text-sm text-muted-foreground lg:block">
-                {currentUser.name ?? currentUser.email}
+              <div className="hidden rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/70 lg:block">
+                {userLabel}
               </div>
             ) : null}
-            <Link href="/runbook" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "hidden md:inline-flex")}>
-              Runbook
-              <ArrowUpRight data-icon="inline-end" />
-            </Link>
             <Button
               variant="outline"
               size="sm"
+              className="rounded-full border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white"
               onClick={() => void signOut()}
             >
               <LogOut data-icon="inline-start" />
@@ -79,20 +77,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-8 lg:px-10 lg:py-10">
+      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         {children}
       </main>
-
-      <footer className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-6 pb-10 pt-2 text-sm text-muted-foreground lg:px-10">
-        <div className="flex items-center gap-2">
-          <Sparkles className="size-4 text-primary" />
-          Structured creator analysis, durable scan history, export-ready trims.
-        </div>
-        <div className="flex items-center gap-2">
-          <Library className="size-4" />
-          Convex-backed SaaS workspace
-        </div>
-      </footer>
     </div>
   );
 }

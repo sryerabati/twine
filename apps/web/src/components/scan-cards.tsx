@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight, Clock3, Download, Sparkles } from "lucide-react";
+import { ArrowUpRight, Clock3, Download, GitCompareArrows, ScanEye, Sparkles } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import type { SavedScanSummary } from "@/lib/contracts";
 import { formatDateTime, formatSeconds } from "@/lib/format";
+import { getScanHref, getScanTitle, isCompareScan } from "@/lib/scan-presenter";
 import { cn } from "@/lib/utils";
 
 type SavedScanCardsProps = {
@@ -24,7 +25,7 @@ export function SavedScanCards({
   title,
   description,
   emptyTitle = "No scans yet",
-  emptyBody = "Run your first upload and it will appear here with scores, selected cuts, and exports.",
+  emptyBody = "Run a scan and it will appear here with scores, exports, and compare history.",
   loading = false,
   limit,
 }: SavedScanCardsProps) {
@@ -39,7 +40,13 @@ export function SavedScanCards({
             <h2 className="mt-2 text-3xl font-semibold tracking-tight">{title}</h2>
             {description ? <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{description}</p> : null}
           </div>
-          <Link href="/app/library" className={cn(buttonVariants({ variant: "outline" }))}>
+          <Link
+            href="/app/library"
+            className={cn(
+              buttonVariants({ variant: "outline" }),
+              "rounded-full border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white",
+            )}
+          >
             Open full library
             <ArrowUpRight data-icon="inline-end" />
           </Link>
@@ -51,7 +58,7 @@ export function SavedScanCards({
           {Array.from({ length: 3 }, (_, index) => (
             <div
               key={index}
-              className="h-56 rounded-[1.8rem] border border-border/70 bg-white/75 shadow-[0_20px_70px_rgba(15,23,42,0.06)]"
+              className="h-56 rounded-[1.75rem] border border-white/10 bg-white/5 shadow-[0_24px_80px_rgba(0,0,0,0.24)]"
             />
           ))}
         </div>
@@ -60,14 +67,22 @@ export function SavedScanCards({
           {visibleScans.map((scan) => (
             <article
               key={scan._id}
-              className="rounded-[1.8rem] border border-border/70 bg-white/88 p-6 shadow-[0_20px_70px_rgba(15,23,42,0.06)]"
+              className="rounded-[1.75rem] border border-white/10 bg-card/75 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.28)] backdrop-blur"
             >
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <ScanStatusBadge status={scan.status} />
-                  <h3 className="mt-4 text-xl font-semibold tracking-tight text-foreground">
-                    {scan.filename}
-                  </h3>
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    <ScanTypeBadge scanType={scan.scanType} />
+                    <ScanStatusBadge status={scan.status} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold tracking-tight text-foreground">
+                      {getScanTitle(scan)}
+                    </h3>
+                    {getScanSubtitle(scan) ? (
+                      <p className="mt-1 text-sm text-muted-foreground">{getScanSubtitle(scan)}</p>
+                    ) : null}
+                  </div>
                 </div>
                 <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                   <Clock3 className="size-3.5" />
@@ -76,7 +91,8 @@ export function SavedScanCards({
               </div>
 
               <p className="mt-4 min-h-14 text-sm leading-6 text-muted-foreground">
-                {scan.overviewRecommendation ??
+                {scan.compareResult?.recommendation ??
+                  scan.overviewRecommendation ??
                   "Analysis is still syncing. Open the scan to follow the timeline and export plan."}
               </p>
 
@@ -105,15 +121,21 @@ export function SavedScanCards({
               </div>
 
               <div className="mt-6 flex flex-wrap gap-3">
-                <Link href={`/app/scans/${scan._id}`} className={cn(buttonVariants({ variant: "default" }))}>
-                  Open scan
+                <Link
+                  href={getScanHref(scan)}
+                  className={cn(buttonVariants({ variant: "default" }), "rounded-full")}
+                >
+                  {isCompareScan(scan) ? "Open compare" : "Open scan"}
                 </Link>
                 {scan.latestExportUrl ? (
                   <a
                     href={scan.latestExportUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className={cn(buttonVariants({ variant: "outline" }))}
+                    className={cn(
+                      buttonVariants({ variant: "outline" }),
+                      "rounded-full border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white",
+                    )}
                   >
                     Latest export
                   </a>
@@ -123,13 +145,39 @@ export function SavedScanCards({
           ))}
         </div>
       ) : (
-        <div className="rounded-[1.9rem] border border-dashed border-border/80 bg-white/75 px-8 py-12 text-center shadow-[0_18px_55px_rgba(15,23,42,0.04)]">
+        <div className="rounded-[1.75rem] border border-dashed border-white/15 bg-white/5 px-8 py-12 text-center shadow-[0_18px_55px_rgba(0,0,0,0.2)]">
           <h3 className="text-2xl font-semibold tracking-tight">{emptyTitle}</h3>
           <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-muted-foreground">{emptyBody}</p>
         </div>
       )}
     </section>
   );
+}
+
+function ScanTypeBadge({ scanType }: { scanType: SavedScanSummary["scanType"] }) {
+  const compare = isCompareScan({ scanType });
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium",
+        compare
+          ? "border-fuchsia-400/30 bg-fuchsia-400/10 text-fuchsia-100"
+          : "border-white/10 bg-white/5 text-white/70",
+      )}
+    >
+      {compare ? <GitCompareArrows className="size-3.5" /> : <ScanEye className="size-3.5" />}
+      {compare ? "Compare" : "Scan"}
+    </span>
+  );
+}
+
+function getScanSubtitle(scan: SavedScanSummary) {
+  if (isCompareScan(scan)) {
+    return scan.secondaryFilename ? `${scan.filename} · ${scan.secondaryFilename}` : scan.filename;
+  }
+
+  return null;
 }
 
 export function ScanStatusBadge({ status }: { status: SavedScanSummary["status"] }) {
@@ -143,21 +191,23 @@ export function ScanStatusBadge({ status }: { status: SavedScanSummary["status"]
           : "Queued";
   const tone =
     status === "completed"
-      ? "bg-emerald-100 text-emerald-700"
+      ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-100"
       : status === "failed"
-        ? "bg-rose-100 text-rose-700"
+        ? "border-rose-400/25 bg-rose-400/10 text-rose-100"
         : status === "running"
-          ? "bg-sky-100 text-sky-700"
-          : "bg-amber-100 text-amber-800";
+          ? "border-sky-400/25 bg-sky-400/10 text-sky-100"
+          : "border-amber-400/25 bg-amber-400/10 text-amber-100";
 
   return (
-    <span className={cn("inline-flex rounded-full px-3 py-1 text-xs font-medium", tone)}>{copy}</span>
+    <span className={cn("inline-flex rounded-full border px-3 py-1 text-xs font-medium", tone)}>
+      {copy}
+    </span>
   );
 }
 
 function Metric({ label, value }: { label: string; value: number | null }) {
   return (
-    <div className="rounded-[1.1rem] border border-border/70 bg-background/70 px-3 py-3">
+    <div className="rounded-[1.1rem] border border-white/10 bg-white/5 px-3 py-3">
       <p className="text-[0.68rem] uppercase tracking-[0.24em] text-muted-foreground">{label}</p>
       <p className="mt-2 text-xl font-semibold tracking-tight text-foreground">
         {value ?? "—"}

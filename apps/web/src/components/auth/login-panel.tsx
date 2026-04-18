@@ -45,31 +45,30 @@ export function LoginPanel() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col gap-6 rounded-[2rem] border border-border/70 bg-white/95 p-8 shadow-[0_24px_80px_rgba(17,24,39,0.08)]">
+    <div className="mx-auto flex w-full max-w-md flex-col gap-6 rounded-[1.75rem] border border-white/10 bg-card/80 p-8 shadow-[0_32px_110px_rgba(0,0,0,0.35)]">
       <div className="space-y-3">
-        <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+        <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-white/70">
           <LockKeyhole className="size-3.5" />
-          Secure creator workspace
+          Secure workspace
         </div>
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">
-            {mode === "signIn" ? "Sign in to Cortent" : "Create your Cortent workspace"}
+            {mode === "signIn" ? "Sign in to VibeCheck" : "Create a VibeCheck account"}
           </h1>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Email/password auth is powered by Convex. Your scan history, selected cuts, and exports
-            stay attached to your account.
+            Email/password auth. Saved scans stay tied to your account.
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 rounded-[1.1rem] bg-muted/70 p-1">
+      <div className="grid grid-cols-2 gap-2 rounded-[1.1rem] border border-white/10 bg-black/20 p-1">
         <button
           type="button"
           className={cn(
             "rounded-[0.9rem] px-4 py-2 text-sm font-medium transition-colors",
             mode === "signIn"
-              ? "bg-white text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground",
+              ? "bg-white/10 text-white shadow-sm"
+              : "text-white/55 hover:text-white",
           )}
           onClick={() => setMode("signIn")}
         >
@@ -80,8 +79,8 @@ export function LoginPanel() {
           className={cn(
             "rounded-[0.9rem] px-4 py-2 text-sm font-medium transition-colors",
             mode === "signUp"
-              ? "bg-white text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground",
+              ? "bg-white/10 text-white shadow-sm"
+              : "text-white/55 hover:text-white",
           )}
           onClick={() => setMode("signUp")}
         >
@@ -132,7 +131,7 @@ export function LoginPanel() {
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
 
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending} className="rounded-full">
           {pending ? (
             <>
               <LoaderCircle data-icon="inline-start" className="animate-spin" />
@@ -143,14 +142,6 @@ export function LoginPanel() {
           )}
         </Button>
       </form>
-
-      <div className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4 text-sm text-muted-foreground">
-        <p className="font-medium text-foreground">What happens after login</p>
-        <p className="mt-1 leading-6">
-          Uploads create durable scan records in Convex before the FastAPI worker starts analysis,
-          so completed clips stay in your library even after local scratch storage is cleaned up.
-        </p>
-      </div>
     </div>
   );
 }
