@@ -43,6 +43,10 @@ function normalizeCompareTitle(title: string): string | null {
   return normalizedTitle.length > 0 ? normalizedTitle : null;
 }
 
+// Legacy fallback stays bounded: small pages, limited retries.
+const LEGACY_SCAN_PAGE_SIZE = 20;
+const LEGACY_SCAN_MAX_PAGES = 5;
+
 function assertCompareScanState(scan: {
   scanType?: Doc<"scans">["scanType"];
   secondaryUploadId?: Doc<"scans">["secondaryUploadId"];
@@ -110,8 +114,34 @@ async function summarizeScan(ctx: QueryCtx, row: Doc<"scans">): Promise<ScanSumm
   };
 }
 
+async function collectLegacyScanRows(ctx: QueryCtx, userId: string, limit: number) {
+  const legacyRows: Doc<"scans">[] = [];
+  let cursor: string | null = null;
+
+  for (let pageIndex = 0; pageIndex < LEGACY_SCAN_MAX_PAGES; pageIndex += 1) {
+    if (legacyRows.length >= limit) {
+      break;
+    }
+
+    const page = await ctx.db
+      .query("scans")
+      .withIndex("by_userId_createdAt", (q) => q.eq("userId", userId as never))
+      .order("desc")
+      .paginate({ cursor, numItems: LEGACY_SCAN_PAGE_SIZE });
+
+    legacyRows.push(...page.page.filter((row) => row.scanType == null));
+    cursor = page.continueCursor;
+
+    if (page.isDone) {
+      break;
+    }
+  }
+
+  return legacyRows.slice(0, limit);
+}
+
 async function listMineScans(ctx: QueryCtx, userId: string) {
-  const rows = await ctx.db
+  const currentSingles = await ctx.db
     .query("scans")
     .withIndex("by_userId_scanType_createdAt", (q) =>
       q.eq("userId", userId as never).eq("scanType", "single" as never),
@@ -119,7 +149,26 @@ async function listMineScans(ctx: QueryCtx, userId: string) {
     .order("desc")
     .take(50);
 
-  return await Promise.all(rows.map(async (row) => summarizeScan(ctx, row)));
+  const legacyRows =
+    currentSingles.length < 50
+      ? await collectLegacyScanRows(ctx, userId, 50 - currentSingles.length)
+      : [];
+
+  const mergedRows = [...currentSingles, ...legacyRows].sort((a, b) => b.createdAt - a.createdAt);
+  const dedupedRows: Doc<"scans">[] = [];
+  const seenIds = new Set<string>();
+  for (const row of mergedRows) {
+    if (seenIds.has(row._id)) {
+      continue;
+    }
+    seenIds.add(row._id);
+    dedupedRows.push(row);
+    if (dedupedRows.length === 50) {
+      break;
+    }
+  }
+
+  return await Promise.all(dedupedRows.map(async (row) => summarizeScan(ctx, row)));
 }
 
 /**

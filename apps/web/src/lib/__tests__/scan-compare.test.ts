@@ -287,23 +287,56 @@ describe("compare scan handlers", () => {
     ).rejects.toThrow("running");
   });
 
-  it("uses the single-scan index for shared list queries", async () => {
-    const take = vi.fn().mockResolvedValue([
+  it("includes legacy scans in the shared list alongside indexed singles", async () => {
+    const currentTake = vi.fn().mockResolvedValue([
       {
         _id: "scan_single_1",
         userId: "user_1",
         uploadId: "upload_single",
         scanType: "single",
         status: "completed",
-        createdAt: 1700000000000,
-        updatedAt: 1700000000000,
+        createdAt: 1700000002000,
+        updatedAt: 1700000002000,
       },
     ]);
-    const eq = vi.fn(() => ({ eq, order, take }));
-    const order = vi.fn(() => ({ take }));
+    const currentOrder = vi.fn(() => ({ take: currentTake }));
+    const currentEq = vi.fn(() => ({ eq: currentEq, order: currentOrder, take: currentTake }));
+    const legacyPaginate = vi.fn().mockResolvedValue({
+      page: [
+        {
+          _id: "scan_compare_1",
+          userId: "user_1",
+          uploadId: "upload_compare",
+          scanType: "compare",
+          secondaryUploadId: "upload_compare_2",
+          status: "completed",
+          createdAt: 1700000001500,
+          updatedAt: 1700000001500,
+        },
+        {
+          _id: "scan_legacy_1",
+          userId: "user_1",
+          uploadId: "upload_legacy",
+          status: "completed",
+          createdAt: 1700000001000,
+          updatedAt: 1700000001000,
+        },
+      ],
+      continueCursor: null,
+      isDone: true,
+    });
+    const legacyOrder = vi.fn(() => ({ paginate: legacyPaginate }));
+    const legacyEq = vi.fn(() => ({ eq: legacyEq, order: legacyOrder, paginate: legacyPaginate }));
     const withIndex = vi.fn((indexName: string, builder: (q: never) => never) => {
-      builder({ eq } as never);
-      return { order };
+      if (indexName === "by_userId_scanType_createdAt") {
+        builder({ eq: currentEq } as never);
+        return { order: currentOrder };
+      }
+      if (indexName === "by_userId_createdAt") {
+        builder({ eq: legacyEq } as never);
+        return { order: legacyOrder };
+      }
+      throw new Error(`unexpected index ${indexName}`);
     });
     const query = vi.fn(() => ({ withIndex }));
     const get = vi.fn(async (id: string) => {
@@ -313,6 +346,14 @@ describe("compare scan handlers", () => {
           userId: "user_1",
           filename: "single.mp4",
           localUploadId: "local_single",
+        };
+      }
+      if (id === "upload_legacy") {
+        return {
+          _id: "upload_legacy",
+          userId: "user_1",
+          filename: "legacy.mp4",
+          localUploadId: "local_legacy",
         };
       }
       return null;
@@ -327,14 +368,17 @@ describe("compare scan handlers", () => {
       "by_userId_scanType_createdAt",
       expect.any(Function),
     );
-    expect(eq).toHaveBeenNthCalledWith(1, "userId", "user_1");
-    expect(eq).toHaveBeenNthCalledWith(2, "scanType", "single");
-    expect(order).toHaveBeenCalledWith("desc");
-    expect(take).toHaveBeenCalledWith(50);
-    expect(result).toHaveLength(1);
-    expect(result[0]._id).toBe("scan_single_1");
-    expect(result[0].filename).toBe("single.mp4");
-    expect(get).toHaveBeenCalledTimes(1);
+    expect(withIndex).toHaveBeenCalledWith("by_userId_createdAt", expect.any(Function));
+    expect(currentEq).toHaveBeenNthCalledWith(1, "userId", "user_1");
+    expect(currentEq).toHaveBeenNthCalledWith(2, "scanType", "single");
+    expect(currentOrder).toHaveBeenCalledWith("desc");
+    expect(currentTake).toHaveBeenCalledWith(50);
+    expect(legacyEq).toHaveBeenCalledWith("userId", "user_1");
+    expect(legacyOrder).toHaveBeenCalledWith("desc");
+    expect(legacyPaginate).toHaveBeenCalledWith({ cursor: null, numItems: 20 });
+    expect(result.map((scan) => scan._id)).toEqual(["scan_single_1", "scan_legacy_1"]);
+    expect(result[1].filename).toBe("legacy.mp4");
+    expect(get).toHaveBeenCalledTimes(2);
   });
 
   it("rejects compare status rewrites from the service bridge", async () => {
