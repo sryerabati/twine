@@ -12,6 +12,7 @@ from app.services.convex_sync import ConvexSyncService
 from app.services.gemini_runner import GeminiRunner
 from app.services.jobs import AnalysisJobService, EditorDraftJobService
 from app.services.media import MediaService
+from app.services.nvidia_editor_ai import NvidiaEditorAI
 from app.services.storage import StorageService
 from app.services.tribe_runner import TribeRunner
 
@@ -28,7 +29,11 @@ def build_context(settings=None) -> APIContext:
     engine = AnalysisEngine(storage, media)
     convex_sync = ConvexSyncService(resolved_settings)
     jobs = AnalysisJobService(storage, runner, engine, convex_sync)
-    editor_ai = GeminiRunner(resolved_settings)
+    editor_ai = (
+        NvidiaEditorAI(resolved_settings, media)
+        if resolved_settings.editor_ai_provider == "nvidia"
+        else GeminiRunner(resolved_settings)
+    )
     editor_jobs = EditorDraftJobService(
         storage=storage,
         runner=runner,

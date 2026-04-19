@@ -1,0 +1,128 @@
+{
+  "export": {
+    "videoUrl": "/storage/editor-drafts/867df4036aa24835a3310caeb7880057/draft.mp4",
+    "durationSec": 44.47
+  },
+  "storylineSummary": "The sequence depicts a frustrated website developer confronting a client about unauthorized website creation and poor sales performance. The developer expresses anger and uses offensive language, followed by a demonstration of a website built using a simple method. The sequence culminates in a confirmation of a meeting to discuss the website.",
+  "orderingConfidence": "high",
+  "orderedClips": [
+    {
+      "clipId": "k97426f924q2e6zf5dbakf9knd8540m6",
+      "uploadId": "k177dnkzv414tnn345b3h464ms8547dk",
+      "filename": "821348129-291617387-fapdion.mp4",
+      "sourceOrder": 5,
+      "resolvedOrder": 1,
+      "rationale": "This clip introduces the website creation process and provides context for the developer's skills, setting the stage for the subsequent conflict.",
+      "transcriptPreview": "Here's a website that I made that I'm going to sell to the Luigi. Dumb, look. You can",
+      "summary": "The speaker is showing a website they created using copy-pasting from Google Maps. They highlight that the website was built entirely using this method and resulted in a beautiful landing page.",
+      "speechCoverage": 1.0,
+      "removedSeconds": 0.0,
+      "trimmedDurationSec": 10.57,
+      "outputStartSec": 0.0,
+      "outputEndSec": 10.57,
+      "warnings": [],
+      "appliedCuts": []
+    },
+    {
+      "clipId": "k97ckvxdnkqtad30tc948vzkss85473s",
+      "uploadId": "k17cjxzb0trx3nfe68f76pn841855rte",
+      "filename": "174276771-488220455-poaidsm.mp4",
+      "sourceOrder": 2,
+      "resolvedOrder": 2,
+      "rationale": "This clip establishes the core conflict \u2013 the client building a website without permission \u2013 and the developer's anger and frustration.",
+      "transcriptPreview": "You already built me a fucking website without asking. Balls to hell.",
+      "summary": "The speaker expresses frustration and anger, accusing someone of building a website without permission. They use strong language and seem upset by the situation.",
+      "speechCoverage": 0.95,
+      "removedSeconds": 0.0,
+      "trimmedDurationSec": 5.97,
+      "outputStartSec": 10.57,
+      "outputEndSec": 16.53,
+      "warnings": [],
+      "appliedCuts": []
+    },
+    {
+      "clipId": "k97att96spgpfjtb293vnpbrnh855gfg",
+      "uploadId": "k17ecfve81rbsw88txjq5enwvh85503r",
+      "filename": "298171353-806422503-lkjafds.mp4",
+      "sourceOrder": 3,
+      "resolvedOrder": 3,
+      "rationale": "This clip shows the developer aggressively questioning the client about sales, escalating the tension and revealing the developer's dissatisfaction with the client's performance.",
+      "transcriptPreview": "Well, I'm the guy telling you that your sales looks like fucking dog shit. And so the question,",
+      "summary": "The speaker is aggressively questioning the listener about their desire for increased customers and revenue, using strong and offensive language.",
+      "speechCoverage": 0.95,
+      "removedSeconds": 0.0,
+      "trimmedDurationSec": 7.7,
+      "outputStartSec": 16.53,
+      "outputEndSec": 24.23,
+      "warnings": [
+        "Strong and offensive language used."
+      ],
+      "appliedCuts": []
+    },
+    {
+      "clipId": "k976p82jt7805crednncdz5ths855b2z",
+      "uploadId": "k17ec5c8m7h3a7bczdh04pt70s854mtw",
+      "filename": "23502100-990228342-asdf.mp4",
+      "sourceOrder": 0,
+      "resolvedOrder": 4,
+      "rationale": "This clip further emphasizes the developer's negative feelings towards the client, reinforcing the conflict and the developer's emotional state.",
+      "transcriptPreview": "Hey, this is Shreyas, I'm a college student selling websites. And I think you sound like a fucking",
+      "summary": "The speaker, identifying as a college student selling websites, expresses strong negative sentiment towards someone, repeatedly using the word 'tch'.",
+      "speechCoverage": 0.95,
+      "removedSeconds": 0.0,
+      "trimmedDurationSec": 4.83,
+      "outputStartSec": 24.23,
+      "outputEndSec": 29.07,
+      "warnings": [],
+      "appliedCuts": []
+    },
+    {
+      "clipId": "k976dftr0t8yws6s9d672fwq5s855nb5",
+      "uploadId": "k17cqara47y81vnmx4fvw73rg185489f",
+      "filename": "385992193-288119371-peoiwer.mp4",
+      "sourceOrder": 4,
+      "resolvedOrder": 5,
+      "rationale": "This clip provides a demonstration of the developer's website building skills, showcasing a quick and simple method. This could be interpreted as a way to prove their capabilities or highlight the client's lack of understanding.",
+      "transcriptPreview": "College kid calling you a bitch. You got some nerf, you little shit. Fuck. What kind of website",
+      "summary": "The speaker is aggressively yelling at someone, using derogatory language and expressing frustration. The content appears to be a heated verbal attack.",
+      "speechCoverage": 0.95,
+      "removedSeconds": 0.0,
+      "trimmedDurationSec": 6.63,
+      "outputStartSec": 29.07,
+      "outputEndSec": 35.7,
+      "warnings": [],
+      "appliedCuts": []
+    },
+    {
+      "clipId": "k97ec0m9y2qaszmwfn5m2s5wq9855gn1",
+      "uploadId": "k17fgas8n1sr254h3yckpxa9y9855ds9",
+      "filename": "116408529-462297233-mcxe.mp4",
+      "sourceOrder": 1,
+      "resolvedOrder": 6,
+      "rationale": "This clip provides a resolution to the immediate conflict by confirming a meeting to discuss the website, suggesting a path forward.",
+      "transcriptPreview": "Alright, I will be there in 20 minutes if you want to run some numbers. I can show",
+      "summary": "The speaker is confirming a meeting time in 20 minutes and offering to show the client the website they've already built.",
+      "speechCoverage": 0.95,
+      "removedSeconds": 0.8,
+      "trimmedDurationSec": 8.77,
+      "outputStartSec": 35.7,
+      "outputEndSec": 44.47,
+      "warnings": [],
+      "appliedCuts": [
+        {
+          "id": "deadspace-1",
+          "type": "deadspace",
+          "start": 0.0,
+          "end": 0.8,
+          "reason": "Likely deadspace from low activation, low motion, and low audio energy.",
+          "defaultSelected": true,
+          "recommendedAction": "Cut roughly 0.8s or cover it with a harder transition."
+        }
+      ]
+    }
+  ],
+  "warnings": [
+    "Several clips contain strong and offensive language, which may be unsuitable for some audiences. Clips 1 and 5 are primarily supporting footage, but their aggressive tone could be interpreted as part of the main storyline. The aggressive questioning in clip 4 could be considered supporting footage as well.",
+    "Strong and offensive language used."
+  ]
+}

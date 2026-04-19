@@ -1,0 +1,133 @@
+{
+  "export": {
+    "videoUrl": "/storage/editor-drafts/dfd4614dbd764747955506541bb5dfd4/draft.mp4",
+    "durationSec": 45.27
+  },
+  "storylineSummary": "A college student demonstrates a bold and provocative cold-calling strategy to sell websites. He starts by insulting a prospect's current site to capture their attention, navigates through their hostile yet intrigued reaction, successfully secures an in-person meeting, and concludes by revealing the AI tool he uses to rapidly build the professional websites he pitches.",
+  "orderingConfidence": "high",
+  "orderedClips": [
+    {
+      "clipId": "k975cy271ndbtyrbf5ekw5mme5854y27",
+      "uploadId": "k172jbh531ta988tqr7xnfgrhd855xsc",
+      "filename": "23502100-990228342-asdf.mp4",
+      "sourceOrder": 0,
+      "resolvedOrder": 1,
+      "rationale": "This clip serves as the hook and introduction, where the creator identifies himself and begins the high-tension cold call.",
+      "transcriptPreview": "Hey this is Shreyas, I'm a college student selling websites and I think you sound like a fucking",
+      "summary": "A man records a video depicting an aggressive and humorous cold-calling scenario, introducing himself as a college student selling websites before abruptly insulting the listener.",
+      "speechCoverage": 1.0,
+      "removedSeconds": 0.0,
+      "trimmedDurationSec": 4.83,
+      "outputStartSec": 0.0,
+      "outputEndSec": 4.83,
+      "recordedAt": null,
+      "fileModifiedAt": "2026-04-19T06:38:45.704000Z",
+      "warnings": [],
+      "appliedCuts": []
+    },
+    {
+      "clipId": "k9705jvvv2bws5c94yn05xw70s8550gh",
+      "uploadId": "k17ddgtt168nf7t4mqkgtcsx8x8557xg",
+      "filename": "298171353-806422503-lkjafds.mp4",
+      "sourceOrder": 3,
+      "resolvedOrder": 2,
+      "rationale": "This clip follows the introduction, escalating the confrontation by doubling down on the insult to the client's current website.",
+      "transcriptPreview": "Well I'm the guy telling you that your website looks like fucking dog shit. Answer the question: do",
+      "summary": "A man demonstrates an aggressive and profanity-laced approach to cold calling in 2026, bluntly insulting a client's website to provoke a response about increasing their revenue.",
+      "speechCoverage": 0.95,
+      "removedSeconds": 0.0,
+      "trimmedDurationSec": 7.7,
+      "outputStartSec": 4.83,
+      "outputEndSec": 12.53,
+      "recordedAt": null,
+      "fileModifiedAt": "2026-04-19T06:38:43.889000Z",
+      "warnings": [
+        "The audio contains explicit language."
+      ],
+      "appliedCuts": []
+    },
+    {
+      "clipId": "k97a399aj3fevz3f34d8hgy1bn854q1s",
+      "uploadId": "k174hx1vv1p1683vc585m8m2k1854e0g",
+      "filename": "385992193-288119371-peoiwer.mp4",
+      "sourceOrder": 4,
+      "resolvedOrder": 3,
+      "rationale": "This clip transitions to the prospect's perspective (role-played), showing the shift from anger to curiosity regarding the creator's pitch.",
+      "transcriptPreview": "College kid calling me a bitch? You got some nerve, you little shit. But, fuck, what kind of",
+      "summary": "A creator role-plays a scenario of a hostile prospect responding to a cold call to practice overcoming objections and diffusing tension, using a retro phone accessory.",
+      "speechCoverage": 0.95,
+      "removedSeconds": 0.0,
+      "trimmedDurationSec": 6.63,
+      "outputStartSec": 12.53,
+      "outputEndSec": 19.17,
+      "recordedAt": null,
+      "fileModifiedAt": "2026-04-19T06:38:44.428000Z",
+      "warnings": [
+        "Contains profanity"
+      ],
+      "appliedCuts": []
+    },
+    {
+      "clipId": "k97bzzwes684e961n78d43b9ah854w4h",
+      "uploadId": "k173e802df6sysnk8tj9s37yj9854ws1",
+      "filename": "116408529-462297233-mcxe.mp4",
+      "sourceOrder": 1,
+      "resolvedOrder": 4,
+      "rationale": "The conversation moves into the negotiation phase, with the prospect asking about pricing and expressing interest in more customers.",
+      "transcriptPreview": "You got my attention. Yeah, I want more customers. Who the fuck doesn't? How much is this going",
+      "summary": "A young man practices a cold call, speaking to an automated voice representing a potential client. He offers to meet in person shortly to discuss pricing and showcase a pre-built website prototype.",
+      "speechCoverage": 0.98,
+      "removedSeconds": 0.0,
+      "trimmedDurationSec": 9.57,
+      "outputStartSec": 19.17,
+      "outputEndSec": 28.73,
+      "recordedAt": null,
+      "fileModifiedAt": "2026-04-19T06:38:45.060000Z",
+      "warnings": [],
+      "appliedCuts": []
+    },
+    {
+      "clipId": "k97b3exngafa2ty0v8bap86xz9854a98",
+      "uploadId": "k170szqrh7sxngdphr6gdx38rh854628",
+      "filename": "174276771-488220455-poaidsm.mp4",
+      "sourceOrder": 2,
+      "resolvedOrder": 5,
+      "rationale": "This clip provides the narrative resolution of the call, where the prospect is impressed by the initiative and agrees to a meeting.",
+      "transcriptPreview": "You already built me a fucking website without asking? Ballsy as hell. Fine, swing by. Let's see what",
+      "summary": "The person in the video is listening to a voice on their phone. The voice is that of a potential client who is impressed that the caller built a website for them without even being asked, calling it \"ballsy as hell\" and inviting them to stop by to show their work.",
+      "speechCoverage": 0.7,
+      "removedSeconds": 0.0,
+      "trimmedDurationSec": 5.97,
+      "outputStartSec": 28.73,
+      "outputEndSec": 34.7,
+      "recordedAt": null,
+      "fileModifiedAt": "2026-04-19T06:39:12.720000Z",
+      "warnings": [],
+      "appliedCuts": []
+    },
+    {
+      "clipId": "k97b4qa0vw17qpmtc3xjfd3vqh8545gm",
+      "uploadId": "k17aftc8ypveta6qznq5zhntjs8545ta",
+      "filename": "821348129-291617387-fapdion.mp4",
+      "sourceOrder": 5,
+      "resolvedOrder": 6,
+      "rationale": "This clip acts as an 'outro' or technical reveal, showing the audience the actual tool and process used to create the value promised during the call.",
+      "transcriptPreview": "Here's a website that I made that I'm going to sell to Luigi's. Down below, you can see",
+      "summary": "A creator showcases a professional restaurant website he built for Luigi's Ristorante & Catering. He demonstrates how he used a tool called Lovable to generate the entire landing page simply by copying and pasting data directly from the restaurant's Google Maps listing.",
+      "speechCoverage": 1.0,
+      "removedSeconds": 0.0,
+      "trimmedDurationSec": 10.57,
+      "outputStartSec": 34.7,
+      "outputEndSec": 45.27,
+      "recordedAt": null,
+      "fileModifiedAt": "2026-04-19T06:38:47.408000Z",
+      "warnings": [],
+      "appliedCuts": []
+    }
+  ],
+  "warnings": [
+    "Clip k97b4qa0vw17qpmtc3xjfd3vqh8545gm is placed last as it provides technical context and product demonstration rather than being a direct part of the role-played phone conversation.",
+    "The audio contains explicit language.",
+    "Contains profanity"
+  ]
+}

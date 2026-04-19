@@ -197,6 +197,9 @@ class StorageService:
             draftId=draft_id,
             projectId=project_id,
             status="queued",
+            stage="queued",
+            progressPercent=5,
+            statusMessage="Queued for rough-cut generation.",
             createdAt=now,
             updatedAt=now,
             error=None,
@@ -342,6 +345,9 @@ class StorageService:
         width: int,
         height: int,
         size_bytes: int,
+        *,
+        recorded_at: datetime | None = None,
+        file_modified_at: datetime | None = None,
     ) -> VideoAsset:
         paths = self.upload_paths(upload_id)
         return VideoAsset(
@@ -353,4 +359,6 @@ class StorageService:
             width=width,
             height=height,
             sizeBytes=size_bytes,
+            recordedAt=recorded_at,
+            fileModifiedAt=file_modified_at,
         )

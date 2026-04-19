@@ -28,6 +28,8 @@ class PreparedEditorClip:
     source_order: int
     source_path: Path
     duration_sec: float
+    recorded_at: datetime | None
+    file_modified_at: datetime | None
     transcript_preview: str
     summary: str
     speech_coverage: float
@@ -169,11 +171,13 @@ class EditorDraftJobService:
         draft_id: str,
         clips: list[EditorClipDescriptor],
     ) -> None:
-        record = self.storage.read_editor_draft_record(draft_id)
-        running = record.model_copy(
-            update={"status": "running", "updatedAt": datetime.now(UTC)}
+        record = self._update_draft_record(
+            draft_id,
+            status="running",
+            stage="preparing_clips",
+            progress_percent=12,
+            status_message="Reviewing clips for transcript cues and deadspace.",
         )
-        self.storage.write_editor_draft_record(running)
         self.convex_sync.update_editor_project_status(
             convex_project_id=project_id,
             status="running",
@@ -181,12 +185,33 @@ class EditorDraftJobService:
         )
 
         try:
-            prepared_clips = [
-                self._prepare_clip(source_order=index, clip=clip)
-                for index, clip in enumerate(clips)
-            ]
+            prepared_clips: list[PreparedEditorClip] = []
+            for index, clip in enumerate(clips):
+                self._update_draft_record(
+                    draft_id,
+                    status="running",
+                    stage="preparing_clips",
+                    progress_percent=min(55, 18 + int(((index + 1) / max(len(clips), 1)) * 32)),
+                    status_message=f"Preparing clip {index + 1} of {len(clips)}.",
+                )
+                prepared_clips.append(self._prepare_clip(source_order=index, clip=clip))
+
+            self._update_draft_record(
+                draft_id,
+                status="running",
+                stage="ordering_story",
+                progress_percent=66,
+                status_message="Resolving the story order across all uploaded clips.",
+            )
             ordered_clips, storyline_summary, ordering_confidence, order_warnings = self._resolve_order(
                 prepared_clips
+            )
+            self._update_draft_record(
+                draft_id,
+                status="running",
+                stage="rendering_video",
+                progress_percent=84,
+                status_message="Rendering the combined rough cut video.",
             )
             draft_paths = self.storage.editor_draft_paths(draft_id)
             total_duration, timings = self.media.assemble_sequence(
@@ -204,6 +229,13 @@ class EditorDraftJobService:
             timings_by_clip = {timing.clip_id: timing for timing in timings}
             warnings = self._dedupe_warnings(
                 [*order_warnings, *(warning for clip in ordered_clips for warning in clip.warnings)]
+            )
+            self._update_draft_record(
+                draft_id,
+                status="running",
+                stage="finalizing",
+                progress_percent=94,
+                status_message="Finalizing export metadata and review details.",
             )
             ordered_payload_clips = [
                 self._build_ordered_clip_payload(
@@ -228,6 +260,9 @@ class EditorDraftJobService:
                 draftId=draft_id,
                 projectId=project_id,
                 status="completed",
+                stage="completed",
+                progressPercent=100,
+                statusMessage="Rough cut ready to review.",
                 createdAt=record.createdAt,
                 updatedAt=datetime.now(UTC),
                 error=None,
@@ -248,10 +283,14 @@ class EditorDraftJobService:
                 warning_count=len(payload.warnings),
             )
         except (GeminiIntegrationError, TribeIntegrationError, FileNotFoundError, MediaInspectionError, RuntimeError) as exc:
+            current_record = self.storage.read_editor_draft_record(draft_id)
             failed = EditorDraftResponse(
                 draftId=draft_id,
                 projectId=project_id,
                 status="failed",
+                stage="failed",
+                progressPercent=current_record.progressPercent,
+                statusMessage="Rough cut generation failed.",
                 createdAt=record.createdAt,
                 updatedAt=datetime.now(UTC),
                 error=str(exc),
@@ -265,9 +304,40 @@ class EditorDraftJobService:
                 error_message=str(exc),
             )
 
+    def _update_draft_record(
+        self,
+        draft_id: str,
+        *,
+        status: str | None = None,
+        stage: str | None = None,
+        progress_percent: int | None = None,
+        status_message: str | None = None,
+    ) -> EditorDraftResponse:
+        record = self.storage.read_editor_draft_record(draft_id)
+        update: dict[str, object] = {
+            "updatedAt": datetime.now(UTC),
+        }
+        if status is not None:
+            update["status"] = status
+        if stage is not None:
+            update["stage"] = stage
+        if progress_percent is not None:
+            update["progressPercent"] = progress_percent
+        if status_message is not None:
+            update["statusMessage"] = status_message
+        next_record = record.model_copy(update=update)
+        self.storage.write_editor_draft_record(next_record)
+        return next_record
+
     def _prepare_clip(self, *, source_order: int, clip: EditorClipDescriptor) -> PreparedEditorClip:
         upload = self.storage.read_upload_metadata(clip.localUploadId)
         upload_paths = self.storage.upload_paths(clip.localUploadId)
+        recorded_at = upload.video.recordedAt
+        file_modified_at = upload.video.fileModifiedAt
+        if recorded_at is None or file_modified_at is None:
+            inspected_metadata = self.media.inspect_video(upload_paths.source_path)
+            recorded_at = recorded_at or inspected_metadata.recorded_at
+            file_modified_at = file_modified_at or inspected_metadata.file_modified_at
         ai_summary = self.editor_ai.summarize_editor_clip(upload_paths.source_path)
         speech_segments = self._speech_segments_from_ai(ai_summary, upload.video.durationSec)
         transcript_preview = self._transcript_preview_from_segments(speech_segments) or str(
@@ -307,13 +377,15 @@ class EditorDraftJobService:
             )
         if transcript_word_count < 3 or speech_coverage < 0.2:
             warnings.append(
-                "Limited spoken context detected. Keeping this clip in source-order fallback mode."
+                "Limited spoken context detected. Metadata or original order will be used as a fallback."
             )
         return PreparedEditorClip(
             descriptor=clip,
             source_order=source_order,
             source_path=upload_paths.source_path,
             duration_sec=upload.video.durationSec,
+            recorded_at=recorded_at,
+            file_modified_at=file_modified_at,
             transcript_preview=transcript_preview,
             summary=summary,
             speech_coverage=max(speech_coverage, 0.0),
@@ -325,39 +397,42 @@ class EditorDraftJobService:
         self,
         clips: list[PreparedEditorClip],
     ) -> tuple[list[PreparedEditorClip], str, str, list[str]]:
-        semantic_clips = [
-            clip for clip in clips if clip.speech_coverage >= 0.2 and clip.transcript_preview.strip()
-        ]
-        supporting_clips = [clip for clip in clips if clip not in semantic_clips]
-
         storyline_summary = "Ordered clips into a rough-cut sequence."
         ordering_confidence = "low"
         warnings: list[str] = []
-        ordered_semantic_clips = semantic_clips
+        ordered_clips = clips
 
-        if semantic_clips:
+        if clips:
             ordering = self.editor_ai.order_editor_clips(
                 [
                     {
                         "clipId": clip.descriptor.clipId,
                         "filename": clip.descriptor.filename,
+                        "sourceOrder": clip.source_order,
                         "summary": clip.summary,
                         "transcriptPreview": clip.transcript_preview,
                         "speechCoverage": clip.speech_coverage,
+                        "recordedAt": self._serialize_datetime(clip.recorded_at),
+                        "fileModifiedAt": self._serialize_datetime(clip.file_modified_at),
                     }
-                    for clip in semantic_clips
+                    for clip in clips
                 ]
             )
-            clip_map = {clip.descriptor.clipId: clip for clip in semantic_clips}
-            ordered_semantic_clips = [
-                clip_map[item["clipId"]]
-                for item in ordering.get("orderedClips", [])
-                if item["clipId"] in clip_map
-            ]
+            clip_map = {clip.descriptor.clipId: clip for clip in clips}
+            seen_clip_ids: set[str] = set()
+            ordered_clips = []
+            for item in ordering.get("orderedClips", []):
+                clip_id = str(item["clipId"])
+                if clip_id not in clip_map or clip_id in seen_clip_ids:
+                    continue
+                ordered_clips.append(clip_map[clip_id])
+                seen_clip_ids.add(clip_id)
             fallback_missing = [
-                clip for clip in semantic_clips if clip.descriptor.clipId not in {item.descriptor.clipId for item in ordered_semantic_clips}
+                clip
+                for clip in clips
+                if clip.descriptor.clipId not in seen_clip_ids
             ]
-            ordered_semantic_clips.extend(sorted(fallback_missing, key=lambda clip: clips.index(clip)))
+            ordered_clips.extend(sorted(fallback_missing, key=self._fallback_order_key))
             rationale_by_clip = {
                 str(item["clipId"]): str(item["rationale"])
                 for item in ordering.get("orderedClips", [])
@@ -365,17 +440,23 @@ class EditorDraftJobService:
             storyline_summary = str(ordering.get("storylineSummary") or storyline_summary)
             ordering_confidence = str(ordering.get("orderingConfidence") or ordering_confidence)
             warnings.extend(str(item) for item in ordering.get("warnings", []))
-            for clip in ordered_semantic_clips:
-                clip.rationale = rationale_by_clip.get(
-                    clip.descriptor.clipId,
-                    "Placed to support the storyline.",
-                )
 
-        supporting_clips = sorted(supporting_clips, key=lambda clip: clip.source_order)
-        for clip in supporting_clips:
-            clip.rationale = "Kept in source order because transcript signal was limited."
+            for clip in ordered_clips:
+                if clip.descriptor.clipId in rationale_by_clip:
+                    clip.rationale = rationale_by_clip[clip.descriptor.clipId]
+                    continue
+                if clip.speech_coverage < 0.2 or not clip.transcript_preview.strip():
+                    if self._has_chronology_metadata(clip):
+                        clip.rationale = (
+                            "Placed using clip chronology metadata because spoken context was limited."
+                        )
+                    else:
+                        clip.rationale = (
+                            "Kept near its original position because spoken context was limited."
+                        )
+                    continue
+                clip.rationale = "Placed to support the storyline."
 
-        ordered_clips = [*ordered_semantic_clips, *supporting_clips]
         for clip in ordered_clips:
             clip.warnings = self._dedupe_warnings(clip.warnings)
         return ordered_clips, storyline_summary, ordering_confidence, self._dedupe_warnings(warnings)
@@ -388,7 +469,7 @@ class EditorDraftJobService:
         timing: SequenceClipTiming,
     ) -> OrderedDraftClip:
         rationale = getattr(clip, "rationale", None) or (
-            "Kept in source order because transcript signal was limited."
+            "Placed using metadata or original order because transcript signal was limited."
         )
         return OrderedDraftClip(
             clipId=clip.descriptor.clipId,
@@ -404,9 +485,25 @@ class EditorDraftJobService:
             trimmedDurationSec=timing.trimmed_duration_sec,
             outputStartSec=timing.output_start_sec,
             outputEndSec=timing.output_end_sec,
+            recordedAt=clip.recorded_at,
+            fileModifiedAt=clip.file_modified_at,
             warnings=clip.warnings,
             appliedCuts=clip.applied_cuts,
         )
+
+    @staticmethod
+    def _serialize_datetime(value: datetime | None) -> str | None:
+        return value.isoformat() if value is not None else None
+
+    @staticmethod
+    def _has_chronology_metadata(clip: PreparedEditorClip) -> bool:
+        return clip.recorded_at is not None or clip.file_modified_at is not None
+
+    def _fallback_order_key(self, clip: PreparedEditorClip) -> tuple[int, float, int]:
+        chronology = clip.recorded_at or clip.file_modified_at
+        if chronology is None:
+            return (1, float(clip.source_order), clip.source_order)
+        return (0, chronology.timestamp(), clip.source_order)
 
     @staticmethod
     def _transcript_preview_from_events(result: TribeRunResult) -> str:

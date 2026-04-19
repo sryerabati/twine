@@ -221,6 +221,8 @@ def command_analyze(context: APIContext, os_name: str, video_path: Path) -> dict
         width=metadata.width,
         height=metadata.height,
         size_bytes=metadata.size_bytes,
+        recorded_at=metadata.recorded_at,
+        file_modified_at=metadata.file_modified_at,
     )
     upload_response = UploadResponse(uploadId=upload_paths.upload_id, video=video_asset)
     storage.write_upload_metadata(upload_response)

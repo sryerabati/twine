@@ -35,6 +35,8 @@ export type VideoAsset = {
   width: number;
   height: number;
   sizeBytes: number;
+  recordedAt?: string | null;
+  fileModifiedAt?: string | null;
 };
 
 export type UploadResponse = {
@@ -260,6 +262,14 @@ export type SavedScanSummary = {
 export type SavedScanRecord = SavedScanSummary;
 
 export type EditorProjectStatus = "drafting" | "queued" | "running" | "completed" | "failed";
+export type EditorDraftStage =
+  | "queued"
+  | "preparing_clips"
+  | "ordering_story"
+  | "rendering_video"
+  | "finalizing"
+  | "completed"
+  | "failed";
 
 export type EditorProjectClip = {
   _id: string;
@@ -304,6 +314,8 @@ export type OrderedDraftClip = {
   trimmedDurationSec: number;
   outputStartSec: number;
   outputEndSec: number;
+  recordedAt?: string | null;
+  fileModifiedAt?: string | null;
   warnings: string[];
   appliedCuts: DeadspaceCut[];
 };
@@ -323,6 +335,9 @@ export type EditorDraftResponse = {
   draftId: string;
   projectId: string;
   status: "queued" | "running" | "completed" | "failed";
+  stage: EditorDraftStage | null;
+  progressPercent: number | null;
+  statusMessage: string | null;
   createdAt: string;
   updatedAt: string;
   error: string | null;

@@ -92,6 +92,7 @@ def health(context: APIContext = Depends(get_context)) -> HealthResponse:
 async def upload_video(
     file: UploadFile = File(...),
     convex_upload_id: str | None = Form(default=None, alias="convexUploadId"),
+    client_modified_at: datetime | None = Form(default=None, alias="clientModifiedAt"),
     context: APIContext = Depends(get_context),
 ) -> UploadResponse:
     settings = context.settings
@@ -135,6 +136,8 @@ async def upload_video(
         width=metadata.width,
         height=metadata.height,
         size_bytes=metadata.size_bytes,
+        recorded_at=metadata.recorded_at,
+        file_modified_at=client_modified_at or metadata.file_modified_at,
     )
     response = UploadResponse(uploadId=paths.upload_id, video=video)
     storage.write_upload_metadata(response)

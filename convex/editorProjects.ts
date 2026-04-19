@@ -179,6 +179,53 @@ export const removeClip = mutation({
   },
 });
 
+export const updateTitle = mutation({
+  args: {
+    projectId: v.id("editorProjects"),
+    title: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) {
+      throw new Error("Not authenticated.");
+    }
+
+    await requireOwnedProject(ctx, userId, args.projectId);
+    const title = args.title.trim();
+    if (!title) {
+      throw new Error("Project title cannot be empty.");
+    }
+    await ctx.db.patch(args.projectId, {
+      title,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const deleteProject = mutation({
+  args: {
+    projectId: v.id("editorProjects"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) {
+      throw new Error("Not authenticated.");
+    }
+
+    await requireOwnedProject(ctx, userId, args.projectId);
+    const clips = await ctx.db
+      .query("editorProjectClips")
+      .withIndex("by_projectId_and_sourceOrder", (q) => q.eq("projectId", args.projectId))
+      .collect();
+
+    for (const clip of clips) {
+      await ctx.db.delete(clip._id);
+    }
+    await ctx.db.delete(args.projectId);
+    return args.projectId;
+  },
+});
+
 export const listRecentMine = query({
   args: {},
   handler: async (ctx) => {

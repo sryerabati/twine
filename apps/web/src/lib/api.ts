@@ -28,6 +28,9 @@ export async function uploadVideo(
 ): Promise<UploadResponse> {
   const formData = new FormData();
   formData.append("file", file);
+  if (Number.isFinite(file.lastModified) && file.lastModified > 0) {
+    formData.append("clientModifiedAt", new Date(file.lastModified).toISOString());
+  }
   if (convexUploadId) {
     formData.append("convexUploadId", convexUploadId);
   }

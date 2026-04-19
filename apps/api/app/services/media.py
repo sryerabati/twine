@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import json
 import re
 import subprocess
@@ -25,6 +26,8 @@ class VideoMetadata:
     height: int
     size_bytes: int
     fps: float
+    recorded_at: datetime | None = None
+    file_modified_at: datetime | None = None
 
 
 @dataclass
@@ -65,9 +68,12 @@ class MediaService:
             "-v",
             "error",
             "-show_entries",
-            "format=duration,size",
-            "-show_entries",
-            "stream=width,height,r_frame_rate",
+            (
+                "format=duration,size"
+                ":format_tags=creation_time,com.apple.quicktime.creationdate,date"
+                ":stream=width,height,r_frame_rate"
+                ":stream_tags=creation_time,com.apple.quicktime.creationdate,date"
+            ),
             "-of",
             "json",
             str(path),
@@ -83,13 +89,78 @@ class MediaService:
         fps_text = video_stream.get("r_frame_rate", "0/1")
         numerator, denominator = fps_text.split("/")
         fps = float(numerator) / float(denominator or 1)
+        file_modified_at = self._timestamp_to_utc_datetime(path.stat().st_mtime)
         return VideoMetadata(
             duration_sec=float(payload["format"]["duration"]),
             width=int(video_stream["width"]),
             height=int(video_stream["height"]),
             size_bytes=int(payload["format"]["size"]),
             fps=fps,
+            recorded_at=self._extract_recorded_at(payload),
+            file_modified_at=file_modified_at,
         )
+
+    @classmethod
+    def _extract_recorded_at(cls, payload: dict[str, object]) -> datetime | None:
+        format_payload = payload.get("format")
+        if isinstance(format_payload, dict):
+            tags = format_payload.get("tags")
+            parsed = cls._parse_tags_datetime(tags)
+            if parsed is not None:
+                return parsed
+
+        streams = payload.get("streams")
+        if not isinstance(streams, list):
+            return None
+
+        for stream in streams:
+            if not isinstance(stream, dict):
+                continue
+            parsed = cls._parse_tags_datetime(stream.get("tags"))
+            if parsed is not None:
+                return parsed
+        return None
+
+    @classmethod
+    def _parse_tags_datetime(cls, raw_tags: object) -> datetime | None:
+        if not isinstance(raw_tags, dict):
+            return None
+        for key in ("creation_time", "com.apple.quicktime.creationdate", "date"):
+            parsed = cls._parse_media_datetime(raw_tags.get(key))
+            if parsed is not None:
+                return parsed
+        return None
+
+    @staticmethod
+    def _parse_media_datetime(value: object) -> datetime | None:
+        if value is None:
+            return None
+
+        normalized = str(value).strip()
+        if not normalized:
+            return None
+
+        normalized = normalized.replace("Z", "+00:00").replace(" UTC", "+00:00")
+        normalized = re.sub(r"([+-]\d{2})(\d{2})$", r"\1:\2", normalized)
+        candidates = [normalized]
+        if " " in normalized and "T" not in normalized:
+            candidates.append(normalized.replace(" ", "T", 1))
+
+        for candidate in candidates:
+            try:
+                parsed = datetime.fromisoformat(candidate)
+            except ValueError:
+                continue
+            if parsed.tzinfo is None:
+                return parsed.replace(tzinfo=UTC)
+            return parsed.astimezone(UTC)
+        return None
+
+    @staticmethod
+    def _timestamp_to_utc_datetime(timestamp: float | None) -> datetime | None:
+        if timestamp is None:
+            return None
+        return datetime.fromtimestamp(timestamp, tz=UTC)
 
     def generate_thumbnail(self, source_path: Path, output_path: Path) -> None:
         cmd = [

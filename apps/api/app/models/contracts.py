@@ -29,6 +29,8 @@ class VideoAsset(BaseModel):
     width: int
     height: int
     sizeBytes: int
+    recordedAt: datetime | None = None
+    fileModifiedAt: datetime | None = None
 
 
 class UploadResponse(BaseModel):
@@ -243,6 +245,15 @@ class CompareResponse(BaseModel):
 
 EditorProjectStatus = Literal["drafting", "queued", "running", "completed", "failed"]
 EditorDraftStatus = Literal["queued", "running", "completed", "failed"]
+EditorDraftStage = Literal[
+    "queued",
+    "preparing_clips",
+    "ordering_story",
+    "rendering_video",
+    "finalizing",
+    "completed",
+    "failed",
+]
 OrderingConfidence = Literal["low", "medium", "high"]
 
 
@@ -277,6 +288,8 @@ class OrderedDraftClip(BaseModel):
     trimmedDurationSec: float
     outputStartSec: float
     outputEndSec: float
+    recordedAt: datetime | None = None
+    fileModifiedAt: datetime | None = None
     warnings: list[str] = Field(default_factory=list)
     appliedCuts: list[DeadspaceCut] = Field(default_factory=list)
 
@@ -293,6 +306,9 @@ class EditorDraftResponse(BaseModel):
     draftId: str
     projectId: str
     status: EditorDraftStatus
+    stage: EditorDraftStage | None = None
+    progressPercent: int | None = Field(default=None, ge=0, le=100)
+    statusMessage: str | None = None
     createdAt: datetime
     updatedAt: datetime
     error: str | None = None
