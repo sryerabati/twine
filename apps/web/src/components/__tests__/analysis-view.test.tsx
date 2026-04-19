@@ -291,8 +291,13 @@ describe("AnalysisView", () => {
       expect(screen.getByRole("heading", { name: /primary analysis/i })).toBeInTheDocument();
       expect(screen.getByRole("heading", { name: /secondary details/i })).toBeInTheDocument();
     });
-    expect(screen.getAllByText(/Strong open/i).length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: /Provider response JSON/i })).toBeInTheDocument();
+    expect(screen.getByText(/Automatic deadspace trim/i)).toBeInTheDocument();
+    expect(screen.getByText(/Quiet stretch\./i)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Provider response JSON/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Action board/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Detailed segment notes/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Downloads/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Past exports/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Raw predictions/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/TRIBE/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Gemini/i)).not.toBeInTheDocument();
