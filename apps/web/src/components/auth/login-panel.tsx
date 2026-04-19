@@ -10,6 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
+const INVALID_SIGN_IN_ERROR_PATTERN = /invalid (credentials|password)/i;
+const INVALID_SIGN_IN_MESSAGE = "Password or email was wrong. Please try again.";
+
 export function LoginPanel() {
   const { signIn } = useAuthActions();
   const [mode, setMode] = useState<"signIn" | "signUp">("signIn");
@@ -38,7 +41,15 @@ export function LoginPanel() {
         setMessage("Verification started. Finish the auth flow to enter the app.");
       }
     } catch (authError) {
-      setError(authError instanceof Error ? authError.message : "Authentication failed.");
+      if (
+        mode === "signIn" &&
+        authError instanceof Error &&
+        INVALID_SIGN_IN_ERROR_PATTERN.test(authError.message)
+      ) {
+        setError(INVALID_SIGN_IN_MESSAGE);
+      } else {
+        setError(authError instanceof Error ? authError.message : "Authentication failed.");
+      }
     } finally {
       setPending(false);
     }

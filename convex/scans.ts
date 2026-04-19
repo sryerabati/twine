@@ -367,6 +367,26 @@ export const saveExportMetadata = mutation({
   },
 });
 
+export const deleteMine = mutation({
+  args: {
+    scanId: v.id("scans"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) {
+      throw new Error("Not authenticated.");
+    }
+
+    const scan = await ctx.db.get(args.scanId);
+    if (scan === null || scan.userId !== userId) {
+      throw new Error("Scan not found.");
+    }
+
+    await ctx.db.delete(args.scanId);
+    return args.scanId;
+  },
+});
+
 /**
  * List scans owned by the current user, newest first, with the matching upload.
  */

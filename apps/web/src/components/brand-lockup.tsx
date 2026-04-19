@@ -15,7 +15,7 @@ const variantStyles = {
     root: "gap-4",
     mark: "size-13 rounded-[1.55rem]",
     surface:
-      "border border-white/70 bg-white ring-primary/20 shadow-[0_18px_40px_-24px_rgba(255,255,255,0.7)]",
+      "border border-white/12 bg-card ring-primary/20 shadow-[0_18px_40px_-24px_rgba(53,184,95,0.28)]",
     meta: "text-[0.6rem] tracking-[0.28em]",
     title: "text-[1.9rem] tracking-[-0.11em]",
   },

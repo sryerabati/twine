@@ -1,5 +1,6 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 
 import { SavedScanCards } from "@/components/scan-cards";
 import type { SavedScanSummary } from "@/lib/contracts";
@@ -121,5 +122,36 @@ describe("SavedScanCards", () => {
     );
 
     expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(5);
+  });
+
+  it("supports deleting a saved scan with confirmation", async () => {
+    const user = userEvent.setup();
+    const onDeleteScan = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <SavedScanCards
+        scans={[
+          {
+            ...baseScan,
+            _id: "scan-single-4",
+            filename: "delete-me.mp4",
+            secondaryFilename: null,
+          },
+        ]}
+        title="Saved scans"
+        onDeleteScan={onDeleteScan}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /delete delete-me\.mp4/i }));
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText(/this removes the saved scan from your history/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /delete scan/i }));
+
+    await waitFor(() => {
+      expect(onDeleteScan).toHaveBeenCalledWith("scan-single-4");
+    });
   });
 });

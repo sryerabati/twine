@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { startTransition, useEffect, useMemo, useState } from "react";
+import { startTransition, useEffect, useState } from "react";
 import { useMutation } from "convex/react";
 import { ArrowUpRight, GitCompareArrows, LoaderCircle, Upload } from "lucide-react";
 
@@ -9,7 +9,6 @@ import { UploadDropzone } from "@/components/upload-dropzone";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { fetchHealth, startAnalysis, uploadVideo } from "@/lib/api";
-import type { HealthResponse } from "@/lib/contracts";
 
 type UploadWorkbenchProps = {
   onSingleReady: (result: { scanId: string; analysisId: string }) => void;
@@ -46,7 +45,6 @@ export function UploadWorkbench({
   const createPendingScan = useMutation("scans:createPendingScan" as never);
   const createPendingCompareScan = useMutation("scans:createPendingCompareScan" as never);
   const attachCompareAnalysisIds = useMutation("scans:attachCompareAnalysisIds" as never);
-  const [health, setHealth] = useState<HealthResponse | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [mode, setMode] = useState<"single" | "compare">("single");
   const [single, setSingle] = useState<FileState>(emptyFileState);
@@ -57,11 +55,7 @@ export function UploadWorkbench({
   useEffect(() => {
     let cancelled = false;
     fetchHealth()
-      .then((response) => {
-        if (!cancelled) {
-          setHealth(response);
-        }
-      })
+      .then(() => undefined)
       .catch((error: Error) => {
         if (!cancelled) {
           setHealthError(error.message);
@@ -71,16 +65,6 @@ export function UploadWorkbench({
       cancelled = true;
     };
   }, []);
-
-  const healthSummary = useMemo(() => {
-    if (!health) {
-      return "Checking";
-    }
-    if (health.blockers.length) {
-      return `${health.blockers.length} blocker${health.blockers.length > 1 ? "s" : ""}`;
-    }
-    return `${health.analysisBackend === "gemini" ? "Remote" : "Local"} · ${health.modelStatus}`;
-  }, [health]);
 
   const singleDisabled = !single.file || single.status !== "idle";
   const compareDisabled =
@@ -187,10 +171,6 @@ export function UploadWorkbench({
               Single upload is the default path. A/B test stays available, but out of the way.
             </p>
           </div>
-
-          <Badge variant="outline" className="px-3 py-1 text-foreground">
-            {healthSummary}
-          </Badge>
         </div>
 
         <div className="mt-5 flex flex-wrap items-center gap-2">
