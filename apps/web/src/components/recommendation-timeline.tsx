@@ -161,8 +161,6 @@ export function RecommendationTimeline({
         data-testid="timeline-shell"
         className="surface relative overflow-hidden rounded-[2rem] p-5 text-foreground"
       >
-        <div className="pointer-events-none absolute -right-3 top-5 h-14 w-14 rotate-6 rounded-[1.35rem] border-2 border-primary bg-primary shadow-[4px_4px_0_0_var(--shadow-stamp)]" />
-        <div className="pointer-events-none absolute bottom-5 left-5 h-6 w-6 rounded-full border-2 border-border bg-accent shadow-[2px_2px_0_0_var(--shadow-stamp)]" />
         <div className="pointer-events-none absolute inset-x-8 top-6 h-px bg-[linear-gradient(90deg,transparent,rgba(134,216,158,0.26),transparent)]" />
 
         <div className="relative">
@@ -336,9 +334,6 @@ export function RecommendationTimeline({
                 onPointerEnter={clearCloseTimer}
                 onPointerLeave={scheduleRecommendationClose}
               >
-                <div className="pointer-events-none absolute -right-3 top-4 h-10 w-10 rotate-12 rounded-[1rem] border-2 border-primary bg-primary shadow-[3px_3px_0_0_var(--shadow-stamp)]" />
-                <div className="pointer-events-none absolute bottom-4 left-4 h-4 w-4 rounded-full border-2 border-border bg-accent shadow-[2px_2px_0_0_var(--shadow-stamp)]" />
-
                 <div className="relative">
                   <div className="flex items-start justify-between gap-3">
                     <div>

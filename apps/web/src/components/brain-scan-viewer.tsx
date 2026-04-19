@@ -92,8 +92,6 @@ export function BrainScanViewer({
         className,
       )}
     >
-      <div className="absolute -right-3 top-5 h-14 w-14 rotate-6 rounded-[1.35rem] border-2 border-primary bg-primary shadow-[4px_4px_0_0_var(--shadow-stamp)]" />
-      <div className="absolute bottom-5 left-5 h-6 w-6 rounded-full border-2 border-border bg-accent shadow-[2px_2px_0_0_var(--shadow-stamp)]" />
       <div className="relative flex items-start justify-between gap-4">
         <div>
           <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">
