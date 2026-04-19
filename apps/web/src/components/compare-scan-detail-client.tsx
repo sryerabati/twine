@@ -3,9 +3,10 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { FileWarning, LoaderCircle } from "lucide-react";
+import { FileWarning } from "lucide-react";
 
 import { CompareView } from "@/components/compare-view";
+import { CompareWorkspaceSkeleton } from "@/components/loading-states";
 import { Badge } from "@/components/ui/badge";
 import type { AnalysisResponse, CompareResponse, SavedScanRecord } from "@/lib/contracts";
 import { compareAnalyses, fetchAnalysis } from "@/lib/api";
@@ -113,8 +114,7 @@ export function CompareScanDetailClient({
 
   if (scan === undefined) {
     return (
-      <ShellState
-        icon={<LoaderCircle className="size-8 animate-spin text-slate-100" />}
+      <CompareWorkspaceSkeleton
         title="Loading compare workspace"
         body="Fetching the saved compare scan from Convex so the winner, recommendation, and saved breakdown can be restored."
       />
@@ -167,9 +167,8 @@ export function CompareScanDetailClient({
 
   if (!scan.localAnalysisId || !scan.secondaryLocalAnalysisId) {
     return (
-      <ShellState
+      <CompareWorkspaceSkeleton
         badge="Awaiting analyses"
-        icon={<LoaderCircle className="size-8 animate-spin text-slate-100" />}
         title="The compare scan exists before the pair is ready"
         body="This saved scan row is waiting for both analysis IDs to attach. As soon as the upload flow finishes that handoff, this page will finalize the compare result automatically."
       />
@@ -177,9 +176,8 @@ export function CompareScanDetailClient({
   }
 
   return (
-    <ShellState
+    <CompareWorkspaceSkeleton
       badge="Building compare"
-      icon={<LoaderCircle className="size-8 animate-spin text-slate-100" />}
       title="Scoring both versions"
       body="Polling the attached analyses until both complete, then saving the compare winner back onto this single scan row."
     />
@@ -198,15 +196,11 @@ function ShellState({
   body: string;
 }) {
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-4 rounded-[2rem] border border-white/10 bg-[#09090b] px-8 py-16 text-center shadow-[0_28px_80px_rgba(2,6,23,0.45)]">
+    <div className="surface mx-auto flex w-full max-w-3xl flex-col items-center gap-4 rounded-[2rem] px-8 py-16 text-center text-foreground">
       {icon}
-      {badge ? (
-        <Badge variant="secondary" className="bg-white/10 text-slate-100">
-          {badge}
-        </Badge>
-      ) : null}
-      <h1 className="text-3xl font-semibold tracking-tight text-white">{title}</h1>
-      <p className="max-w-xl text-sm leading-6 text-slate-300">{body}</p>
+      {badge ? <Badge variant="secondary">{badge}</Badge> : null}
+      <h1 className="text-3xl font-semibold tracking-tight text-foreground">{title}</h1>
+      <p className="max-w-xl text-sm leading-6 text-muted-foreground">{body}</p>
     </div>
   );
 }

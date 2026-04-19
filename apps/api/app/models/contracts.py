@@ -25,10 +25,14 @@ class VideoAsset(BaseModel):
     filename: str
     sourceUrl: str
     thumbnailUrl: str
+    sourceStorageId: str | None = None
+    thumbnailStorageId: str | None = None
     durationSec: float
     width: int
     height: int
     sizeBytes: int
+    recordedAt: datetime | None = None
+    fileModifiedAt: datetime | None = None
 
 
 class UploadResponse(BaseModel):
@@ -39,6 +43,7 @@ class UploadResponse(BaseModel):
 class AnalyzeRequest(BaseModel):
     uploadId: str
     convexScanId: str | None = None
+    syncToConvexScan: bool = True
 
 
 class HemisphereHeatmap(BaseModel):
@@ -118,6 +123,7 @@ class ExportArtifact(BaseModel):
     exportId: str
     createdAt: datetime
     trimmedVideoUrl: str
+    trimmedVideoStorageId: str | None = None
     selectedCutIds: list[str]
     removedSeconds: float
     trimmedDurationSec: float
@@ -147,6 +153,7 @@ class ArtifactLinks(BaseModel):
     eventsCsvUrl: str
     segmentsJsonUrl: str
     trimmedVideoUrl: str | None = None
+    trimmedVideoStorageId: str | None = None
 
 
 class Diagnostics(BaseModel):
@@ -217,6 +224,7 @@ class TrimRequest(BaseModel):
 class TrimResponse(BaseModel):
     analysisId: str
     trimmedVideoUrl: str
+    trimmedVideoStorageId: str | None = None
     originalDurationSec: float
     trimmedDurationSec: float
     removedSeconds: float
@@ -238,3 +246,76 @@ class CompareResponse(BaseModel):
     recommendation: str
     summary: list[str]
     slices: list[CompareSlice]
+
+
+EditorProjectStatus = Literal["drafting", "queued", "running", "completed", "failed"]
+EditorDraftStatus = Literal["queued", "running", "completed", "failed"]
+EditorDraftStage = Literal[
+    "queued",
+    "preparing_clips",
+    "ordering_story",
+    "rendering_video",
+    "finalizing",
+    "completed",
+    "failed",
+]
+OrderingConfidence = Literal["low", "medium", "high"]
+
+
+class EditorClipDescriptor(BaseModel):
+    clipId: str
+    uploadId: str
+    localUploadId: str
+    filename: str
+
+
+class EditorGenerateRequest(BaseModel):
+    convexProjectId: str
+    clips: list[EditorClipDescriptor] = Field(min_length=2)
+
+
+class EditorDraftExport(BaseModel):
+    videoUrl: str
+    videoStorageId: str | None = None
+    durationSec: float
+
+
+class OrderedDraftClip(BaseModel):
+    clipId: str
+    uploadId: str
+    filename: str
+    sourceOrder: int
+    resolvedOrder: int
+    rationale: str
+    transcriptPreview: str
+    summary: str
+    speechCoverage: float
+    removedSeconds: float
+    trimmedDurationSec: float
+    outputStartSec: float
+    outputEndSec: float
+    recordedAt: datetime | None = None
+    fileModifiedAt: datetime | None = None
+    warnings: list[str] = Field(default_factory=list)
+    appliedCuts: list[DeadspaceCut] = Field(default_factory=list)
+
+
+class EditorDraftPayload(BaseModel):
+    export: EditorDraftExport
+    storylineSummary: str
+    orderingConfidence: OrderingConfidence
+    orderedClips: list[OrderedDraftClip]
+    warnings: list[str] = Field(default_factory=list)
+
+
+class EditorDraftResponse(BaseModel):
+    draftId: str
+    projectId: str
+    status: EditorDraftStatus
+    stage: EditorDraftStage | None = None
+    progressPercent: int | None = Field(default=None, ge=0, le=100)
+    statusMessage: str | None = None
+    createdAt: datetime
+    updatedAt: datetime
+    error: str | None = None
+    payload: EditorDraftPayload | None = None

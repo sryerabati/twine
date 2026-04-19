@@ -15,7 +15,9 @@ type UploadDropzoneProps = {
   status?: "idle" | "uploading" | "analyzing";
   disabled?: boolean;
   accept?: string;
+  multiple?: boolean;
   onFileChange: (file: File) => void;
+  onFilesChange?: (files: File[]) => void;
   className?: string;
 };
 
@@ -26,13 +28,17 @@ export function UploadDropzone({
   status = "idle",
   disabled = false,
   accept = "video/mp4,video/*",
+  multiple = false,
   onFileChange,
+  onFilesChange,
   className,
 }: UploadDropzoneProps) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const busy = disabled || status !== "idle";
+  const quietActionClassName =
+    "h-auto border-transparent bg-transparent px-0 py-0 text-sm font-semibold text-primary shadow-none hover:bg-transparent hover:text-primary hover:underline focus-visible:ring-0";
 
   function openPicker() {
     if (busy) {
@@ -41,18 +47,26 @@ export function UploadDropzone({
     inputRef.current?.click();
   }
 
-  function commitFile(nextFile: File | null | undefined) {
-    if (!nextFile || busy) {
+  function commitFiles(nextFiles: FileList | File[] | null | undefined) {
+    if (!nextFiles || busy) {
       return;
     }
-    onFileChange(nextFile);
+    const files = Array.from(nextFiles).filter(Boolean);
+    if (!files.length) {
+      return;
+    }
+    if (multiple && onFilesChange) {
+      onFilesChange(files);
+      return;
+    }
+    onFileChange(files[0]);
   }
 
   function handleDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
     event.stopPropagation();
     setIsDragging(false);
-    commitFile(event.dataTransfer.files[0]);
+    commitFiles(event.dataTransfer.files);
   }
 
   return (
@@ -86,9 +100,9 @@ export function UploadDropzone({
       }}
       onDrop={handleDrop}
       className={cn(
-        "group relative overflow-hidden rounded-[1.9rem] border border-white/10 bg-white/[0.04] p-5 text-slate-100 shadow-[0_20px_60px_rgba(2,6,23,0.28)] transition",
-        busy ? "cursor-not-allowed opacity-80" : "cursor-pointer hover:border-pink-300/40 hover:bg-white/[0.06]",
-        isDragging && "border-pink-300 bg-pink-500/10",
+        "group relative overflow-hidden rounded-[1.75rem] border border-border/70 bg-muted/35 p-5 text-foreground transition-colors",
+        busy ? "cursor-not-allowed opacity-80" : "cursor-pointer hover:border-primary/70 hover:bg-muted/55",
+        isDragging && "border-primary bg-primary/10",
         className,
       )}
     >
@@ -97,36 +111,43 @@ export function UploadDropzone({
         id={inputId}
         type="file"
         accept={accept}
+        multiple={multiple}
         className="sr-only"
         onChange={(event: ChangeEvent<HTMLInputElement>) => {
-          commitFile(event.target.files?.[0]);
+          commitFiles(event.target.files);
           event.currentTarget.value = "";
         }}
       />
 
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-medium text-white">{label}</p>
-          <p id={`${inputId}-description`} className="mt-1 text-sm leading-6 text-slate-300">
+          <p className="text-sm font-medium text-foreground">{label}</p>
+          <p id={`${inputId}-description`} className="mt-1 text-sm leading-6 text-muted-foreground">
             {description}
           </p>
         </div>
-        <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-[0.7rem] font-medium uppercase tracking-[0.18em] text-slate-200">
+        <span className="rounded-full border border-border/80 bg-secondary/80 px-3 py-1 text-[0.7rem] font-medium uppercase tracking-[0.18em] text-secondary-foreground">
           {status === "uploading" ? "Uploading" : status === "analyzing" ? "Queued" : "Ready"}
         </span>
       </div>
 
-      <div className="mt-5 rounded-[1.6rem] border border-dashed border-white/10 bg-black/20 p-5">
+      <div className="mt-5 border-t border-border/60 pt-5">
         {file ? (
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-base font-medium text-white">{file.name}</p>
-              <p className="mt-1 text-sm text-slate-300">{formatBytes(file.size)}</p>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 inline-flex size-10 items-center justify-center rounded-full border border-primary/80 bg-primary text-primary-foreground">
+                <Upload className="size-4" />
+              </span>
+              <div>
+                <p className="text-base font-medium text-foreground">{file.name}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{formatBytes(file.size)}</p>
+              </div>
             </div>
             <Button
               type="button"
-              variant="outline"
+              variant="link"
               size="sm"
+              className={quietActionClassName}
               onClick={(event: MouseEvent<HTMLButtonElement>) => {
                 event.stopPropagation();
                 openPicker();
@@ -139,22 +160,21 @@ export function UploadDropzone({
         ) : (
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
-              <span className="mt-0.5 inline-flex size-10 items-center justify-center rounded-2xl bg-pink-500/15 text-pink-200">
+              <span className="mt-0.5 inline-flex size-10 items-center justify-center rounded-full border border-primary/80 bg-primary text-primary-foreground">
                 <Upload className="size-4" />
               </span>
               <div>
-                <p className="text-base font-medium text-white">
-                  Drop file here
-                </p>
-                <p className="mt-1 text-sm text-slate-300">
+                <p className="text-base font-medium text-foreground">Drop file here</p>
+                <p className="mt-1 text-sm text-muted-foreground">
                   Or browse from your device.
                 </p>
               </div>
             </div>
             <Button
               type="button"
-              variant="outline"
+              variant="link"
               size="sm"
+              className={quietActionClassName}
               onClick={(event: MouseEvent<HTMLButtonElement>) => {
                 event.stopPropagation();
                 openPicker();

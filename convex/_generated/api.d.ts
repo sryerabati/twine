@@ -9,6 +9,8 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as editorProjects from "../editorProjects.js";
+import type * as editorService from "../editorService.js";
 import type * as http from "../http.js";
 import type * as scans from "../scans.js";
 import type * as service from "../service.js";
@@ -23,6 +25,8 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  editorProjects: typeof editorProjects;
+  editorService: typeof editorService;
   http: typeof http;
   scans: typeof scans;
   service: typeof service;

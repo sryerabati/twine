@@ -1,0 +1,12 @@
+{
+  "draftId": "2596b01946de401083767f9b45bbb197",
+  "projectId": "kd7egzab07mjm82wjhfy5qg6jh854675",
+  "status": "failed",
+  "stage": "failed",
+  "progressPercent": 23,
+  "statusMessage": "Rough cut generation failed.",
+  "createdAt": "2026-04-19T07:43:18.644623Z",
+  "updatedAt": "2026-04-19T07:43:38.578659Z",
+  "error": "Content analysis backend rate limit reached (HTTP 429). The app will retry automatically, but you should still lower request pressure, switch to a lighter Gemini model, or enable Gemini API billing.",
+  "payload": null
+}

@@ -38,7 +38,13 @@ def strict_settings(tmp_path: Path) -> Settings:
 
 @pytest.fixture
 def strict_client(strict_settings: Settings) -> TestClient:
-    from tests.conftest import ImmediateJobService, StubMediaService, StubRunner
+    from tests.conftest import (
+        ImmediateEditorJobService,
+        ImmediateJobService,
+        StubEditorAI,
+        StubMediaService,
+        StubRunner,
+    )
 
     storage = StorageService(strict_settings)
     media = StubMediaService(
@@ -53,6 +59,8 @@ def strict_client(strict_settings: Settings) -> TestClient:
     runner = StubRunner()
     engine = AnalysisEngine(storage, media)
     jobs = ImmediateJobService(storage, runner, engine)
+    editor_ai = StubEditorAI()
+    editor_jobs = ImmediateEditorJobService(storage, runner, media, engine, editor_ai)
     context = APIContext(
         settings=strict_settings,
         storage=storage,
@@ -61,6 +69,8 @@ def strict_client(strict_settings: Settings) -> TestClient:
         engine=engine,
         jobs=jobs,
         convex_sync=ConvexSyncService(strict_settings),
+        editor_ai=editor_ai,
+        editor_jobs=editor_jobs,
     )
     return TestClient(create_app(context))
 
@@ -124,6 +134,22 @@ def test_analyze_accepts_convex_scan_id_when_strict(
     response = strict_client.post(
         "/api/analyze",
         json={"uploadId": upload["uploadId"], "convexScanId": "js456def"},
+    )
+    assert response.status_code == 202
+
+
+def test_analyze_accepts_detached_run_without_convex_scan_id_when_strict(
+    strict_client: TestClient,
+) -> None:
+    upload = strict_client.post(
+        "/api/upload",
+        files={"file": ("clip.mp4", BytesIO(b"fake-mp4"), "video/mp4")},
+        data={"convexUploadId": "kg123abc"},
+    ).json()
+
+    response = strict_client.post(
+        "/api/analyze",
+        json={"uploadId": upload["uploadId"], "syncToConvexScan": False},
     )
     assert response.status_code == 202
 

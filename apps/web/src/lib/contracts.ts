@@ -31,10 +31,14 @@ export type VideoAsset = {
   filename: string;
   sourceUrl: string;
   thumbnailUrl: string;
+  sourceStorageId?: string | null;
+  thumbnailStorageId?: string | null;
   durationSec: number;
   width: number;
   height: number;
   sizeBytes: number;
+  recordedAt?: string | null;
+  fileModifiedAt?: string | null;
 };
 
 export type UploadResponse = {
@@ -107,6 +111,7 @@ export type ExportArtifact = {
   exportId: string;
   createdAt: string;
   trimmedVideoUrl: string;
+  trimmedVideoStorageId?: string | null;
   selectedCutIds: string[];
   removedSeconds: number;
   trimmedDurationSec: number;
@@ -155,6 +160,7 @@ export type AnalysisPayload = {
     eventsCsvUrl: string;
     segmentsJsonUrl: string;
     trimmedVideoUrl: string | null;
+    trimmedVideoStorageId?: string | null;
   };
   diagnostics: {
     device: string;
@@ -215,6 +221,7 @@ export type TrimRequest = {
 export type TrimResponse = {
   analysisId: string;
   trimmedVideoUrl: string;
+  trimmedVideoStorageId?: string | null;
   originalDurationSec: number;
   trimmedDurationSec: number;
   removedSeconds: number;
@@ -258,3 +265,87 @@ export type SavedScanSummary = {
 };
 
 export type SavedScanRecord = SavedScanSummary;
+
+export type EditorProjectStatus = "drafting" | "queued" | "running" | "completed" | "failed";
+export type EditorDraftStage =
+  | "queued"
+  | "preparing_clips"
+  | "ordering_story"
+  | "rendering_video"
+  | "finalizing"
+  | "completed"
+  | "failed";
+
+export type EditorProjectClip = {
+  _id: string;
+  uploadId: string;
+  localUploadId: string | null;
+  filename: string;
+  durationSec: number | null;
+  sourceOrder: number;
+  createdAt: number;
+};
+
+export type EditorProjectSummary = {
+  _id: string;
+  title: string;
+  status: EditorProjectStatus;
+  clipCount: number;
+  latestLocalDraftId: string | null;
+  latestExportUrl: string | null;
+  storylineSummary: string | null;
+  orderingConfidence: ConfidenceBand | null;
+  warningCount: number;
+  errorMessage: string | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type EditorProjectDetail = EditorProjectSummary & {
+  clips: EditorProjectClip[];
+};
+
+export type OrderedDraftClip = {
+  clipId: string;
+  uploadId: string;
+  filename: string;
+  sourceOrder: number;
+  resolvedOrder: number;
+  rationale: string;
+  transcriptPreview: string;
+  summary: string;
+  speechCoverage: number;
+  removedSeconds: number;
+  trimmedDurationSec: number;
+  outputStartSec: number;
+  outputEndSec: number;
+  recordedAt?: string | null;
+  fileModifiedAt?: string | null;
+  warnings: string[];
+  appliedCuts: DeadspaceCut[];
+};
+
+export type EditorDraftPayload = {
+  export: {
+    videoUrl: string;
+    videoStorageId?: string | null;
+    durationSec: number;
+  };
+  storylineSummary: string;
+  orderingConfidence: ConfidenceBand;
+  orderedClips: OrderedDraftClip[];
+  warnings: string[];
+};
+
+export type EditorDraftResponse = {
+  draftId: string;
+  projectId: string;
+  status: "queued" | "running" | "completed" | "failed";
+  stage: EditorDraftStage | null;
+  progressPercent: number | null;
+  statusMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+  error: string | null;
+  payload: EditorDraftPayload | null;
+};

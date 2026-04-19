@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowUpRight, Clock3, Download, GitCompareArrows, ScanEye, Sparkles } from "lucide-react";
 
+import { SavedScanCardsSkeleton } from "@/components/loading-states";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import type { SavedScanSummary } from "@/lib/contracts";
@@ -42,10 +43,7 @@ export function SavedScanCards({
           </div>
           <Link
             href="/app/library"
-            className={cn(
-              buttonVariants({ variant: "outline" }),
-              "rounded-full border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white",
-            )}
+            className={cn(buttonVariants({ variant: "outline" }))}
           >
             Open full library
             <ArrowUpRight data-icon="inline-end" />
@@ -54,40 +52,34 @@ export function SavedScanCards({
       ) : null}
 
       {loading ? (
-        <div className="grid gap-4 lg:grid-cols-3">
-          {Array.from({ length: 3 }, (_, index) => (
-            <div
-              key={index}
-              className="h-56 rounded-[1.75rem] border border-white/10 bg-white/5 shadow-[0_24px_80px_rgba(0,0,0,0.24)]"
-            />
-          ))}
-        </div>
+        <SavedScanCardsSkeleton count={limit ?? 3} />
       ) : visibleScans.length ? (
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="grid gap-4 lg:grid-cols-[repeat(3,minmax(0,1fr))]">
           {visibleScans.map((scan) => (
             <article
               key={scan._id}
-              className="rounded-[1.75rem] border border-white/10 bg-card/75 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.28)] backdrop-blur"
+              className="surface flex h-full min-w-0 flex-col overflow-hidden rounded-[1.75rem] p-6"
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="space-y-3">
-                  <div className="flex flex-wrap gap-2">
-                    <ScanTypeBadge scanType={scan.scanType} />
-                    <ScanStatusBadge status={scan.status} />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-semibold tracking-tight text-foreground">
-                      {getScanTitle(scan)}
-                    </h3>
-                    {getScanSubtitle(scan) ? (
-                      <p className="mt-1 text-sm text-muted-foreground">{getScanSubtitle(scan)}</p>
-                    ) : null}
-                  </div>
+              <div className="flex flex-wrap items-start gap-3">
+                <div className="flex flex-wrap gap-2">
+                  <ScanTypeBadge scanType={scan.scanType} />
+                  <ScanStatusBadge status={scan.status} />
                 </div>
-                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-xs text-muted-foreground sm:ml-auto">
                   <Clock3 className="size-3.5" />
                   {formatDateTime(scan.createdAt)}
                 </span>
+              </div>
+
+              <div className="mt-4 min-w-0">
+                <h3 className="text-xl font-semibold leading-tight tracking-tight text-foreground [overflow-wrap:anywhere]">
+                  {getScanTitle(scan)}
+                </h3>
+                {getScanSubtitle(scan) ? (
+                  <p className="mt-1 text-sm text-muted-foreground [overflow-wrap:anywhere]">
+                    {getScanSubtitle(scan)}
+                  </p>
+                ) : null}
               </div>
 
               <p className="mt-4 min-h-14 text-sm leading-6 text-muted-foreground">
@@ -96,7 +88,7 @@ export function SavedScanCards({
                   "Analysis is still syncing. Open the scan to follow the timeline and export plan."}
               </p>
 
-              <div className="mt-5 grid grid-cols-3 gap-2">
+              <div className="mt-5 grid gap-4 border-t border-border/70 pt-5 sm:grid-cols-3">
                 <Metric label="Hook" value={scan.hookScore} />
                 <Metric label="Pacing" value={scan.pacingScore} />
                 <Metric label="Viral" value={scan.viralPotential} />
@@ -120,7 +112,7 @@ export function SavedScanCards({
                 ) : null}
               </div>
 
-              <div className="mt-6 flex flex-wrap gap-3">
+              <div className="mt-auto flex flex-wrap gap-3 pt-6">
                 <Link
                   href={getScanHref(scan)}
                   className={cn(buttonVariants({ variant: "default" }), "rounded-full")}
@@ -132,10 +124,7 @@ export function SavedScanCards({
                     href={scan.latestExportUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className={cn(
-                      buttonVariants({ variant: "outline" }),
-                      "rounded-full border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white",
-                    )}
+                    className={cn(buttonVariants({ variant: "outline" }))}
                   >
                     Latest export
                   </a>
@@ -145,7 +134,7 @@ export function SavedScanCards({
           ))}
         </div>
       ) : (
-        <div className="rounded-[1.75rem] border border-dashed border-white/15 bg-white/5 px-8 py-12 text-center shadow-[0_18px_55px_rgba(0,0,0,0.2)]">
+        <div className="surface rounded-[1.75rem] border-dashed px-8 py-12 text-center">
           <h3 className="text-2xl font-semibold tracking-tight">{emptyTitle}</h3>
           <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-muted-foreground">{emptyBody}</p>
         </div>
@@ -162,8 +151,8 @@ function ScanTypeBadge({ scanType }: { scanType: SavedScanSummary["scanType"] })
       className={cn(
         "inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium",
         compare
-          ? "border-fuchsia-400/30 bg-fuchsia-400/10 text-fuchsia-100"
-          : "border-white/10 bg-white/5 text-white/70",
+          ? "border-2 border-primary bg-primary text-primary-foreground shadow-[2px_2px_0_0_var(--color-primary)]"
+          : "border-2 border-border bg-secondary text-secondary-foreground shadow-[2px_2px_0_0_var(--shadow-stamp)]",
       )}
     >
       {compare ? <GitCompareArrows className="size-3.5" /> : <ScanEye className="size-3.5" />}
@@ -191,15 +180,15 @@ export function ScanStatusBadge({ status }: { status: SavedScanSummary["status"]
           : "Queued";
   const tone =
     status === "completed"
-      ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-100"
+      ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-800"
       : status === "failed"
-        ? "border-rose-400/25 bg-rose-400/10 text-rose-100"
+        ? "border-rose-400/25 bg-rose-400/10 text-rose-700"
         : status === "running"
-          ? "border-sky-400/25 bg-sky-400/10 text-sky-100"
-          : "border-amber-400/25 bg-amber-400/10 text-amber-100";
+          ? "border-sky-400/25 bg-sky-400/10 text-sky-700"
+          : "border-amber-400/25 bg-amber-400/10 text-amber-700";
 
   return (
-    <span className={cn("inline-flex rounded-full border px-3 py-1 text-xs font-medium", tone)}>
+    <span className={cn("inline-flex rounded-full border-2 px-3 py-1 text-xs font-medium shadow-[2px_2px_0_0_var(--shadow-stamp)]", tone)}>
       {copy}
     </span>
   );
@@ -207,8 +196,9 @@ export function ScanStatusBadge({ status }: { status: SavedScanSummary["status"]
 
 function Metric({ label, value }: { label: string; value: number | null }) {
   return (
-    <div className="rounded-[1.1rem] border border-white/10 bg-white/5 px-3 py-3">
-      <p className="text-[0.68rem] uppercase tracking-[0.24em] text-muted-foreground">{label}</p>
+    <div className="min-w-0">
+      <span aria-hidden="true" className="block h-px w-8 bg-border/80" />
+      <p className="mt-3 text-[0.68rem] uppercase tracking-[0.24em] text-muted-foreground">{label}</p>
       <p className="mt-2 text-xl font-semibold tracking-tight text-foreground">
         {value ?? "—"}
       </p>

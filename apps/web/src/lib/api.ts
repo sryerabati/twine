@@ -1,6 +1,7 @@
 import type {
   AnalysisResponse,
   CompareResponse,
+  EditorDraftResponse,
   HealthResponse,
   TrimResponse,
   UploadResponse,
@@ -27,6 +28,9 @@ export async function uploadVideo(
 ): Promise<UploadResponse> {
   const formData = new FormData();
   formData.append("file", file);
+  if (Number.isFinite(file.lastModified) && file.lastModified > 0) {
+    formData.append("clientModifiedAt", new Date(file.lastModified).toISOString());
+  }
   if (convexUploadId) {
     formData.append("convexUploadId", convexUploadId);
   }
@@ -38,14 +42,21 @@ export async function uploadVideo(
 
 export async function startAnalysis(
   uploadId: string,
-  convexScanId?: string,
+  options?: {
+    convexScanId?: string;
+    syncToConvexScan?: boolean;
+  },
 ): Promise<AnalysisResponse> {
   return request<AnalysisResponse>("/api/analyze", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ uploadId, convexScanId }),
+    body: JSON.stringify({
+      uploadId,
+      convexScanId: options?.convexScanId,
+      syncToConvexScan: options?.syncToConvexScan ?? true,
+    }),
   });
 }
 
@@ -84,5 +95,32 @@ export async function compareAnalyses(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ analysisIdA, analysisIdB }),
+  });
+}
+
+export async function generateEditorDraft(
+  convexProjectId: string,
+  clips: Array<{
+    clipId: string;
+    uploadId: string;
+    localUploadId: string;
+    filename: string;
+  }>,
+): Promise<EditorDraftResponse> {
+  return request<EditorDraftResponse>("/api/editor/generate", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      convexProjectId,
+      clips,
+    }),
+  });
+}
+
+export async function fetchLatestEditorDraft(projectId: string): Promise<EditorDraftResponse> {
+  return request<EditorDraftResponse>(`/api/editor/projects/${projectId}/latest-draft`, {
+    cache: "no-store",
   });
 }

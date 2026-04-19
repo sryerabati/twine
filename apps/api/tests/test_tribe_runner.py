@@ -24,6 +24,8 @@ def make_settings(tmp_path: Path, *, device: str) -> Settings:
         huggingface_hub_token="hf_test_token",
         ffmpeg_bin="ffmpeg",
         ffprobe_bin="ffprobe",
+        convex_site_url=None,
+        convex_service_secret=None,
     )
 
 

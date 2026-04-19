@@ -199,7 +199,12 @@ describe("UploadWorkbench", () => {
         secondaryUploadId: "convex-upload-2",
         title: "intro-cut vs alt-cut",
       });
-      expect(vi.mocked(api.startAnalysis).mock.calls.length).toBeGreaterThanOrEqual(2);
+      expect(vi.mocked(api.startAnalysis)).toHaveBeenCalledWith("upload-a", {
+        syncToConvexScan: false,
+      });
+      expect(vi.mocked(api.startAnalysis)).toHaveBeenCalledWith("upload-b", {
+        syncToConvexScan: false,
+      });
       const attachArgs = attachCompareAnalysisIds.mock.calls[0]?.[0] as
         | {
             scanId: string;
@@ -216,9 +221,64 @@ describe("UploadWorkbench", () => {
       });
     });
   });
+
+  it("uses the same segmented toggle interaction for both modes", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <UploadWorkbench
+        onSingleReady={vi.fn()}
+        onCompareReady={vi.fn()}
+      />,
+    );
+
+    const singleButton = await screen.findByRole("button", { name: /^Single upload$/i });
+    const compareButton = screen.getByRole("button", { name: /A\/B test/i });
+
+    expect(singleButton).toHaveClass("bg-secondary", "text-secondary-foreground", "shadow-none");
+    expect(compareButton).toHaveClass("bg-transparent", "border-transparent", "shadow-none");
+
+    await user.click(compareButton);
+
+    expect(singleButton).toHaveClass("bg-transparent", "border-transparent", "shadow-none");
+    expect(compareButton).toHaveClass("bg-secondary", "text-secondary-foreground", "shadow-none");
+  });
 });
 
 describe("UploadDropzone", () => {
+  it("renders a flatter upload block without a nested dashed panel", () => {
+    const { container } = render(
+      <UploadDropzone
+        label="Primary clip"
+        description="Upload one clip."
+        file={null}
+        onFileChange={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelector('[class*="border-dashed"]')).toBeNull();
+  });
+
+  it("renders browse files as a quiet inline action instead of a raised button", () => {
+    render(
+      <UploadDropzone
+        label="Primary clip"
+        description="Upload one clip."
+        file={null}
+        onFileChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /Browse files/i })).toHaveClass(
+      "h-auto",
+      "border-transparent",
+      "bg-transparent",
+      "px-0",
+      "py-0",
+      "shadow-none",
+    );
+  });
+
   it("opens the file picker from the browse button", async () => {
     const clickSpy = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => {});
     const user = userEvent.setup();
@@ -259,4 +319,20 @@ describe("UploadDropzone", () => {
 
     expect(onFileChange).toHaveBeenCalledWith(file);
   });
+});
+
+it("removes extra decorative accents from the upload workspace", async () => {
+  const onSingleReady = vi.fn();
+  const onCompareReady = vi.fn();
+  const { container } = render(
+    <UploadWorkbench
+      onSingleReady={onSingleReady}
+      onCompareReady={onCompareReady}
+    />,
+  );
+
+  await screen.findByText(/Drop a clip/i);
+
+  expect(container.querySelector('[class*="absolute right-6 top-6"]')).toBeNull();
+  expect(container.querySelector('[class*="absolute bottom-6 right-12"]')).toBeNull();
 });

@@ -1,0 +1,9 @@
+{
+  "draftId": "8a19e64ab69c483e9c2b20e11aa5e7a7",
+  "projectId": "kd734hd5xxx9p5jceb5w1qafbs855547",
+  "status": "failed",
+  "createdAt": "2026-04-19T06:40:58.134866Z",
+  "updatedAt": "2026-04-19T06:41:49.268900Z",
+  "error": "Content analysis backend rate limit reached (HTTP 429). Wait a minute and retry, or switch to a less quota-intensive model / enable Gemini API billing.",
+  "payload": null
+}

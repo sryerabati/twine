@@ -34,6 +34,8 @@ export const attachUploadLocalId = internalMutation({
     uploadId: v.id("uploads"),
     localUploadId: v.string(),
     durationSec: v.optional(v.number()),
+    videoStorageId: v.optional(v.id("_storage")),
+    thumbnailStorageId: v.optional(v.id("_storage")),
   },
   handler: async (ctx, args) => {
     const upload = await ctx.db.get(args.uploadId);
@@ -43,6 +45,8 @@ export const attachUploadLocalId = internalMutation({
     await ctx.db.patch(args.uploadId, {
       localUploadId: args.localUploadId,
       durationSec: args.durationSec,
+      convexVideoStorageId: args.videoStorageId,
+      convexThumbnailStorageId: args.thumbnailStorageId,
     });
   },
 });

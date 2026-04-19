@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import json
 import re
 import subprocess
+import tempfile
 import wave
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,6 +26,8 @@ class VideoMetadata:
     height: int
     size_bytes: int
     fps: float
+    recorded_at: datetime | None = None
+    file_modified_at: datetime | None = None
 
 
 @dataclass
@@ -37,6 +41,23 @@ class MediaFeatures:
     scene_change_count: int
 
 
+@dataclass
+class SequenceClipPlan:
+    clip_id: str
+    source_path: Path
+    cuts: list[tuple[float, float]]
+    total_duration_sec: float
+
+
+@dataclass
+class SequenceClipTiming:
+    clip_id: str
+    trimmed_duration_sec: float
+    removed_seconds: float
+    output_start_sec: float
+    output_end_sec: float
+
+
 class MediaService:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -47,9 +68,12 @@ class MediaService:
             "-v",
             "error",
             "-show_entries",
-            "format=duration,size",
-            "-show_entries",
-            "stream=width,height,r_frame_rate",
+            (
+                "format=duration,size"
+                ":format_tags=creation_time,com.apple.quicktime.creationdate,date"
+                ":stream=width,height,r_frame_rate"
+                ":stream_tags=creation_time,com.apple.quicktime.creationdate,date"
+            ),
             "-of",
             "json",
             str(path),
@@ -65,13 +89,78 @@ class MediaService:
         fps_text = video_stream.get("r_frame_rate", "0/1")
         numerator, denominator = fps_text.split("/")
         fps = float(numerator) / float(denominator or 1)
+        file_modified_at = self._timestamp_to_utc_datetime(path.stat().st_mtime)
         return VideoMetadata(
             duration_sec=float(payload["format"]["duration"]),
             width=int(video_stream["width"]),
             height=int(video_stream["height"]),
             size_bytes=int(payload["format"]["size"]),
             fps=fps,
+            recorded_at=self._extract_recorded_at(payload),
+            file_modified_at=file_modified_at,
         )
+
+    @classmethod
+    def _extract_recorded_at(cls, payload: dict[str, object]) -> datetime | None:
+        format_payload = payload.get("format")
+        if isinstance(format_payload, dict):
+            tags = format_payload.get("tags")
+            parsed = cls._parse_tags_datetime(tags)
+            if parsed is not None:
+                return parsed
+
+        streams = payload.get("streams")
+        if not isinstance(streams, list):
+            return None
+
+        for stream in streams:
+            if not isinstance(stream, dict):
+                continue
+            parsed = cls._parse_tags_datetime(stream.get("tags"))
+            if parsed is not None:
+                return parsed
+        return None
+
+    @classmethod
+    def _parse_tags_datetime(cls, raw_tags: object) -> datetime | None:
+        if not isinstance(raw_tags, dict):
+            return None
+        for key in ("creation_time", "com.apple.quicktime.creationdate", "date"):
+            parsed = cls._parse_media_datetime(raw_tags.get(key))
+            if parsed is not None:
+                return parsed
+        return None
+
+    @staticmethod
+    def _parse_media_datetime(value: object) -> datetime | None:
+        if value is None:
+            return None
+
+        normalized = str(value).strip()
+        if not normalized:
+            return None
+
+        normalized = normalized.replace("Z", "+00:00").replace(" UTC", "+00:00")
+        normalized = re.sub(r"([+-]\d{2})(\d{2})$", r"\1:\2", normalized)
+        candidates = [normalized]
+        if " " in normalized and "T" not in normalized:
+            candidates.append(normalized.replace(" ", "T", 1))
+
+        for candidate in candidates:
+            try:
+                parsed = datetime.fromisoformat(candidate)
+            except ValueError:
+                continue
+            if parsed.tzinfo is None:
+                return parsed.replace(tzinfo=UTC)
+            return parsed.astimezone(UTC)
+        return None
+
+    @staticmethod
+    def _timestamp_to_utc_datetime(timestamp: float | None) -> datetime | None:
+        if timestamp is None:
+            return None
+        return datetime.fromtimestamp(timestamp, tz=UTC)
 
     def generate_thumbnail(self, source_path: Path, output_path: Path) -> None:
         cmd = [
@@ -189,6 +278,77 @@ class MediaService:
 
         new_duration = sum(end - start for start, end in keep_ranges)
         return float(new_duration)
+
+    def assemble_sequence(
+        self,
+        *,
+        output_path: Path,
+        clips: list[SequenceClipPlan],
+    ) -> tuple[float, list[SequenceClipTiming]]:
+        if not clips:
+            raise MediaInspectionError("At least one clip is required to assemble a draft.")
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with tempfile.TemporaryDirectory() as temp_dir_name:
+            temp_dir = Path(temp_dir_name)
+            concat_list_path = temp_dir / "concat.txt"
+            concat_lines: list[str] = []
+            timings: list[SequenceClipTiming] = []
+            cursor = 0.0
+
+            for index, clip in enumerate(clips):
+                trimmed_path = temp_dir / f"clip-{index:02d}.mp4"
+                trimmed_duration = self.trim_deadspace(
+                    source_path=clip.source_path,
+                    output_path=trimmed_path,
+                    cuts=clip.cuts,
+                    total_duration_sec=clip.total_duration_sec,
+                )
+                removed_seconds = round(max(0.0, clip.total_duration_sec - trimmed_duration), 2)
+                concat_lines.append(f"file '{trimmed_path.as_posix()}'")
+                timings.append(
+                    SequenceClipTiming(
+                        clip_id=clip.clip_id,
+                        trimmed_duration_sec=round(trimmed_duration, 2),
+                        removed_seconds=removed_seconds,
+                        output_start_sec=round(cursor, 2),
+                        output_end_sec=round(cursor + trimmed_duration, 2),
+                    )
+                )
+                cursor += trimmed_duration
+
+            concat_list_path.write_text("\n".join(concat_lines) + "\n", encoding="utf-8")
+            cmd = [
+                self.settings.ffmpeg_bin,
+                "-y",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                str(concat_list_path),
+                "-c:v",
+                "libx264",
+                "-preset",
+                "veryfast",
+                "-crf",
+                "22",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "160k",
+                "-movflags",
+                "+faststart",
+                str(output_path),
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            if result.returncode != 0:
+                raise MediaInspectionError(
+                    "ffmpeg concat failed. Check backend logs for the full ffmpeg output."
+                )
+
+        return round(sum(timing.trimmed_duration_sec for timing in timings), 2), timings
 
     @staticmethod
     def _invert_cuts(

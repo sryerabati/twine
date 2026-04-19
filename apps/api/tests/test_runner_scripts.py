@@ -26,6 +26,7 @@ from scripts.runner_common import (
     command_download,
     probe_runtime,
 )
+from tests.conftest import ImmediateEditorJobService, StubEditorAI
 
 
 class StubMediaService:
@@ -142,6 +143,8 @@ def make_settings(tmp_path: Path, *, token: str | None) -> Settings:
         huggingface_hub_token=token,
         ffmpeg_bin="ffmpeg",
         ffprobe_bin="ffprobe",
+        convex_site_url=None,
+        convex_service_secret=None,
     )
 
 
@@ -165,6 +168,8 @@ def make_context(
     runner = StubRunner(install_present=install_present)
     engine = AnalysisEngine(storage, media)
     convex_sync = ConvexSyncService(settings)
+    editor_ai = StubEditorAI()
+    editor_jobs = ImmediateEditorJobService(storage, runner, media, engine, editor_ai)
     return APIContext(
         settings=settings,
         storage=storage,
@@ -173,6 +178,8 @@ def make_context(
         engine=engine,
         jobs=None,
         convex_sync=convex_sync,
+        editor_ai=editor_ai,
+        editor_jobs=editor_jobs,
     )
 
 
@@ -228,3 +235,14 @@ def test_analyze_writes_artifacts_with_stubbed_context(tmp_path: Path) -> None:
     assert Path(result["artifacts"]["eventsPath"]).exists()
     assert Path(result["artifacts"]["segmentsPath"]).exists()
     assert Path(result["artifacts"]["cutsPath"]).exists()
+
+
+def test_analyze_accepts_mov_inputs(tmp_path: Path) -> None:
+    context = make_context(tmp_path, token="hf_test_token")
+    video_path = tmp_path / "clip.mov"
+    video_path.write_bytes(b"video")
+
+    result = command_analyze(context, "mac", video_path)
+
+    assert result["status"] == "completed"
+    assert result["payload"]["video"]["filename"] == "clip.mov"

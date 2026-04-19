@@ -13,12 +13,15 @@ from app.models.contracts import (
     AnalysisResponse,
     CompareRequest,
     CompareResponse,
+    EditorDraftResponse,
+    EditorGenerateRequest,
     ExportArtifact,
     HealthResponse,
     TrimRequest,
     TrimResponse,
     UploadResponse,
 )
+from app.services.gemini_runner import GeminiIntegrationError
 from app.services.media import MediaInspectionError
 
 
@@ -89,6 +92,7 @@ def health(context: APIContext = Depends(get_context)) -> HealthResponse:
 async def upload_video(
     file: UploadFile = File(...),
     convex_upload_id: str | None = Form(default=None, alias="convexUploadId"),
+    client_modified_at: datetime | None = Form(default=None, alias="clientModifiedAt"),
     context: APIContext = Depends(get_context),
 ) -> UploadResponse:
     settings = context.settings
@@ -102,8 +106,8 @@ async def upload_video(
             ord(ch) < 0x20 or ord(ch) > 0x7E for ch in convex_upload_id
         ):
             raise HTTPException(status_code=400, detail="Invalid convexUploadId.")
-    if not file.filename or not file.filename.lower().endswith(".mp4"):
-        raise HTTPException(status_code=400, detail="Only MP4 uploads are supported in v1.")
+    if not file.filename or not file.filename.lower().endswith((".mp4", ".mov")):
+        raise HTTPException(status_code=400, detail="Only MP4 and MOV uploads are supported in v1.")
 
     storage = context.storage
     media = context.media
@@ -125,6 +129,19 @@ async def upload_video(
         storage.delete_upload(paths.upload_id)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    try:
+        stored_source = storage.store_media_file(
+            paths.source_path,
+            content_type=file.content_type or "video/mp4",
+        )
+        stored_thumbnail = storage.store_media_file(
+            paths.thumbnail_path,
+            content_type="image/jpeg",
+        )
+    except RuntimeError as exc:
+        storage.delete_upload(paths.upload_id)
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
     video = storage.video_asset_from_upload(
         upload_id=paths.upload_id,
         filename=file.filename,
@@ -132,14 +149,24 @@ async def upload_video(
         width=metadata.width,
         height=metadata.height,
         size_bytes=metadata.size_bytes,
+        recorded_at=metadata.recorded_at,
+        file_modified_at=client_modified_at or metadata.file_modified_at,
+        source_storage_id=stored_source.storage_id,
+        thumbnail_storage_id=stored_thumbnail.storage_id,
+        source_url=stored_source.url,
+        thumbnail_url=stored_thumbnail.url,
     )
-    response = UploadResponse(uploadId=paths.upload_id, video=video)
+    response = storage.hydrate_upload_response(UploadResponse(uploadId=paths.upload_id, video=video))
     storage.write_upload_metadata(response)
     context.convex_sync.attach_upload_local_id(
         convex_upload_id=convex_upload_id,
         local_upload_id=paths.upload_id,
         duration_sec=metadata.duration_sec,
+        video_storage_id=stored_source.storage_id,
+        thumbnail_storage_id=stored_thumbnail.storage_id,
     )
+    if stored_source.storage_id or stored_thumbnail.storage_id:
+        storage.delete_upload_cache(paths.upload_id)
     return response
 
 
@@ -151,7 +178,7 @@ def analyze_video(
     storage = context.storage
     jobs = context.jobs
     settings = context.settings
-    if settings.require_convex_ids and not request.convexScanId:
+    if settings.require_convex_ids and request.syncToConvexScan and not request.convexScanId:
         raise HTTPException(
             status_code=400,
             detail="convexScanId is required. Log in and let the app create a pending scan first.",
@@ -165,14 +192,50 @@ def analyze_video(
         storage.read_upload_metadata(request.uploadId)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Upload not found.") from exc
+    convex_scan_id = request.convexScanId if request.syncToConvexScan else None
     paths = storage.create_analysis_paths()
     record = storage.init_analysis_record(paths.analysis_id)
     context.convex_sync.update_scan_status(
-        convex_scan_id=request.convexScanId,
+        convex_scan_id=convex_scan_id,
         status="queued",
         local_analysis_id=paths.analysis_id,
     )
-    jobs.enqueue(paths.analysis_id, request.uploadId, request.convexScanId)
+    jobs.enqueue(paths.analysis_id, request.uploadId, convex_scan_id)
+    return record
+
+
+@router.post("/editor/generate", response_model=EditorDraftResponse, status_code=status.HTTP_202_ACCEPTED)
+def generate_editor_draft(
+    request: EditorGenerateRequest,
+    context: APIContext = Depends(get_context),
+) -> EditorDraftResponse:
+    storage = context.storage
+    try:
+        context.editor_ai.require_editor_support()
+    except (GeminiIntegrationError, RuntimeError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    for clip in request.clips:
+        try:
+            storage.read_upload_metadata(clip.localUploadId)
+        except FileNotFoundError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Local upload {clip.localUploadId} was not found.",
+            ) from exc
+
+    draft_paths = storage.create_editor_draft_paths()
+    record = storage.init_editor_draft_record(draft_paths.draft_id, request.convexProjectId)
+    context.convex_sync.update_editor_project_status(
+        convex_project_id=request.convexProjectId,
+        status="queued",
+        latest_local_draft_id=draft_paths.draft_id,
+    )
+    context.editor_jobs.enqueue(
+        request.convexProjectId,
+        draft_paths.draft_id,
+        request.clips,
+    )
     return record
 
 
@@ -195,7 +258,7 @@ def get_analysis(
                 detail="Analysis is marked completed but its payload is missing.",
             ) from None
         record = record.model_copy(update={"payload": payload})
-    return record
+    return storage.hydrate_analysis_response(record)
 
 
 @router.get("/analysis/by-upload/{upload_id}", response_model=AnalysisResponse)
@@ -211,6 +274,17 @@ def get_analysis_by_upload(
             status_code=404,
             detail="No completed analysis found for this upload yet.",
         ) from exc
+
+
+@router.get("/editor/projects/{project_id}/latest-draft", response_model=EditorDraftResponse)
+def get_latest_editor_draft(
+    project_id: str,
+    context: APIContext = Depends(get_context),
+) -> EditorDraftResponse:
+    try:
+        return context.storage.find_latest_editor_draft_for_project(project_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Editor draft not found.") from exc
 
 
 @router.post("/compare", response_model=CompareResponse)
@@ -333,9 +407,20 @@ def trim_analysis(
     except MediaInspectionError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    try:
+        stored_trimmed_video = storage.store_media_file(
+            analysis_paths.trimmed_video_path,
+            content_type="video/mp4",
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
     # Patch the payload so later reads surface the trimmed artifact.
     updated_artifacts = payload.artifacts.model_copy(
-        update={"trimmedVideoUrl": storage.to_storage_url(analysis_paths.trimmed_video_path)}
+        update={
+            "trimmedVideoUrl": stored_trimmed_video.url,
+            "trimmedVideoStorageId": stored_trimmed_video.storage_id,
+        }
     )
     updated_diagnostics = payload.diagnostics.model_copy(
         update={"trimmedDurationSec": round(new_duration, 2)}
@@ -345,7 +430,8 @@ def trim_analysis(
         ExportArtifact(
             exportId=uuid4().hex,
             createdAt=datetime.now(UTC),
-            trimmedVideoUrl=storage.to_storage_url(analysis_paths.trimmed_video_path),
+            trimmedVideoUrl=stored_trimmed_video.url,
+            trimmedVideoStorageId=stored_trimmed_video.storage_id,
             selectedCutIds=[cut.id for cut in selected_cuts],
             removedSeconds=round(payload.video.durationSec - new_duration, 2),
             trimmedDurationSec=round(new_duration, 2),
@@ -364,10 +450,13 @@ def trim_analysis(
     # that the getter returns to clients.
     refreshed_record = record.model_copy(update={"payload": updated_payload})
     storage.write_analysis_record(refreshed_record)
+    if stored_trimmed_video.storage_id:
+        analysis_paths.trimmed_video_path.unlink(missing_ok=True)
 
     return TrimResponse(
         analysisId=analysis_id,
         trimmedVideoUrl=updated_artifacts.trimmedVideoUrl or "",
+        trimmedVideoStorageId=stored_trimmed_video.storage_id,
         originalDurationSec=round(payload.video.durationSec, 2),
         trimmedDurationSec=round(new_duration, 2),
         removedSeconds=round(payload.video.durationSec - new_duration, 2),

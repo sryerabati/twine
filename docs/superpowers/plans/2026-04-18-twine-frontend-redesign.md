@@ -1,8 +1,8 @@
-# VibeCheck Frontend Redesign Implementation Plan
+# Twine Frontend Redesign Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship the `VibeCheck` rebrand and full frontend redesign across the public landing page, authenticated app shell, upload-first dashboard, single scan workspace, and a persisted compare-scan flow where `A/B test` counts as one saved scan.
+**Goal:** Ship the `Twine` rebrand and full frontend redesign across the public landing page, authenticated app shell, upload-first dashboard, single scan workspace, and a persisted compare-scan flow where `A/B test` counts as one saved scan.
 
 **Architecture:** Keep the current Next.js + Convex app structure, but widen the existing `scans` record to support both `single` and `compare` scan rows, then refactor the UI around a dark token system, smaller presentation components, and route helpers that send compare scans to a dedicated `/app/compare/[scanId]` page. Preserve the existing single-scan pipeline and treat `/compare?a=...&b=...` as a legacy compatibility surface during the transition.
 
@@ -343,10 +343,10 @@ import { describe, expect, it } from "vitest";
 import { LandingClient } from "@/components/landing-client";
 
 describe("LandingClient", () => {
-  it("renders the VibeCheck poster hero and direct dashboard CTA", () => {
+  it("renders the Twine poster hero and direct dashboard CTA", () => {
     render(<LandingClient />);
 
-    expect(screen.getByText(/^VibeCheck$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Twine$/i)).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /Open dashboard/i }),
     ).toBeInTheDocument();
@@ -371,9 +371,9 @@ Expected: FAIL because the current page still renders `Cortent`, extra feature g
 ```ts
 // apps/web/src/app/layout.tsx
 export const metadata: Metadata = {
-  title: "VibeCheck",
+  title: "Twine",
   description:
-    "VibeCheck scans creative signal, compares cuts, and tells you what to ship next.",
+    "Twine scans creative signal, compares cuts, and tells you what to ship next.",
 };
 ```
 
@@ -409,7 +409,7 @@ body {
 <header className="sticky top-0 z-20 border-b border-white/8 bg-black/30 backdrop-blur-2xl">
   <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 lg:px-10">
     <Link href="/" className="text-sm font-semibold uppercase tracking-[0.32em] text-primary">
-      VibeCheck
+      Twine
     </Link>
     <nav className="flex items-center gap-3">
       <Link href="/app" className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}>
@@ -429,13 +429,13 @@ body {
   <section className="grid gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:items-end">
     <div className="max-w-2xl">
       <p className="text-sm font-semibold uppercase tracking-[0.3em] text-primary">
-        VibeCheck
+        Twine
       </p>
       <h1 className="mt-6 text-6xl font-semibold leading-[0.9] tracking-tight text-white md:text-7xl">
         Know what hits before you ship.
       </h1>
       <p className="mt-5 max-w-lg text-base leading-7 text-muted-foreground">
-        Upload one cut or run an A/B test. VibeCheck gives you the verdict, the moments that matter, and the next move.
+        Upload one cut or run an A/B test. Twine gives you the verdict, the moments that matter, and the next move.
       </p>
       <div className="mt-8 flex gap-3">
         <Link href="/app" className={cn(buttonVariants({ variant: "default", size: "lg" }))}>
@@ -466,7 +466,7 @@ Expected: PASS for the landing test and no new lint issues.
 
 ```bash
 git add apps/web/src/app/layout.tsx apps/web/src/app/globals.css apps/web/src/components/brand-shell.tsx apps/web/src/components/landing-client.tsx apps/web/src/components/__tests__/landing-client.test.tsx
-git commit -m "feat: redesign public VibeCheck landing"
+git commit -m "feat: redesign public Twine landing"
 ```
 
 ## Task 3: Refactor The Authenticated Shell, Login Surface, And Saved Scan Cards
@@ -492,7 +492,7 @@ it("renders the login panel when the user is signed out", () => {
       <div>private area</div>
     </AuthGate>,
   );
-  expect(screen.getByText(/Sign in to VibeCheck/i)).toBeInTheDocument();
+  expect(screen.getByText(/Sign in to Twine/i)).toBeInTheDocument();
   expect(screen.queryByText(/Cortent/i)).not.toBeInTheDocument();
 });
 ```
@@ -578,7 +578,7 @@ const navigation = [
   <header className="sticky top-0 z-30 border-b border-white/8 bg-black/30 backdrop-blur-2xl">
     <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-6 py-4 lg:px-10">
       <Link href="/" className="text-sm font-semibold uppercase tracking-[0.32em] text-primary">
-        VibeCheck
+        Twine
       </Link>
       <nav className="hidden items-center gap-2 md:flex">
         {navigation.map((item) => (
@@ -595,7 +595,7 @@ const navigation = [
 ```tsx
 // apps/web/src/components/auth/login-panel.tsx
 <h1 className="text-3xl font-semibold tracking-tight">
-  {mode === "signIn" ? "Sign in to VibeCheck" : "Create your VibeCheck workspace"}
+  {mode === "signIn" ? "Sign in to Twine" : "Create your Twine workspace"}
 </h1>
 <p className="mt-2 text-sm leading-6 text-muted-foreground">
   Your scans, compare runs, and exports stay attached to your account.
@@ -1222,14 +1222,14 @@ Expected: PASS across lint and the full Vitest suite, with `landing-client`, `up
 
 ```bash
 git add .gitignore apps/web/src/components/dashboard-home.tsx apps/web/src/components/scan-library.tsx apps/web/src/components/scan-cards.tsx apps/web/src/components/__tests__/scan-cards.test.tsx
-git commit -m "chore: finalize VibeCheck frontend polish"
+git commit -m "chore: finalize Twine frontend polish"
 ```
 
 ## Self-Review
 
 ### Spec coverage
 
-- Rebrand to `VibeCheck`: covered in Tasks 2 and 3.
+- Rebrand to `Twine`: covered in Tasks 2 and 3.
 - Dark sakura-pink visual system: covered in Task 2.
 - Minimal landing page: covered in Task 2.
 - Upload-first dashboard: covered in Task 4.
@@ -1253,7 +1253,7 @@ No `TODO`, `TBD`, “handle appropriately,” or “similar to above” placehol
 
 ## Execution Handoff
 
-Plan complete and saved to `docs/superpowers/plans/2026-04-18-vibecheck-frontend-redesign.md`. Two execution options:
+Plan complete and saved to `docs/superpowers/plans/2026-04-18-twine-frontend-redesign.md`. Two execution options:
 
 **1. Subagent-Driven (recommended)** - I dispatch a fresh subagent per task, review between tasks, fast iteration
 

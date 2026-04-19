@@ -13,7 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=str(REPO_ROOT / ".env"),
+        env_file=(str(REPO_ROOT / ".env"), str(REPO_ROOT / ".env.local")),
         env_file_encoding="utf-8",
         extra="ignore",
         populate_by_name=True,
@@ -43,9 +43,32 @@ class Settings(BaseSettings):
     )
     tribe_device: str = Field(default="auto", alias="TRIBE_DEVICE")
     gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
+    gemini_platform: Literal["developer", "vertex"] = Field(
+        default="developer",
+        alias="GEMINI_PLATFORM",
+    )
     gemini_model: str = Field(default="gemini-2.5-pro", alias="GEMINI_MODEL")
-    max_video_seconds: int = Field(default=60, alias="TRIBE_MAX_VIDEO_SECONDS")
-    max_upload_bytes: int = Field(default=250_000_000, alias="TRIBE_MAX_UPLOAD_BYTES")
+    gemini_fallback_model: str | None = Field(
+        default="gemini-2.5-flash-lite",
+        alias="GEMINI_FALLBACK_MODEL",
+    )
+    editor_ai_provider: Literal["gemini", "nvidia"] = Field(
+        default="gemini",
+        alias="EDITOR_AI_PROVIDER",
+    )
+    nvidia_api_key: str | None = Field(default=None, alias="NVIDIA_API_KEY")
+    nvidia_model: str = Field(
+        default="google/gemma-3n-e4b-it",
+        alias="NVIDIA_MODEL",
+    )
+    gemini_max_retries: int = Field(default=2, alias="GEMINI_MAX_RETRIES", ge=0, le=8)
+    gemini_retry_base_seconds: float = Field(
+        default=2.0,
+        alias="GEMINI_RETRY_BASE_SECONDS",
+        gt=0,
+    )
+    max_video_seconds: int = Field(default=120, alias="TRIBE_MAX_VIDEO_SECONDS")
+    max_upload_bytes: int = Field(default=50_000_000, alias="TRIBE_MAX_UPLOAD_BYTES")
     huggingface_hub_token: str | None = Field(
         default=None,
         alias="HUGGINGFACE_HUB_TOKEN",
@@ -64,6 +87,14 @@ class Settings(BaseSettings):
         if path.is_absolute():
             return path
         return REPO_ROOT / path
+
+    @field_validator("gemini_fallback_model", "nvidia_api_key", mode="before")
+    @classmethod
+    def normalize_optional_model_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
 
     @property
     def storage_root(self) -> Path:

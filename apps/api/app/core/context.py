@@ -17,6 +17,22 @@ class JobQueue(Protocol):
         """Queue analysis work."""
 
 
+class EditorAI(Protocol):
+    def require_editor_support(self) -> None:
+        """Raise if editor-specific AI features are unavailable."""
+
+    def summarize_editor_clip(self, video_path: Path) -> dict[str, object]:
+        """Return transcript-forward clip summary data."""
+
+    def order_editor_clips(self, clips: list[dict[str, object]]) -> dict[str, object]:
+        """Return ordered clip ids plus storyline metadata."""
+
+
+class EditorJobQueue(Protocol):
+    def enqueue(self, project_id: str, draft_id: str, clips: list[object]) -> None:
+        """Queue editor draft generation work."""
+
+
 class AnalysisRunner(Protocol):
     MODEL_REPO: str
     MODEL_COMMIT: str
@@ -49,3 +65,5 @@ class APIContext:
     engine: AnalysisEngine
     jobs: JobQueue
     convex_sync: ConvexSyncService
+    editor_ai: EditorAI
+    editor_jobs: EditorJobQueue

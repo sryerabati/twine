@@ -45,15 +45,15 @@ export function LoginPanel() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col gap-6 rounded-[1.75rem] border border-white/10 bg-card/80 p-8 shadow-[0_32px_110px_rgba(0,0,0,0.35)]">
+    <div className="surface mx-auto flex w-full max-w-md flex-col gap-6 rounded-[1.75rem] p-8">
       <div className="space-y-3">
-        <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-white/70">
+        <div className="sticker inline-flex items-center gap-2 px-3 py-1 text-xs font-medium text-secondary-foreground">
           <LockKeyhole className="size-3.5" />
           Secure workspace
         </div>
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">
-            {mode === "signIn" ? "Sign in to VibeCheck" : "Create a VibeCheck account"}
+            {mode === "signIn" ? "Sign in to Twine" : "Create a Twine account"}
           </h1>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
             Email/password auth. Saved scans stay tied to your account.
@@ -61,14 +61,14 @@ export function LoginPanel() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 rounded-[1.1rem] border border-white/10 bg-black/20 p-1">
+      <div className="grid grid-cols-2 gap-2 rounded-[1.1rem] border-2 border-border bg-muted p-1 shadow-[4px_4px_0_0_var(--shadow-stamp)]">
         <button
           type="button"
           className={cn(
-            "rounded-[0.9rem] px-4 py-2 text-sm font-medium transition-colors",
+            "rounded-full border-2 px-4 py-2 text-sm font-medium transition-all",
             mode === "signIn"
-              ? "bg-white/10 text-white shadow-sm"
-              : "text-white/55 hover:text-white",
+              ? "border-primary bg-primary text-primary-foreground shadow-[3px_3px_0_0_var(--color-primary)]"
+              : "border-transparent text-foreground/70 hover:border-border hover:bg-card hover:text-foreground",
           )}
           onClick={() => setMode("signIn")}
         >
@@ -77,10 +77,10 @@ export function LoginPanel() {
         <button
           type="button"
           className={cn(
-            "rounded-[0.9rem] px-4 py-2 text-sm font-medium transition-colors",
+            "rounded-full border-2 px-4 py-2 text-sm font-medium transition-all",
             mode === "signUp"
-              ? "bg-white/10 text-white shadow-sm"
-              : "text-white/55 hover:text-white",
+              ? "border-primary bg-primary text-primary-foreground shadow-[3px_3px_0_0_var(--color-primary)]"
+              : "border-transparent text-foreground/70 hover:border-border hover:bg-card hover:text-foreground",
           )}
           onClick={() => setMode("signUp")}
         >
@@ -131,7 +131,7 @@ export function LoginPanel() {
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
 
-        <Button type="submit" disabled={pending} className="rounded-full">
+        <Button type="submit" disabled={pending}>
           {pending ? (
             <>
               <LoaderCircle data-icon="inline-start" className="animate-spin" />

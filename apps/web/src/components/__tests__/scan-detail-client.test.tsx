@@ -70,4 +70,12 @@ describe("ScanDetailClient", () => {
     });
     expect(fetchAnalysisByUpload).toHaveBeenCalledWith("local_upload_123");
   });
+
+  it("renders a skeleton workspace while the saved scan is loading", () => {
+    useQuery.mockReturnValue(undefined);
+    const { container } = render(<ScanDetailClient scanId="scan_123" />);
+
+    expect(screen.getByRole("heading", { name: /Loading scan workspace/i })).toBeInTheDocument();
+    expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(3);
+  });
 });

@@ -1,6 +1,6 @@
-# VibeCheck Frontend Redesign Design
+# Twine Frontend Redesign Design
 
-**Goal:** Transform the current `Cortent` frontend into `VibeCheck`: a dark, modern, pink-accented product experience with a minimal landing page, a cleaner upload-first dashboard, and focused scan results that surface only the most important information.
+**Goal:** Transform the current `Cortent` frontend into `Twine`: a dark, modern, pink-accented product experience with a minimal landing page, a cleaner upload-first dashboard, and focused scan results that surface only the most important information.
 
 ## Product Direction
 
@@ -22,7 +22,7 @@ It removes the redundant explanation, duplicate proof sections, and light-theme 
 
 ## Visual Thesis
 
-`VibeCheck` should feel like a dark creative-analysis system lit by sakura pink.
+`Twine` should feel like a dark creative-analysis system lit by sakura pink.
 
 - Base surfaces: charcoal, black, soft graphite
 - Accent family: light sakura pink plus darker rose and blush shades
@@ -82,7 +82,7 @@ The current `/compare?a=...&b=...` page is an implementation artifact. The redes
 ### 1. Landing to dashboard
 
 1. User lands on `/`
-2. User sees `VibeCheck` branding immediately
+2. User sees `Twine` branding immediately
 3. User reads one short statement of value
 4. User clicks `Login` or `Open dashboard`
 5. User enters the authenticated workspace
@@ -123,7 +123,7 @@ The page should answer “what happened, why, and what do I do next?” before s
 
 ## Landing Page
 
-The landing page should be full-bleed and dark, with `VibeCheck` as the loudest text on screen.
+The landing page should be full-bleed and dark, with `Twine` as the loudest text on screen.
 
 ### Content
 
@@ -155,7 +155,7 @@ The shell should shift from a bright, padded SaaS layout to a darker, more compa
 
 ### Changes
 
-- Rename all product branding from `Cortent` to `VibeCheck`
+- Rename all product branding from `Cortent` to `Twine`
 - Replace warm light gradients with dark surfaces and pink-lit accents
 - Simplify header copy
 - Reduce footer copy or remove it entirely
@@ -399,7 +399,7 @@ The redesign plan should verify both presentation and behavior.
 
 ## Final Design Summary
 
-`VibeCheck` should feel sharper, darker, quieter, and more intentional than the current product.
+`Twine` should feel sharper, darker, quieter, and more intentional than the current product.
 
 - The landing page sells one idea.
 - The dashboard centers one action.

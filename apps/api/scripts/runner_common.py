@@ -186,8 +186,8 @@ def command_serve(context: APIContext, os_name: str, host: str, port: int) -> in
 def command_analyze(context: APIContext, os_name: str, video_path: Path) -> dict[str, Any]:
     if not video_path.exists():
         raise RunnerScriptError(f"Video file not found: {video_path}")
-    if video_path.suffix.lower() != ".mp4":
-        raise RunnerScriptError("Only MP4 inputs are supported.")
+    if video_path.suffix.lower() not in {".mp4", ".mov"}:
+        raise RunnerScriptError("Only MP4 and MOV inputs are supported.")
 
     settings = context.settings
     storage = context.storage
@@ -221,6 +221,8 @@ def command_analyze(context: APIContext, os_name: str, video_path: Path) -> dict
         width=metadata.width,
         height=metadata.height,
         size_bytes=metadata.size_bytes,
+        recorded_at=metadata.recorded_at,
+        file_modified_at=metadata.file_modified_at,
     )
     upload_response = UploadResponse(uploadId=upload_paths.upload_id, video=video_asset)
     storage.write_upload_metadata(upload_response)
@@ -274,7 +276,7 @@ def build_parser(os_name: str) -> argparse.ArgumentParser:
 
     analyze = subparsers.add_parser(
         "analyze",
-        help="Run a local smoke-test analysis for an MP4 using the existing backend pipeline.",
+        help="Run a local smoke-test analysis for an MP4 or MOV using the existing backend pipeline.",
     )
     analyze.add_argument("--video", type=Path, required=True)
 

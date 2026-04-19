@@ -124,8 +124,8 @@ storage/cache/*
 *.ckpt
 *.onnx
 pytorch_model*.bin
+storage/editor-drafts/*
+!storage/editor-drafts/.gitkeep
 .DS_Store
 .superpowers/
 apps/api/storage/
-storage/editor-drafts/*
-!storage/editor-drafts/.gitkeep

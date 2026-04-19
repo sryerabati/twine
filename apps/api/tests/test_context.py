@@ -29,6 +29,8 @@ def test_build_context_selects_gemini_runner(monkeypatch, tmp_path) -> None:
         huggingface_hub_token=None,
         ffmpeg_bin="ffmpeg",
         ffprobe_bin="ffprobe",
+        convex_site_url=None,
+        convex_service_secret=None,
     )
 
     context = build_context(settings)
