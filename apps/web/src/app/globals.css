@@ -123,6 +123,28 @@
     @apply rounded-full border-2 border-border bg-secondary;
     box-shadow: 2px 2px 0 0 var(--shadow-stamp);
   }
+
+  .skeleton-flow {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+  }
+
+  .skeleton-flow::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(238, 244, 239, 0.08) 34%,
+      rgba(238, 244, 239, 0.18) 50%,
+      rgba(238, 244, 239, 0.08) 66%,
+      transparent 100%
+    );
+    animation: skeleton-flow 1.45s ease-in-out infinite;
+  }
 }
 
 @keyframes float-brain {
@@ -180,5 +202,11 @@
   50% {
     opacity: 1;
     transform: scale(1.22);
+  }
+}
+
+@keyframes skeleton-flow {
+  100% {
+    transform: translateX(100%);
   }
 }

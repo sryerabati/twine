@@ -24,7 +24,7 @@ const monoFont = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "Twine",
   description:
-    "Twine scans creative signal, compares cuts, and tells you what to ship next.",
+    "Twine compares cuts and tells you what to ship next.",
 };
 
 export default function RootLayout({

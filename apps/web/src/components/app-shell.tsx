@@ -4,8 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useQuery } from "convex/react";
-import { LogOut, ScanEye } from "lucide-react";
+import { LogOut } from "lucide-react";
 
+import { BrandLockup } from "@/components/brand-lockup";
+import { WorkspaceIdentitySkeleton } from "@/components/loading-states";
 import { Button, buttonVariants } from "@/components/ui/button";
 import type { CurrentUser } from "@/lib/contracts";
 import { cn } from "@/lib/utils";
@@ -29,20 +31,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
-      <header className="sticky top-0 z-30 border-b-2 border-border bg-background">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-4">
-            <Link href="/" className="flex items-center gap-3">
-              <span className="flex size-10 items-center justify-center rounded-full border-2 border-primary bg-primary text-primary-foreground shadow-[4px_4px_0_0_var(--color-primary)]">
-                <ScanEye className="size-5" />
-              </span>
-              <div className="leading-tight">
-                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-primary">
-                  Twine
-                </p>
-                <p className="text-xs text-primary/70">Command deck for saved scans</p>
-              </div>
-            </Link>
+      <header className="sticky top-0 z-30 border-b border-primary/15 bg-background/90 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-4 lg:px-10">
+          <div className="flex min-w-0 items-center gap-4 lg:gap-6">
+            <BrandLockup href="/" showMeta={false} />
             <nav className="hidden items-center gap-1 md:flex">
               {navigation.map((item) => {
                 const active =
@@ -66,15 +58,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </nav>
           </div>
 
-          <div className="flex items-center gap-2">
-            {currentUser?.email ? (
-              <div className="hidden rounded-full border-2 border-border bg-secondary px-3 py-1.5 text-xs text-secondary-foreground shadow-[2px_2px_0_0_var(--shadow-stamp)] lg:block">
+          <div className="flex items-center gap-2 sm:gap-3">
+            {currentUser === undefined ? (
+              <WorkspaceIdentitySkeleton />
+            ) : currentUser?.email ? (
+              <div className="hidden rounded-full border border-primary/20 bg-primary/10 px-3 py-1.5 text-xs text-foreground/80 shadow-[0_14px_32px_-28px_rgba(53,184,95,0.95)] lg:block">
                 {userLabel}
               </div>
             ) : null}
             <Button
               variant="outline"
               size="sm"
+              className="border-primary/25 bg-background/70 shadow-[0_14px_32px_-28px_rgba(53,184,95,0.95)] hover:border-primary/45 hover:bg-primary/10"
               onClick={() => void signOut()}
             >
               <LogOut data-icon="inline-start" />

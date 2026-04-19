@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { FileWarning, LoaderCircle } from "lucide-react";
+import { FileWarning } from "lucide-react";
 
 import { AnalysisView } from "@/components/analysis-view";
+import { ScanWorkspaceSkeleton } from "@/components/loading-states";
 import { ScanSummaryHeader } from "@/components/scan-summary-header";
 import type { SavedScanRecord } from "@/lib/contracts";
 import { fetchAnalysisByUpload } from "@/lib/api";
@@ -19,14 +20,10 @@ export function ScanDetailClient({ scanId }: { scanId: string }) {
 
   if (scan === undefined) {
     return (
-      <div className="surface mx-auto flex w-full max-w-3xl flex-col items-center gap-4 rounded-[2.5rem] px-8 py-16 text-center text-foreground">
-        <LoaderCircle className="size-8 animate-spin text-primary" />
-        <h1 className="text-3xl font-semibold tracking-tight text-foreground">Loading scan workspace</h1>
-        <p className="max-w-xl text-sm text-muted-foreground">
-          Fetching the saved scan record from Convex so the editor can restore its last known
-          state.
-        </p>
-      </div>
+      <ScanWorkspaceSkeleton
+        title="Loading scan workspace"
+        body="Fetching the saved scan record from Convex so the editor can restore its last known state."
+      />
     );
   }
 
@@ -157,18 +154,13 @@ function RecoveredScanAnalysis({
   }
 
   return (
-    <div className="surface rounded-[2.5rem] p-8 text-foreground">
-      <div className="sticker inline-flex px-3 py-1 text-xs font-medium text-secondary-foreground">
-        Analysis pending
-      </div>
-      <h2 className="mt-4 text-3xl font-semibold tracking-tight text-foreground">
-        Analysis is still attaching.
-      </h2>
-      <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-        The saved scan exists, but the completed Python payload has not synced yet. This view keeps
-        checking the local upload record until the analysis appears.
-      </p>
-      {recoveryError ? <p className="mt-4 text-sm text-destructive">{recoveryError}</p> : null}
+    <div className="space-y-4">
+      <ScanWorkspaceSkeleton
+        badge="Analysis pending"
+        title="Analysis is still attaching."
+        body="The saved scan exists, but the completed Python payload has not synced yet. This view keeps checking the local upload record until the analysis appears."
+      />
+      {recoveryError ? <p className="text-sm text-destructive">{recoveryError}</p> : null}
     </div>
   );
 }

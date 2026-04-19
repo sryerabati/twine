@@ -60,7 +60,7 @@ describe("SavedScanCards", () => {
       secondaryFilename: null,
     };
 
-    render(<SavedScanCards scans={[singleScan]} title="Saved scans" />);
+    const { container } = render(<SavedScanCards scans={[singleScan]} title="Saved scans" />);
 
     expect(screen.getByText("Scan")).toBeInTheDocument();
     expect(screen.getByText("clip.mp4")).toBeInTheDocument();
@@ -68,6 +68,7 @@ describe("SavedScanCards", () => {
       "href",
       "/app/scans/scan-single-1",
     );
+    expect(container.querySelectorAll(".surface-soft")).toHaveLength(0);
   });
 
   it("keeps long filenames wrappable inside the card layout", () => {
@@ -88,5 +89,13 @@ describe("SavedScanCards", () => {
     expect(heading.className).toContain("[overflow-wrap:anywhere]");
     expect(article?.className).toContain("min-w-0");
     expect(article?.className).toContain("h-full");
+  });
+
+  it("renders flowing skeleton cards while scans are loading", () => {
+    const { container } = render(
+      <SavedScanCards scans={[]} loading title="Saved scans" />,
+    );
+
+    expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(5);
   });
 });

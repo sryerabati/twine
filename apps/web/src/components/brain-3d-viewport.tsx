@@ -20,6 +20,10 @@ type Brain3DViewportProps = {
 };
 
 const BRAIN_MODEL_PATH = "/models/brain.glb";
+const DARK_GREEN = "#0f2215";
+const PRIMARY_GREEN = "#35b85f";
+const ACCENT_GREEN = "#86d89e";
+const SOFT_GREEN = "#e5ffed";
 
 const REGION_VISUALS: Record<
   BrainRegionId,
@@ -32,34 +36,36 @@ const REGION_VISUALS: Record<
       left: number;
       right: number;
       labelTop: number;
+      labelLeft: number;
     };
   }
 > = {
   frontal: {
-    color: "#86d89e",
+    color: PRIMARY_GREEN,
     position: [-0.92, 0.72, 0.74],
     rotation: [0.14, 0.42, -0.08],
-    fallback: { top: 24, left: 24, right: 24, labelTop: 15 },
+    fallback: { top: 24, left: 22, right: 22, labelTop: 13, labelLeft: 21 },
   },
   parietal: {
-    color: "#35b85f",
+    color: PRIMARY_GREEN,
     position: [-0.88, 1.02, -0.04],
     rotation: [-0.08, 0.38, 0.04],
-    fallback: { top: 35, left: 30, right: 30, labelTop: 26 },
+    fallback: { top: 34, left: 28, right: 28, labelTop: 24, labelLeft: 46 },
   },
   temporal: {
-    color: "#f0a35b",
+    color: PRIMARY_GREEN,
     position: [-1.08, -0.2, 0.14],
     rotation: [0.02, 0.2, -0.16],
-    fallback: { top: 56, left: 17, right: 17, labelTop: 47 },
+    fallback: { top: 54, left: 17, right: 17, labelTop: 46, labelLeft: 23 },
   },
   occipital: {
-    color: "#6bd6ff",
+    color: ACCENT_GREEN,
     position: [-0.78, 0.44, -0.86],
     rotation: [0.08, -0.1, 0.12],
-    fallback: { top: 42, left: 37, right: 37, labelTop: 33 },
+    fallback: { top: 42, left: 36, right: 36, labelTop: 34, labelLeft: 71 },
   },
 };
+const FALLBACK_DOTS = buildFallbackDots();
 
 export function Brain3DViewport({
   point,
@@ -69,35 +75,42 @@ export function Brain3DViewport({
   const [supportsWebGl, setSupportsWebGl] = useState(false);
 
   useEffect(() => {
-    setSupportsWebGl(checkWebGlSupport());
+    const frame = window.requestAnimationFrame(() => {
+      setSupportsWebGl(checkWebGlSupport());
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
   }, []);
 
   return (
     <div
       data-testid="brain-viewport"
       className={cn(
-        "relative aspect-[7/5] w-full overflow-hidden rounded-[1.7rem]",
+        "relative aspect-[7/5] w-full",
         mode === "panel"
-          ? "border border-border/55 bg-[radial-gradient(circle_at_top,rgba(53,184,95,0.12),transparent_44%),linear-gradient(180deg,rgba(8,14,10,0.92),rgba(7,9,8,0.98))]"
-          : "bg-transparent",
+          ? "overflow-hidden rounded-[1.7rem] border border-border/35 bg-[radial-gradient(circle_at_top,rgba(53,184,95,0.08),transparent_48%)]"
+          : "overflow-visible rounded-none bg-transparent",
         className,
       )}
     >
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(134,216,158,0.12),transparent_42%)]" />
-      <div className="absolute inset-x-[18%] bottom-8 h-16 rounded-full bg-black/45 blur-2xl" />
+      <div
+        className={cn(
+          "absolute inset-0",
+          mode === "hero"
+            ? "bg-[radial-gradient(circle_at_center,rgba(53,184,95,0.12),transparent_58%)]"
+            : "bg-[radial-gradient(circle_at_center,rgba(53,184,95,0.08),transparent_42%)]",
+        )}
+      />
       {supportsWebGl ? (
         <Canvas
           className="h-full w-full"
-          camera={{ fov: mode === "hero" ? 28 : 30, position: [0, 0.2, 8.4] }}
+          camera={{ fov: mode === "hero" ? 27 : 30, position: [0, 0.16, 8.9] }}
           dpr={[1, 1.75]}
           gl={{ alpha: true, antialias: true }}
         >
-          <color attach="background" args={["#000000"]} />
-          <fog attach="fog" args={["#020302", 10, 18]} />
-          <ambientLight intensity={1.1} color="#f3fff5" />
-          <directionalLight position={[5, 6, 7]} intensity={1.6} color="#e6ffee" />
-          <pointLight position={[-4, 2, 4]} intensity={0.85} color="#86d89e" />
-          <pointLight position={[4, -2, 3]} intensity={0.72} color="#35b85f" />
+          <ambientLight intensity={0.35} color="#dffff1" />
           <Suspense fallback={null}>
             <BrainScene point={point} hero={mode === "hero"} />
           </Suspense>
@@ -118,9 +131,8 @@ function BrainScene({
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const model = useLoader(GLTFLoader, BRAIN_MODEL_PATH);
-  const brainStemGeometry = useMemo(() => new THREE.CapsuleGeometry(0.16, 0.76, 6, 16), []);
   const regions = deriveBrainRegionActivations(point?.hemisphereHeatmap);
-  const brainGeometry = useMemo(() => {
+  const sampledPoints = useMemo(() => {
     const sourceMesh = findFirstMesh(model.scene);
 
     if (!sourceMesh) {
@@ -137,17 +149,55 @@ function BrainScene({
 
     geometry.scale(scale, scale, scale);
     geometry.translate(0, 0.18, 0);
-    geometry.computeVertexNormals();
+    const surface = geometry.index ? geometry.toNonIndexed() : geometry;
+    const positionAttribute = surface.getAttribute("position");
+    const targetCount = Math.min(hero ? 7200 : 5600, positionAttribute.count);
+    const stride = Math.max(1, Math.floor(positionAttribute.count / targetCount));
+    const sampledCount = Math.ceil(positionAttribute.count / stride);
+    const positions = new Float32Array(sampledCount * 3);
+    let writeIndex = 0;
+
+    for (let index = 0; index < positionAttribute.count; index += stride) {
+      const jitterX = (randomFromIndex(index * 11 + 1) - 0.5) * 0.016;
+      const jitterY = (randomFromIndex(index * 13 + 2) - 0.5) * 0.016;
+      const jitterZ = (randomFromIndex(index * 17 + 3) - 0.5) * 0.016;
+
+      positions[writeIndex * 3] = positionAttribute.getX(index) + jitterX;
+      positions[writeIndex * 3 + 1] = positionAttribute.getY(index) + jitterY;
+      positions[writeIndex * 3 + 2] = positionAttribute.getZ(index) + jitterZ;
+      writeIndex += 1;
+    }
+
+    if (surface !== geometry) {
+      geometry.dispose();
+      surface.dispose();
+    } else {
+      surface.dispose();
+    }
+
+    return positions;
+  }, [hero, model.scene]);
+  const pointCloudGeometry = useMemo(() => {
+    if (!sampledPoints) {
+      return null;
+    }
+
+    const globalActivation = clamp01(point?.globalActivation ?? 0.24);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(sampledPoints, 3));
+    geometry.setAttribute(
+      "color",
+      new THREE.BufferAttribute(buildPointCloudColors(sampledPoints, regions, globalActivation), 3),
+    );
 
     return geometry;
-  }, [model.scene]);
+  }, [point?.globalActivation, regions, sampledPoints]);
 
   useEffect(() => {
     return () => {
-      brainGeometry?.dispose();
-      brainStemGeometry.dispose();
+      pointCloudGeometry?.dispose();
     };
-  }, [brainGeometry, brainStemGeometry]);
+  }, [pointCloudGeometry]);
 
   useFrame((state) => {
     const t = state.clock.elapsedTime;
@@ -158,133 +208,28 @@ function BrainScene({
     }
 
     group.rotation.x = 0.18 + Math.sin(t * 0.22) * 0.05;
-    group.rotation.y = -0.4 + Math.sin(t * 0.3) * (hero ? 0.46 : 0.32);
+    group.rotation.y = -0.4 + Math.sin(t * 0.3) * (hero ? 0.32 : 0.24);
     group.rotation.z = Math.sin(t * 0.14) * 0.04;
-    group.position.y = Math.sin(t * 0.36) * 0.08;
+    group.position.y = Math.sin(t * 0.36) * 0.06;
   });
 
-  if (!brainGeometry) {
+  if (!pointCloudGeometry) {
     return null;
   }
 
-  const globalActivation = clamp01(point?.globalActivation ?? 0.18);
-
   return (
-    <group ref={groupRef} scale={hero ? 1.16 : 1} position={[0, hero ? -0.24 : -0.08, 0]}>
-      <mesh position={[0, -2.15, -0.7]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[2.55, 48]} />
-        <meshBasicMaterial color="#000000" opacity={0.35} transparent />
-      </mesh>
-
-      <mesh geometry={brainGeometry}>
-        <meshPhysicalMaterial
-          color="#1b241f"
-          roughness={0.82}
-          metalness={0.08}
-          clearcoat={0.18}
-          emissive="#102516"
-          emissiveIntensity={0.14 + globalActivation * 0.28}
-        />
-      </mesh>
-
-      <mesh geometry={brainGeometry} scale={[1.015, 1.015, 1.015]}>
-        <meshPhysicalMaterial
-          color="#e7fff1"
+    <group ref={groupRef} scale={hero ? 0.9 : 0.96} position={[0, hero ? -0.12 : -0.04, 0]}>
+      <points geometry={pointCloudGeometry}>
+        <pointsMaterial
+          size={hero ? 0.066 : 0.058}
+          sizeAttenuation
           transparent
-          opacity={0.04 + globalActivation * 0.04}
-          roughness={0.3}
-          metalness={0.03}
-          clearcoat={0.36}
+          opacity={hero ? 0.92 : 0.84}
+          depthWrite={false}
+          vertexColors
+          blending={THREE.AdditiveBlending}
         />
-      </mesh>
-
-      <mesh position={[0, -1.9, -0.18]} rotation={[0.38, 0, 0]} geometry={brainStemGeometry}>
-        <meshStandardMaterial color="#162018" roughness={0.92} metalness={0.02} />
-      </mesh>
-
-      {regions.map((region) => (
-        <RegionPair key={region.id} region={region} hero={hero} />
-      ))}
-    </group>
-  );
-}
-
-function RegionPair({
-  region,
-  hero,
-}: {
-  region: BrainRegionActivation;
-  hero: boolean;
-}) {
-  const visual = REGION_VISUALS[region.id];
-
-  return (
-    <>
-      <ActivationRegion
-        position={visual.position}
-        rotation={visual.rotation}
-        intensity={region.left}
-        color={visual.color}
-        hero={hero}
-      />
-      <ActivationRegion
-        position={[-visual.position[0], visual.position[1], visual.position[2]]}
-        rotation={[visual.rotation[0], -visual.rotation[1], -visual.rotation[2]]}
-        intensity={region.right}
-        color={visual.color}
-        hero={hero}
-      />
-    </>
-  );
-}
-
-function ActivationRegion({
-  position,
-  rotation,
-  intensity,
-  color,
-  hero,
-}: {
-  position: [number, number, number];
-  rotation: [number, number, number];
-  intensity: number;
-  color: string;
-  hero: boolean;
-}) {
-  const scaleBoost = hero ? 1.08 : 1;
-  const pulse = 0.18 + intensity * 1.1;
-
-  return (
-    <group position={position} rotation={rotation}>
-      <mesh
-        scale={[
-          (0.28 + intensity * 0.28) * scaleBoost,
-          (0.18 + intensity * 0.1) * scaleBoost,
-          (0.22 + intensity * 0.18) * scaleBoost,
-        ]}
-      >
-        <sphereGeometry args={[1, 28, 28]} />
-        <meshStandardMaterial
-          color={color}
-          emissive={color}
-          emissiveIntensity={0.16 + intensity * 1.65}
-          transparent
-          opacity={0.12 + intensity * 0.62}
-          roughness={0.34}
-          metalness={0.04}
-        />
-      </mesh>
-      <mesh scale={[0.14 + intensity * 0.09, 0.14 + intensity * 0.09, 0.14 + intensity * 0.09]}>
-        <sphereGeometry args={[1, 20, 20]} />
-        <meshStandardMaterial
-          color="#f7fff9"
-          emissive={color}
-          emissiveIntensity={0.28 + intensity * 2.1}
-          transparent
-          opacity={0.18 + intensity * 0.34}
-        />
-      </mesh>
-      <pointLight color={color} intensity={pulse} distance={1.15 + intensity * 0.8} />
+      </points>
     </group>
   );
 }
@@ -300,15 +245,27 @@ function BrainViewportFallback({
 
   return (
     <div className="relative h-full w-full">
-      <div
-        className={cn(
-          "absolute inset-x-[12%] inset-y-[14%] rounded-[48%] border border-primary/35 bg-card/35",
-          mode === "hero" ? "shadow-[0_24px_80px_rgba(0,0,0,0.45)]" : "",
-        )}
-      />
-      <div className="absolute inset-y-[18%] left-[19%] w-[28%] rounded-[50%] border border-primary/45 bg-card/45" />
-      <div className="absolute inset-y-[18%] right-[19%] w-[28%] rounded-[50%] border border-accent/55 bg-card/45" />
-      <div className="absolute left-1/2 top-[18%] bottom-[18%] w-px -translate-x-1/2 border-l border-dashed border-border/75" />
+      {FALLBACK_DOTS.map((dot, index) => {
+        const dotVisual = getFallbackDotVisual(dot, regions, point?.globalActivation ?? 0.24);
+
+        return (
+          <span
+            key={`${index}-${dot.left}-${dot.top}`}
+            data-testid="brain-dot"
+            className="absolute block rounded-full"
+            style={{
+              top: formatMeasure(dot.top, "%", 3),
+              left: formatMeasure(dot.left, "%", 3),
+              width: formatMeasure(dot.size, "px", 2),
+              height: formatMeasure(dot.size, "px", 2),
+              transform: `translate(-50%, -50%) scale(${mode === "hero" ? 1 : 0.9})`,
+              backgroundColor: dotVisual.color,
+              opacity: roundToPrecision(dotVisual.opacity, 3),
+              boxShadow: `0 0 ${formatMeasure(dotVisual.glow, "px", 2)} ${toRgba(dotVisual.color, mode === "hero" ? 0.18 : 0.12)}`,
+            }}
+          />
+        );
+      })}
       {regions.map((region) => (
         <FallbackRegionRow key={region.id} region={region} />
       ))}
@@ -320,60 +277,12 @@ function FallbackRegionRow({ region }: { region: BrainRegionActivation }) {
   const visual = REGION_VISUALS[region.id];
 
   return (
-    <>
-      <span
-        className="absolute left-1/2 z-10 -translate-x-1/2 rounded-full border border-border/70 bg-card/90 px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-foreground"
-        style={{ top: `${visual.fallback.labelTop}%` }}
-      >
-        {region.label}
-      </span>
-      <FallbackRegionGlow
-        anchor="left"
-        color={visual.color}
-        intensity={region.left}
-        offset={visual.fallback.left}
-        top={visual.fallback.top}
-      />
-      <FallbackRegionGlow
-        anchor="right"
-        color={visual.color}
-        intensity={region.right}
-        offset={visual.fallback.right}
-        top={visual.fallback.top}
-      />
-    </>
-  );
-}
-
-function FallbackRegionGlow({
-  anchor,
-  color,
-  intensity,
-  offset,
-  top,
-}: {
-  anchor: "left" | "right";
-  color: string;
-  intensity: number;
-  offset: number;
-  top: number;
-}) {
-  const size = 16 + intensity * 30;
-  const shadow = `0 0 ${10 + intensity * 18}px ${toRgba(color, 0.55)}`;
-
-  return (
     <span
-      className="absolute block rounded-full blur-[2px]"
-      style={{
-        top: `${top}%`,
-        [anchor]: `${offset}%`,
-        width: `${size}px`,
-        height: `${size}px`,
-        backgroundColor: color,
-        opacity: 0.2 + intensity * 0.72,
-        boxShadow: shadow,
-      }}
-    />
+      className="absolute z-10 -translate-x-1/2 rounded-full border border-primary/25 bg-background/20 px-2 py-1 text-[0.58rem] font-semibold uppercase tracking-[0.22em] text-primary/85 backdrop-blur-[2px]"
+      style={{ top: `${visual.fallback.labelTop}%`, left: `${visual.fallback.labelLeft}%` }}
+    >
+      {region.label}
+    </span>
   );
 }
 
@@ -415,6 +324,171 @@ function checkWebGlSupport() {
 
 function clamp01(value: number) {
   return Math.max(0, Math.min(1, value));
+}
+
+function buildPointCloudColors(
+  positions: Float32Array,
+  regions: BrainRegionActivation[],
+  globalActivation: number,
+) {
+  const colors = new Float32Array(positions.length);
+
+  for (let index = 0; index < positions.length; index += 3) {
+    const x = positions[index];
+    const y = positions[index + 1];
+    const z = positions[index + 2];
+    const regionInfluence = get3dRegionInfluence(x, y, z, regions);
+    const shimmer = (randomFromIndex(index * 19) - 0.5) * 0.04;
+    const color = resolveActivationColor(
+      clamp01(globalActivation * 0.14 + regionInfluence * 1.12 + shimmer),
+    );
+
+    colors[index] = color.r;
+    colors[index + 1] = color.g;
+    colors[index + 2] = color.b;
+  }
+
+  return colors;
+}
+
+function get3dRegionInfluence(
+  x: number,
+  y: number,
+  z: number,
+  regions: BrainRegionActivation[],
+) {
+  let influence = 0;
+
+  for (const region of regions) {
+    const visual = REGION_VISUALS[region.id];
+    influence = Math.max(
+      influence,
+      getWeightedDistance3d([x, y, z], visual.position) * region.left,
+      getWeightedDistance3d([x, y, z], [-visual.position[0], visual.position[1], visual.position[2]]) *
+        region.right,
+    );
+  }
+
+  return clamp01(influence);
+}
+
+function getWeightedDistance3d(
+  source: [number, number, number],
+  target: [number, number, number],
+) {
+  const dx = (source[0] - target[0]) / 0.95;
+  const dy = (source[1] - target[1]) / 0.78;
+  const dz = (source[2] - target[2]) / 0.9;
+
+  return Math.exp(-(dx * dx + dy * dy + dz * dz) * 1.7);
+}
+
+function buildFallbackDots() {
+  const dots: Array<{ left: number; top: number; size: number }> = [];
+
+  for (let row = 0; row < 30; row += 1) {
+    for (let column = 0; column < 46; column += 1) {
+      const normalizedX = column / 45 * 2 - 1;
+      const normalizedY = row / 29 * 2 - 1;
+      const lobeX = Math.abs(normalizedX) - 0.08;
+      const outerCurve =
+        Math.pow(Math.abs(lobeX) / 0.88, 2.25) + Math.pow(Math.abs((normalizedY + 0.08) / 0.92), 2.1);
+      const lowerNotch = normalizedY > 0.68 && Math.abs(normalizedX) < 0.12;
+      const lowerTrim = normalizedY > 0.6 && Math.abs(normalizedX) > 0.78;
+
+      if (outerCurve > 1 || lowerNotch || lowerTrim) {
+        continue;
+      }
+
+      const jitterX = (randomFromIndex(row * 43 + column * 11) - 0.5) * 0.026;
+      const jitterY = (randomFromIndex(row * 67 + column * 17) - 0.5) * 0.026;
+      const size = 1.7 + randomFromIndex(row * 79 + column * 23) * 1.25;
+
+      dots.push({
+        left: 50 + (normalizedX + jitterX) * 30,
+        top: 50 + (normalizedY + jitterY) * 31,
+        size,
+      });
+    }
+  }
+
+  return dots;
+}
+
+function getFallbackDotVisual(
+  dot: { left: number; top: number; size: number },
+  regions: BrainRegionActivation[],
+  globalActivation: number,
+) {
+  const influence = get2dRegionInfluence(dot.left, dot.top, regions);
+  const activationLevel = clamp01(globalActivation * 0.14 + influence * 1.12);
+  const color = resolveActivationColor(activationLevel);
+
+  return {
+    color: `#${color.getHexString()}`,
+    glow: 5 + activationLevel * 17,
+    opacity: 0.28 + activationLevel * 0.7,
+  };
+}
+
+function get2dRegionInfluence(left: number, top: number, regions: BrainRegionActivation[]) {
+  let influence = 0;
+
+  for (const region of regions) {
+    const visual = REGION_VISUALS[region.id].fallback;
+    influence = Math.max(
+      influence,
+      getWeightedDistance2d(left, top, visual.left, visual.top) * region.left,
+      getWeightedDistance2d(left, top, 100 - visual.right, visual.top) * region.right,
+    );
+  }
+
+  return clamp01(influence);
+}
+
+function getWeightedDistance2d(
+  left: number,
+  top: number,
+  targetLeft: number,
+  targetTop: number,
+) {
+  const dx = (left - targetLeft) / 16;
+  const dy = (top - targetTop) / 12;
+
+  return Math.exp(-(dx * dx + dy * dy) * 1.35);
+}
+
+function randomFromIndex(seed: number) {
+  const value = Math.sin(seed * 12.9898 + 78.233) * 43758.5453;
+
+  return value - Math.floor(value);
+}
+
+function resolveActivationColor(activationLevel: number) {
+  const darkColor = new THREE.Color(DARK_GREEN);
+  const activeColor = new THREE.Color(PRIMARY_GREEN);
+  const accentColor = new THREE.Color(ACCENT_GREEN);
+  const softColor = new THREE.Color(SOFT_GREEN);
+  const primaryMix = Math.pow(clamp01(activationLevel), 0.74);
+  const color = darkColor.clone().lerp(activeColor, primaryMix);
+
+  if (activationLevel > 0.38) {
+    color.lerp(accentColor, ((activationLevel - 0.38) / 0.62) * 0.78);
+  }
+
+  if (activationLevel > 0.72) {
+    color.lerp(softColor, ((activationLevel - 0.72) / 0.28) * 0.55);
+  }
+
+  return color;
+}
+
+function formatMeasure(value: number, unit: "%" | "px", precision: number) {
+  return `${value.toFixed(precision)}${unit}`;
+}
+
+function roundToPrecision(value: number, precision: number) {
+  return Number(value.toFixed(precision));
 }
 
 function toRgba(hex: string, alpha: number) {

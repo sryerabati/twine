@@ -221,6 +221,28 @@ describe("UploadWorkbench", () => {
       });
     });
   });
+
+  it("uses the same segmented toggle interaction for both modes", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <UploadWorkbench
+        onSingleReady={vi.fn()}
+        onCompareReady={vi.fn()}
+      />,
+    );
+
+    const singleButton = await screen.findByRole("button", { name: /^Single upload$/i });
+    const compareButton = screen.getByRole("button", { name: /A\/B test/i });
+
+    expect(singleButton).toHaveClass("bg-secondary", "text-secondary-foreground", "shadow-none");
+    expect(compareButton).toHaveClass("bg-transparent", "border-transparent", "shadow-none");
+
+    await user.click(compareButton);
+
+    expect(singleButton).toHaveClass("bg-transparent", "border-transparent", "shadow-none");
+    expect(compareButton).toHaveClass("bg-secondary", "text-secondary-foreground", "shadow-none");
+  });
 });
 
 describe("UploadDropzone", () => {

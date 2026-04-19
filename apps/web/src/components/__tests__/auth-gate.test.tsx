@@ -66,4 +66,17 @@ describe("AuthGate", () => {
     );
     expect(screen.getByText(/private area/i)).toBeInTheDocument();
   });
+
+  it("renders skeleton structure while auth state is loading", () => {
+    authState = "loading";
+    process.env.NEXT_PUBLIC_CONVEX_URL = "https://example.convex.cloud";
+    const { container } = render(
+      <AuthGate>
+        <div>private area</div>
+      </AuthGate>,
+    );
+
+    expect(screen.getByText(/Loading Twine/i)).toBeInTheDocument();
+    expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(2);
+  });
 });

@@ -197,7 +197,7 @@ export function UploadWorkbench({
           <Button
             type="button"
             size="sm"
-            variant={mode === "single" ? "default" : "outline"}
+            variant={mode === "single" ? "secondary" : "ghost"}
             onClick={() => setMode("single")}
           >
             Single upload

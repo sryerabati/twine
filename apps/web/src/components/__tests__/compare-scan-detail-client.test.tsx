@@ -163,4 +163,12 @@ describe("CompareScanDetailClient", () => {
     });
     expect(screen.getByText(/Ship B./i)).toBeInTheDocument();
   });
+
+  it("renders a skeleton workspace while the compare scan record is loading", () => {
+    useQuery.mockReturnValue(undefined);
+    const { container } = render(<CompareScanDetailClient scanId="scan_compare_1" />);
+
+    expect(screen.getByRole("heading", { name: /Loading compare workspace/i })).toBeInTheDocument();
+    expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(3);
+  });
 });

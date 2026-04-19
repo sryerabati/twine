@@ -1,10 +1,11 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { LoaderCircle, LockKeyhole, ServerCrash } from "lucide-react";
+import { LockKeyhole, ServerCrash } from "lucide-react";
 import { AuthLoading, Authenticated, Unauthenticated } from "convex/react";
 
 import { LoginPanel } from "@/components/auth/login-panel";
+import { AuthLoadingSkeleton } from "@/components/loading-states";
 import { Badge } from "@/components/ui/badge";
 import { isConvexConfigured } from "@/lib/convex";
 
@@ -27,20 +28,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
 }
 
 function AuthLoadingPanel() {
-  return (
-    <div className="surface mx-auto flex w-full max-w-md flex-col gap-5 rounded-[1.75rem] p-8">
-      <Badge variant="secondary" className="w-fit">
-        Secure workspace
-      </Badge>
-      <div className="flex items-center gap-3">
-        <LoaderCircle className="size-5 animate-spin text-primary" />
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Loading Twine</h1>
-          <p className="text-sm text-muted-foreground">Restoring auth and saved scans.</p>
-        </div>
-      </div>
-    </div>
-  );
+  return <AuthLoadingSkeleton />;
 }
 
 function ConvexSetupPanel() {

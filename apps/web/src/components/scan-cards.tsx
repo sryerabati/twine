@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowUpRight, Clock3, Download, GitCompareArrows, ScanEye, Sparkles } from "lucide-react";
 
+import { SavedScanCardsSkeleton } from "@/components/loading-states";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import type { SavedScanSummary } from "@/lib/contracts";
@@ -51,14 +52,7 @@ export function SavedScanCards({
       ) : null}
 
       {loading ? (
-        <div className="grid gap-4 lg:grid-cols-[repeat(3,minmax(0,1fr))]">
-          {Array.from({ length: 3 }, (_, index) => (
-            <div
-              key={index}
-              className="surface h-56 rounded-[1.75rem]"
-            />
-          ))}
-        </div>
+        <SavedScanCardsSkeleton count={limit ?? 3} />
       ) : visibleScans.length ? (
         <div className="grid gap-4 lg:grid-cols-[repeat(3,minmax(0,1fr))]">
           {visibleScans.map((scan) => (
@@ -94,7 +88,7 @@ export function SavedScanCards({
                   "Analysis is still syncing. Open the scan to follow the timeline and export plan."}
               </p>
 
-              <div className="mt-5 grid grid-cols-3 gap-2">
+              <div className="mt-5 grid gap-4 border-t border-border/70 pt-5 sm:grid-cols-3">
                 <Metric label="Hook" value={scan.hookScore} />
                 <Metric label="Pacing" value={scan.pacingScore} />
                 <Metric label="Viral" value={scan.viralPotential} />
@@ -202,8 +196,9 @@ export function ScanStatusBadge({ status }: { status: SavedScanSummary["status"]
 
 function Metric({ label, value }: { label: string; value: number | null }) {
   return (
-    <div className="surface-soft rounded-[1.1rem] px-3 py-3">
-      <p className="text-[0.68rem] uppercase tracking-[0.24em] text-muted-foreground">{label}</p>
+    <div className="min-w-0">
+      <span aria-hidden="true" className="block h-px w-8 bg-border/80" />
+      <p className="mt-3 text-[0.68rem] uppercase tracking-[0.24em] text-muted-foreground">{label}</p>
       <p className="mt-2 text-xl font-semibold tracking-tight text-foreground">
         {value ?? "—"}
       </p>

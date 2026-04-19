@@ -102,8 +102,8 @@ async def upload_video(
             ord(ch) < 0x20 or ord(ch) > 0x7E for ch in convex_upload_id
         ):
             raise HTTPException(status_code=400, detail="Invalid convexUploadId.")
-    if not file.filename or not file.filename.lower().endswith(".mp4"):
-        raise HTTPException(status_code=400, detail="Only MP4 uploads are supported in v1.")
+    if not file.filename or not file.filename.lower().endswith((".mp4", ".mov")):
+        raise HTTPException(status_code=400, detail="Only MP4 and MOV uploads are supported in v1.")
 
     storage = context.storage
     media = context.media

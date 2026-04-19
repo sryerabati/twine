@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { Brain3DViewport } from "@/components/brain-3d-viewport";
@@ -11,7 +11,7 @@ describe("Brain3DViewport", () => {
     const viewport = screen.getByTestId("brain-viewport");
     expect(viewport).toBeInTheDocument();
     expect(viewport.className).toContain("bg-transparent");
-    expect(screen.getAllByTestId("brain-dot").length).toBeGreaterThan(40);
+    expect(screen.getAllByTestId("brain-dot").length).toBeGreaterThan(850);
     expect(screen.getAllByText("Frontal").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Parietal").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Temporal").length).toBeGreaterThan(0);
@@ -58,4 +58,92 @@ describe("Brain3DViewport", () => {
     expect(screen.getAllByText("Frontal").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Occipital").length).toBeGreaterThan(0);
   });
+
+  it("renders fallback dot positions with hydration-safe precision", () => {
+    render(<Brain3DViewport point={null} mode="hero" />);
+
+    const firstDot = screen.getAllByTestId("brain-dot")[0];
+    expect(firstDot).toBeDefined();
+    expect(firstDot?.getAttribute("style")).not.toMatch(/\d+\.\d{4,}%/);
+  });
+
+  it("makes highly activated regions visibly brighter than low-activation regions", () => {
+    const lowFrontalPoint = buildPointForRegionProfile({
+      frontal: 0.12,
+      parietal: 0.12,
+      temporal: 0.12,
+      occipital: 0.12,
+    });
+    const highFrontalPoint = buildPointForRegionProfile({
+      frontal: 0.95,
+      parietal: 0.12,
+      temporal: 0.12,
+      occipital: 0.12,
+    });
+
+    render(<Brain3DViewport point={lowFrontalPoint} />);
+    const lowBrightness = readDotBrightnessNear(22, 24);
+
+    cleanup();
+
+    render(<Brain3DViewport point={highFrontalPoint} />);
+    const highBrightness = readDotBrightnessNear(22, 24);
+
+    expect(highBrightness - lowBrightness).toBeGreaterThan(35);
+  });
 });
+
+function buildPointForRegionProfile(levels: Record<"frontal" | "parietal" | "temporal" | "occipital", number>): BrainResponsePoint {
+  return {
+    stimulusTimeSec: 1.6,
+    segmentStartSec: 1.6,
+    segmentDurationSec: 1.6,
+    globalActivation: (levels.frontal + levels.parietal + levels.temporal + levels.occipital) / 4,
+    leftHemisphereActivation: (levels.frontal + levels.parietal + levels.temporal + levels.occipital) / 4,
+    rightHemisphereActivation: (levels.frontal + levels.parietal + levels.temporal + levels.occipital) / 4,
+    rollingVariance: 0.16,
+    activationDelta: 0.08,
+    spikeScore: 0.42,
+    dropScore: 0.12,
+    audioEnergy: 0.54,
+    motionScore: 0.38,
+    transcriptDensity: 0.29,
+    sceneChange: false,
+    silenceOverlap: false,
+    hemisphereHeatmap: {
+      left: [
+        ...Array.from({ length: 16 }, () => levels.frontal),
+        ...Array.from({ length: 16 }, () => levels.parietal),
+        ...Array.from({ length: 16 }, () => levels.temporal),
+        ...Array.from({ length: 16 }, () => levels.occipital),
+      ],
+      right: [
+        ...Array.from({ length: 16 }, () => levels.frontal),
+        ...Array.from({ length: 16 }, () => levels.parietal),
+        ...Array.from({ length: 16 }, () => levels.temporal),
+        ...Array.from({ length: 16 }, () => levels.occipital),
+      ],
+    },
+  };
+}
+
+function readDotBrightnessNear(targetLeft: number, targetTop: number) {
+  const dots = screen.getAllByTestId("brain-dot");
+  const closestDot = dots
+    .map((dot) => ({
+      dot,
+      left: Number.parseFloat(dot.style.left),
+      top: Number.parseFloat(dot.style.top),
+    }))
+    .sort((left, right) => {
+      const leftDistance = Math.hypot(left.left - targetLeft, left.top - targetTop);
+      const rightDistance = Math.hypot(right.left - targetLeft, right.top - targetTop);
+      return leftDistance - rightDistance;
+    })[0];
+
+  const rgb = closestDot?.dot.style.backgroundColor.match(/\d+/g)?.map((value) => Number.parseInt(value, 10));
+
+  expect(rgb).toBeDefined();
+
+  return Math.round(((rgb?.[0] ?? 0) + (rgb?.[1] ?? 0) + (rgb?.[2] ?? 0)) / 3);
+}

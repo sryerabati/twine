@@ -239,3 +239,61 @@ class CompareResponse(BaseModel):
     recommendation: str
     summary: list[str]
     slices: list[CompareSlice]
+
+
+EditorProjectStatus = Literal["drafting", "queued", "running", "completed", "failed"]
+EditorDraftStatus = Literal["queued", "running", "completed", "failed"]
+OrderingConfidence = Literal["low", "medium", "high"]
+
+
+class EditorClipDescriptor(BaseModel):
+    clipId: str
+    uploadId: str
+    localUploadId: str
+    filename: str
+
+
+class EditorGenerateRequest(BaseModel):
+    convexProjectId: str
+    clips: list[EditorClipDescriptor] = Field(min_length=2)
+
+
+class EditorDraftExport(BaseModel):
+    videoUrl: str
+    durationSec: float
+
+
+class OrderedDraftClip(BaseModel):
+    clipId: str
+    uploadId: str
+    filename: str
+    sourceOrder: int
+    resolvedOrder: int
+    rationale: str
+    transcriptPreview: str
+    summary: str
+    speechCoverage: float
+    removedSeconds: float
+    trimmedDurationSec: float
+    outputStartSec: float
+    outputEndSec: float
+    warnings: list[str] = Field(default_factory=list)
+    appliedCuts: list[DeadspaceCut] = Field(default_factory=list)
+
+
+class EditorDraftPayload(BaseModel):
+    export: EditorDraftExport
+    storylineSummary: str
+    orderingConfidence: OrderingConfidence
+    orderedClips: list[OrderedDraftClip]
+    warnings: list[str] = Field(default_factory=list)
+
+
+class EditorDraftResponse(BaseModel):
+    draftId: str
+    projectId: str
+    status: EditorDraftStatus
+    createdAt: datetime
+    updatedAt: datetime
+    error: str | None = None
+    payload: EditorDraftPayload | None = None

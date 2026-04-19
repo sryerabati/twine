@@ -28,15 +28,27 @@ describe("LandingClient", () => {
   it("renders a login CTA for signed-out visitors", () => {
     render(<LandingClient />);
 
-    expect(screen.getByText(/^Twine$/i)).toBeInTheDocument();
     expect(screen.getByText(/Read the room before you post\./i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", {
+        name: /A decision tool for short-form video\./i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", {
+        name: /Built for people shipping content on a schedule\./i,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /UGC creators/i })).toBeInTheDocument();
     expect(screen.getByTestId("brain-viewport")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Log in/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Start with Twine/i })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Open dashboard/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/Cortent/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Product preview/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Know what hits before you ship\./i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Vibe radar/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Creative signal/i)).not.toBeInTheDocument();
   });
 
   it("renders an open dashboard CTA for authenticated visitors", () => {
@@ -44,7 +56,7 @@ describe("LandingClient", () => {
 
     render(<LandingClient />);
 
-    expect(screen.getByRole("link", { name: /Open dashboard/i })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /Open dashboard/i })).toHaveLength(2);
     expect(screen.queryByRole("link", { name: /Log in/i })).not.toBeInTheDocument();
   });
 });

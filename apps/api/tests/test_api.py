@@ -25,6 +25,23 @@ def test_upload_endpoint_persists_file_and_metadata(
     assert paths.metadata_path.exists()
 
 
+def test_upload_accepts_mov_files(
+    client: TestClient,
+    test_context: APIContext,
+) -> None:
+    response = client.post(
+        "/api/upload",
+        files={"file": ("clip.mov", BytesIO(b"fake-mov"), "video/quicktime")},
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    upload_id = payload["uploadId"]
+    paths = test_context.storage.upload_paths(upload_id)
+    assert paths.source_path.suffix == ".mov"
+    assert paths.source_path.exists()
+
+
 def test_upload_rejects_over_duration(
     client: TestClient,
     test_context: APIContext,

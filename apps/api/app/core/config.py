@@ -44,8 +44,8 @@ class Settings(BaseSettings):
     tribe_device: str = Field(default="auto", alias="TRIBE_DEVICE")
     gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
     gemini_model: str = Field(default="gemini-2.5-pro", alias="GEMINI_MODEL")
-    max_video_seconds: int = Field(default=60, alias="TRIBE_MAX_VIDEO_SECONDS")
-    max_upload_bytes: int = Field(default=250_000_000, alias="TRIBE_MAX_UPLOAD_BYTES")
+    max_video_seconds: int = Field(default=120, alias="TRIBE_MAX_VIDEO_SECONDS")
+    max_upload_bytes: int = Field(default=50_000_000, alias="TRIBE_MAX_UPLOAD_BYTES")
     huggingface_hub_token: str | None = Field(
         default=None,
         alias="HUGGINGFACE_HUB_TOKEN",

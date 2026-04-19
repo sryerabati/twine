@@ -35,6 +35,7 @@ describe("BrandShell", () => {
     expect(screen.getByRole("link", { name: /^Twine$/i })).toHaveAttribute("href", "/");
     expect(screen.getByRole("link", { name: /Log in/i })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Open dashboard/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Creative signal/i)).not.toBeInTheDocument();
   });
 
   it("renders an open dashboard CTA for authenticated visitors", () => {

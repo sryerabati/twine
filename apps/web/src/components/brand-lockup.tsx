@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 
 import { cn } from "@/lib/utils";
@@ -6,6 +7,7 @@ type BrandLockupProps = {
   className?: string;
   href?: string;
   variant?: "nav" | "hero";
+  showMeta?: boolean;
 };
 
 const variantStyles = {
@@ -27,6 +29,7 @@ export function BrandLockup({
   className,
   href,
   variant = "nav",
+  showMeta = true,
 }: BrandLockupProps) {
   const styles = variantStyles[variant];
   const content = (
@@ -37,17 +40,21 @@ export function BrandLockup({
           styles.mark,
         )}
       >
-        <img
+        <Image
           src="/branding/twine-mark.png"
           alt=""
-          aria-hidden="true"
+          aria-hidden
+          width={72}
+          height={72}
           className="size-[90%] object-contain drop-shadow-[0_16px_18px_rgba(5,7,5,0.55)]"
         />
       </span>
       <span className="flex min-w-0 flex-col">
-        <span className={cn("font-mono uppercase text-primary/70", styles.meta)}>
-          Creative signal
-        </span>
+        {showMeta ? (
+          <span className={cn("font-mono uppercase text-primary/70", styles.meta)}>
+            Creative signal
+          </span>
+        ) : null}
         <span className={cn("font-heading font-semibold leading-none text-foreground", styles.title)}>
           Twine
         </span>

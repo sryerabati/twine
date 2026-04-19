@@ -1,32 +1,27 @@
 "use client";
 
-import { AlertTriangle, Check, Download, LoaderCircle, Scissors } from "lucide-react";
+import { Check, Download } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
+import { buttonVariants } from "@/components/ui/button";
 import type { AnalysisPayload, DeadspaceCut, TimelineSegment } from "@/lib/contracts";
 import { formatDateTime, formatSeconds } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
+type TrimMode = "speech_safe" | "lenient";
+
 type ScanSecondaryDetailsProps = {
   payload: AnalysisPayload;
-  selectedCutIds: string[];
-  trimError: string | null;
-  trimPending: boolean;
-  onExport: () => Promise<void>;
-  onToggleCut: (cutId: string) => Promise<void>;
+  activeCutIds: string[];
+  trimMode: TrimMode;
   onPreviewTimeChange: (time: number | null) => void;
   onJumpToTime: (time: number) => void;
 };
 
 export function ScanSecondaryDetails({
   payload,
-  selectedCutIds,
-  trimError,
-  trimPending,
-  onExport,
-  onToggleCut,
+  activeCutIds,
+  trimMode,
   onPreviewTimeChange,
   onJumpToTime,
 }: ScanSecondaryDetailsProps) {
@@ -42,18 +37,18 @@ export function ScanSecondaryDetails({
           <p className="mt-2 text-sm leading-6 text-muted-foreground">Cuts, guidance, and exports.</p>
         </div>
         <Badge variant="secondary">
-          {selectedCutIds.length} selected
+          {activeCutIds.length} in current trim
         </Badge>
       </div>
 
-      <div className="mt-6 grid gap-4 xl:grid-cols-[1.04fr_0.96fr]">
-        <div className="surface-soft rounded-[1.7rem] p-4">
+      <div className="mt-6 grid gap-8 xl:grid-cols-[1.04fr_0.96fr]">
+        <div className="space-y-5 border-t border-border/70 pt-6 xl:border-r xl:border-t-0 xl:pr-6 xl:pt-0">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-sm font-medium text-foreground">Guidance</p>
               <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                The action board stays compact so the strongest notes remain visible without
-                taking over the page.
+                The action board stays visible without turning the whole lower half of the page into
+                a stack of cards.
               </p>
             </div>
             <Badge variant="secondary">
@@ -61,7 +56,7 @@ export function ScanSecondaryDetails({
             </Badge>
           </div>
 
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <div className="grid gap-5 md:grid-cols-2">
             <ActionColumn title="Keep" items={payload.actionBoard.keep} />
             <ActionColumn title="Fix now" items={payload.actionBoard.fixNow} />
             <ActionColumn title="Test next" items={payload.actionBoard.testNext} />
@@ -69,29 +64,30 @@ export function ScanSecondaryDetails({
           </div>
         </div>
 
-        <div className="surface-soft rounded-[1.7rem] p-4">
+        <div className="space-y-5 border-t border-border/70 pt-6 xl:border-t-0 xl:pl-6 xl:pt-0">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-sm font-medium text-foreground">Cuts</p>
               <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                Deadspace stays selected by default. Optional AI trims remain review-only until
-                you choose them.
+                Speech-safe deadspace trims run automatically. Lenient mode adds the AI low-value
+                cuts when you want the export to hold onto only the important parts.
               </p>
             </div>
             <Badge variant="secondary" className="bg-primary/15 text-primary">
-              {selectedCutIds.length} active
+              {trimMode === "lenient" ? "Lenient mode" : "Speech-safe mode"}
             </Badge>
           </div>
 
-          <div className="mt-4 space-y-3">
+          <div className="space-y-4">
             {payload.deadspaceCuts.length ? (
               payload.deadspaceCuts.map((cut) => (
-                <SelectableCutCard
+                <CutPlanRow
                   key={cut.id}
                   cut={cut}
-                  selected={selectedCutIds.includes(cut.id)}
-                  title="Default deadspace trim"
-                  onToggle={onToggleCut}
+                  active={activeCutIds.includes(cut.id)}
+                  title="Automatic deadspace trim"
+                  activeLabel="Included automatically"
+                  inactiveLabel="Not active"
                 />
               ))
             ) : (
@@ -101,19 +97,18 @@ export function ScanSecondaryDetails({
             )}
           </div>
 
-          <Separator className="my-5 bg-border" />
-
-          <div>
-            <p className="text-sm font-medium text-foreground">Optional AI trims</p>
-            <div className="mt-4 space-y-3">
+          <div className="border-t border-border/70 pt-5">
+            <p className="text-sm font-medium text-foreground">Lenient add-on trims</p>
+            <div className="mt-4 space-y-4">
               {payload.lowValueCuts.length ? (
                 payload.lowValueCuts.map((cut) => (
-                  <SelectableCutCard
+                  <CutPlanRow
                     key={cut.id}
                     cut={cut}
-                    selected={selectedCutIds.includes(cut.id)}
+                    active={activeCutIds.includes(cut.id)}
                     title="AI suggestion"
-                    onToggle={onToggleCut}
+                    activeLabel="Included in lenient mode"
+                    inactiveLabel="Lenient mode only"
                   />
                 ))
               ) : (
@@ -124,23 +119,11 @@ export function ScanSecondaryDetails({
             </div>
           </div>
 
-          <div className="mt-5 flex flex-wrap gap-3">
-            <Button
-              onClick={() => void onExport()}
-              disabled={trimPending || !selectedCutIds.length}
-            >
-              {trimPending ? (
-                <>
-                  <LoaderCircle data-icon="inline-start" className="animate-spin" />
-                  Exporting trim
-                </>
-              ) : (
-                <>
-                  <Scissors data-icon="inline-start" />
-                  Export selected trim
-                </>
-              )}
-            </Button>
+          <div className="flex flex-wrap gap-3 border-t border-border/70 pt-5">
+            <p className="text-sm text-muted-foreground">
+              Run the trim from the player box above. This panel stays focused on why each cut is
+              included.
+            </p>
             {latestExport ? (
               <a
                 href={latestExport.trimmedVideoUrl}
@@ -153,35 +136,28 @@ export function ScanSecondaryDetails({
               </a>
             ) : null}
           </div>
-
-          {trimError ? (
-            <div className="mt-4 flex items-start gap-2 rounded-[1.25rem] border-2 border-destructive bg-destructive/10 p-4 text-sm text-destructive">
-              <AlertTriangle className="mt-0.5 size-4" />
-              <span>{trimError}</span>
-            </div>
-          ) : null}
         </div>
       </div>
 
-      <div className="mt-6 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-        <section className="surface-soft rounded-[1.7rem] p-4">
+      <div className="mt-8 grid gap-8 border-t border-border/70 pt-6 xl:grid-cols-[1.1fr_0.9fr]">
+        <section className="space-y-5 xl:border-r xl:border-border/70 xl:pr-6">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-medium text-foreground">Detailed segment notes</p>
               <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                Use the marker timeline above for quick hover previews, then scan these rows when
-                you want the full list. Click a row to jump the video.
+                Use the marker rail above for quick previews, then scan these rows when you want
+                the full list. Click a row to jump the video.
               </p>
             </div>
           </div>
 
-          <div className="mt-4 space-y-3">
+          <div className="space-y-0">
             {payload.timelineSegments.length ? (
               payload.timelineSegments.map((segment) => (
                 <TimelineRow
                   key={segment.id}
                   segment={segment}
-                  selected={segment.cutId ? selectedCutIds.includes(segment.cutId) : false}
+                  active={segment.cutId ? activeCutIds.includes(segment.cutId) : false}
                   onHover={onPreviewTimeChange}
                   onJump={onJumpToTime}
                 />
@@ -194,13 +170,15 @@ export function ScanSecondaryDetails({
           </div>
         </section>
 
-        <section className="surface-soft rounded-[1.7rem] p-4">
-          <p className="text-sm font-medium text-foreground">Downloads</p>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            Keep the raw artifacts close without promoting them into the main workspace.
-          </p>
+        <section className="space-y-5 border-t border-border/70 pt-6 xl:border-t-0 xl:pl-6 xl:pt-0">
+          <div>
+            <p className="text-sm font-medium text-foreground">Downloads</p>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              Keep the raw artifacts close without promoting them into the main workspace.
+            </p>
+          </div>
 
-          <div className="mt-4 flex flex-col gap-2">
+          <div className="flex flex-col gap-2">
             <ExportLink href={payload.artifacts.processedJsonUrl} label="Analysis JSON" />
             <ExportLink href={payload.artifacts.cutListJsonUrl} label="Cut list JSON" />
             <ExportLink href={payload.artifacts.eventsCsvUrl} label="Event CSV" />
@@ -216,44 +194,41 @@ export function ScanSecondaryDetails({
           </div>
 
           {payload.exports.length ? (
-            <>
-              <Separator className="my-5 bg-border" />
-              <div className="space-y-3">
-                <p className="text-sm font-medium text-foreground">Past exports</p>
-                {payload.exports
-                  .slice()
-                  .reverse()
-                  .map((exportItem) => (
-                    <div
-                      key={exportItem.exportId}
-                      className="surface rounded-[1.35rem] p-4"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-medium text-foreground">
-                            Trimmed to {formatSeconds(exportItem.trimmedDurationSec)}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            Removed {formatSeconds(exportItem.removedSeconds)} •{" "}
-                            {formatDateTime(exportItem.createdAt)}
-                          </p>
-                        </div>
-                        <a
-                          href={exportItem.trimmedVideoUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className={buttonVariants({ variant: "outline", size: "sm" })}
-                        >
-                          Open
-                        </a>
+            <div className="space-y-4 border-t border-border/70 pt-5">
+              <p className="text-sm font-medium text-foreground">Past exports</p>
+              {payload.exports
+                .slice()
+                .reverse()
+                .map((exportItem) => (
+                  <div
+                    key={exportItem.exportId}
+                    className="border-t border-border/70 pt-4 first:border-t-0 first:pt-0"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-foreground">
+                          Trimmed to {formatSeconds(exportItem.trimmedDurationSec)}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          Removed {formatSeconds(exportItem.removedSeconds)} •{" "}
+                          {formatDateTime(exportItem.createdAt)}
+                        </p>
                       </div>
-                      <p className="mt-3 text-sm text-muted-foreground">
-                        Cut set: {exportItem.selectedCutIds.join(", ")}
-                      </p>
+                      <a
+                        href={exportItem.trimmedVideoUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={buttonVariants({ variant: "outline", size: "sm" })}
+                      >
+                        Open
+                      </a>
                     </div>
-                  ))}
-              </div>
-            </>
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      Cut set: {exportItem.selectedCutIds.join(", ")}
+                    </p>
+                  </div>
+                ))}
+            </div>
           ) : null}
         </section>
       </div>
@@ -263,7 +238,7 @@ export function ScanSecondaryDetails({
 
 function ActionColumn({ title, items }: { title: string; items: string[] }) {
   return (
-    <div className="surface rounded-[1.35rem] p-4">
+    <div className="border-t border-border/70 pt-4 first:border-t-0 first:pt-0">
       <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">{title}</p>
       <div className="mt-3 flex flex-col gap-2">
         {items.length ? (
@@ -281,60 +256,60 @@ function ActionColumn({ title, items }: { title: string; items: string[] }) {
   );
 }
 
-function SelectableCutCard({
+function CutPlanRow({
   cut,
-  selected,
+  active,
   title,
-  onToggle,
+  activeLabel,
+  inactiveLabel,
 }: {
   cut: DeadspaceCut;
-  selected: boolean;
+  active: boolean;
   title: string;
-  onToggle: (cutId: string) => Promise<void>;
+  activeLabel: string;
+  inactiveLabel: string;
 }) {
   return (
-    <button
-      type="button"
+    <div
       className={cn(
-        "w-full rounded-[1.45rem] border-2 p-4 text-left transition-[transform,box-shadow,border-color,background-color]",
-        selected
-          ? "border-primary bg-primary text-primary-foreground shadow-[4px_4px_0_0_var(--color-primary)]"
-          : "border-border bg-card text-foreground shadow-[4px_4px_0_0_var(--shadow-stamp)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[3px_3px_0_0_var(--shadow-stamp)]",
+        "relative w-full border-t border-border/70 pt-4 pl-4 text-left first:border-t-0 first:pt-0",
+        active
+          ? "before:absolute before:bottom-0 before:left-0 before:top-4 before:w-0.5 before:rounded-full before:bg-primary first:before:top-0"
+          : "",
       )}
-      onClick={() => void onToggle(cut.id)}
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className={cn("text-xs uppercase tracking-[0.24em]", selected ? "text-primary-foreground/80" : "text-muted-foreground")}>{title}</p>
-          <p className={cn("mt-2 font-semibold", selected ? "text-primary-foreground" : "text-foreground")}>
+          <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">{title}</p>
+          <p className="mt-2 font-semibold text-foreground">
             {formatSeconds(cut.start)} to {formatSeconds(cut.end)}
           </p>
         </div>
         <span
           className={cn(
-            "rounded-full border-2 px-3 py-1 text-xs font-medium",
-            selected
+            "rounded-full border px-3 py-1 text-xs font-medium",
+            active
               ? "border-primary bg-white text-primary"
               : "border-border bg-secondary text-secondary-foreground",
           )}
         >
-          {selected ? "Selected" : "Optional"}
+          {active ? activeLabel : inactiveLabel}
         </span>
       </div>
-      <p className={cn("mt-3 text-sm", selected ? "text-primary-foreground/80" : "text-muted-foreground")}>{cut.reason}</p>
-      <p className={cn("mt-2 text-sm", selected ? "text-primary-foreground" : "text-foreground")}>{cut.recommendedAction}</p>
-    </button>
+      <p className="mt-3 text-sm text-muted-foreground">{cut.reason}</p>
+      <p className="mt-2 text-sm text-foreground">{cut.recommendedAction}</p>
+    </div>
   );
 }
 
 function TimelineRow({
   segment,
-  selected,
+  active,
   onHover,
   onJump,
 }: {
   segment: TimelineSegment;
-  selected: boolean;
+  active: boolean;
   onHover: (time: number | null) => void;
   onJump: (time: number) => void;
 }) {
@@ -343,7 +318,7 @@ function TimelineRow({
   return (
     <button
       type="button"
-      className="w-full rounded-[1.45rem] border-2 border-border bg-card p-4 text-left text-foreground shadow-[4px_4px_0_0_var(--shadow-stamp)] transition-[transform,box-shadow,border-color] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[3px_3px_0_0_var(--shadow-stamp)]"
+      className="w-full border-t border-border/70 py-4 text-left text-foreground transition-colors first:border-t-0 first:pt-0 hover:bg-muted/15"
       onMouseEnter={() => onHover(midpoint)}
       onMouseLeave={() => onHover(null)}
       onClick={() => onJump(segment.start)}
@@ -357,9 +332,9 @@ function TimelineRow({
             <Badge variant="secondary">
               {formatSeconds(segment.start)} to {formatSeconds(segment.end)}
             </Badge>
-            {selected ? (
+            {active ? (
               <Badge variant="secondary" className="bg-primary/15 text-primary">
-                selected cut
+                in current trim
               </Badge>
             ) : null}
           </div>

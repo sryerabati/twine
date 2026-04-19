@@ -19,10 +19,10 @@ export function LandingBrainModel() {
   }, [points.length]);
 
   return (
-    <div aria-hidden="true" className="relative mx-auto h-[460px] w-full max-w-[680px]">
-      <SignalChip className="left-6 top-14" label="Signal" />
-      <SignalChip className="right-10 top-20" label="A/B" tone="subtle" />
-      <SignalChip className="left-12 bottom-14" label="Hooks" tone="subtle" />
+    <div aria-hidden="true" className="relative mx-auto h-[450px] w-full max-w-[680px]">
+      <SignalChip className="left-4 top-12" label="Signal" />
+      <SignalChip className="right-8 top-16" label="A/B" tone="subtle" />
+      <SignalChip className="left-10 bottom-12" label="Hooks" tone="subtle" />
       <Brain3DViewport point={points[index] ?? null} mode="hero" className="h-full w-full" />
     </div>
   );

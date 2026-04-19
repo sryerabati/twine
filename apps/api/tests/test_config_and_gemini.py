@@ -26,6 +26,18 @@ def make_gemini_settings(tmp_path: Path) -> Settings:
     )
 
 
+def test_settings_defaults_allow_50mb_uploads_and_2_minute_clips(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("TRIBE_MAX_VIDEO_SECONDS", raising=False)
+    monkeypatch.delenv("TRIBE_MAX_UPLOAD_BYTES", raising=False)
+
+    settings = Settings(_env_file=None)
+
+    assert settings.max_video_seconds == 120
+    assert settings.max_upload_bytes == 50_000_000
+
+
 def test_relative_storage_paths_resolve_from_repo_root() -> None:
     settings = Settings(
         uploads_dir="./storage/uploads",

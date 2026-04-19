@@ -70,13 +70,20 @@ export function BrainScanViewer({
     return () => window.clearInterval(timer);
   }, [autoPlay, currentTimeSec, points.length]);
 
-  const point =
+  const focusedSample =
     points.length === 0
-      ? null
+      ? { point: null, count: 0 }
       : currentTimeSec === undefined || currentTimeSec === null
-        ? points[autoIndex]
-        : findClosestPoint(points, currentTimeSec);
+        ? { point: points[autoIndex] ?? null, count: 1 }
+        : averagePointsForFocusWindow(points, currentTimeSec);
+  const point = focusedSample.point;
   const regions = deriveBrainRegionActivations(point?.hemisphereHeatmap);
+  const focusLabel =
+    currentTimeSec !== undefined && currentTimeSec !== null
+      ? `${currentTimeSec.toFixed(1)}s ${focusedSample.count > 1 ? "avg" : "focus"}`
+      : point
+        ? `${point.stimulusTimeSec.toFixed(1)}s focus`
+        : "Standby";
 
   return (
     <section
@@ -96,21 +103,35 @@ export function BrainScanViewer({
           <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">{description}</p>
         </div>
         <div className="sticker px-3 py-1 text-xs font-medium text-secondary-foreground">
-          {point ? `${point.stimulusTimeSec.toFixed(1)}s focus` : "Standby"}
+          {focusLabel}
         </div>
       </div>
 
-      <Brain3DViewport point={point} mode="panel" className="mt-6 px-4 py-5" />
+      <div
+        data-testid="brain-scan-layout"
+        className="relative mt-6 grid gap-5 xl:grid-cols-[0.82fr_1.18fr] xl:items-center"
+      >
+        <div data-testid="brain-scan-info-column" className="grid gap-0">
+          {regions.map((region, index) => (
+            <SignalCard
+              key={region.id}
+              icon={REGION_ICONS[index]}
+              label={region.label}
+              value={formatPercent(region.value)}
+            />
+          ))}
+        </div>
 
-      <div className="relative mt-5 grid gap-3 md:grid-cols-4">
-        {regions.map((region, index) => (
-          <SignalCard
-            key={region.id}
-            icon={REGION_ICONS[index]}
-            label={region.label}
-            value={formatPercent(region.value)}
+        <div
+          data-testid="brain-scan-viewport-column"
+          className="flex justify-center xl:justify-center"
+        >
+          <Brain3DViewport
+            point={point}
+            mode="panel"
+            className="w-full max-w-[28rem] px-3 py-3 xl:max-w-[30rem]"
           />
-        ))}
+        </div>
       </div>
     </section>
   );
@@ -128,12 +149,19 @@ function SignalCard({
   value: string;
 }) {
   return (
-    <div className="surface-soft rounded-[1.35rem] p-4">
-      <div className="flex items-center gap-2 text-muted-foreground">
-        <Icon className="size-4 text-primary" />
-        <span className="text-xs uppercase tracking-[0.24em]">{label}</span>
+    <div
+      data-testid="brain-region-card"
+      className="flex min-h-[5.75rem] items-center justify-between gap-4 border-t border-border/70 px-1 py-4 first:border-t-0 first:pt-0 last:pb-0"
+    >
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Icon className="size-4 shrink-0 text-primary" />
+          <span className="text-xs uppercase tracking-[0.24em]">{label}</span>
+        </div>
       </div>
-      <p className="mt-3 text-xl font-semibold tracking-tight text-foreground">{value}</p>
+      <p className="shrink-0 text-2xl font-semibold tracking-tight text-foreground">
+        {value}
+      </p>
     </div>
   );
 }
@@ -145,6 +173,85 @@ function findClosestPoint(points: BrainResponsePoint[], currentTimeSec: number) 
       ? point
       : closest,
   );
+}
+
+function averagePointsForFocusWindow(points: BrainResponsePoint[], currentTimeSec: number) {
+  const nearestPoint = findClosestPoint(points, currentTimeSec);
+  const focusDurationSec = nearestPoint.segmentDurationSec > 0 ? nearestPoint.segmentDurationSec : 1;
+  const windowStartSec = currentTimeSec - focusDurationSec / 2;
+  const windowEndSec = currentTimeSec + focusDurationSec / 2;
+  const overlappingPoints = points.filter((point) =>
+    windowsOverlap(
+      windowStartSec,
+      windowEndSec,
+      point.segmentStartSec,
+      point.segmentStartSec + point.segmentDurationSec,
+    ),
+  );
+
+  if (!overlappingPoints.length) {
+    return { point: nearestPoint, count: 1 };
+  }
+
+  return {
+    point: averageBrainResponsePoints(overlappingPoints, currentTimeSec, windowStartSec, focusDurationSec),
+    count: overlappingPoints.length,
+  };
+}
+
+function averageBrainResponsePoints(
+  points: BrainResponsePoint[],
+  currentTimeSec: number,
+  windowStartSec: number,
+  focusDurationSec: number,
+): BrainResponsePoint {
+  return {
+    stimulusTimeSec: currentTimeSec,
+    segmentStartSec: windowStartSec,
+    segmentDurationSec: focusDurationSec,
+    globalActivation: averageNumber(points, (point) => point.globalActivation),
+    leftHemisphereActivation: averageNumber(points, (point) => point.leftHemisphereActivation),
+    rightHemisphereActivation: averageNumber(points, (point) => point.rightHemisphereActivation),
+    rollingVariance: averageNumber(points, (point) => point.rollingVariance),
+    activationDelta: averageNumber(points, (point) => point.activationDelta),
+    spikeScore: averageNumber(points, (point) => point.spikeScore),
+    dropScore: averageNumber(points, (point) => point.dropScore),
+    audioEnergy: averageNumber(points, (point) => point.audioEnergy),
+    motionScore: averageNumber(points, (point) => point.motionScore),
+    transcriptDensity: averageNumber(points, (point) => point.transcriptDensity),
+    sceneChange: points.some((point) => point.sceneChange),
+    silenceOverlap: points.some((point) => point.silenceOverlap),
+    hemisphereHeatmap: {
+      left: averageHeatmap(points, "left"),
+      right: averageHeatmap(points, "right"),
+    },
+  };
+}
+
+function averageNumber(
+  points: BrainResponsePoint[],
+  pick: (point: BrainResponsePoint) => number,
+) {
+  return points.reduce((total, point) => total + pick(point), 0) / points.length;
+}
+
+function averageHeatmap(
+  points: BrainResponsePoint[],
+  side: "left" | "right",
+) {
+  return Array.from({ length: 64 }, (_, index) =>
+    points.reduce((total, point) => total + (point.hemisphereHeatmap[side][index] ?? 0), 0) /
+    points.length,
+  );
+}
+
+function windowsOverlap(
+  windowStartSec: number,
+  windowEndSec: number,
+  pointStartSec: number,
+  pointEndSec: number,
+) {
+  return pointStartSec <= windowEndSec && pointEndSec >= windowStartSec;
 }
 
 function buildHeatmap(seed: number) {

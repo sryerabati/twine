@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setPathname } from "next/navigation";
@@ -36,6 +35,15 @@ describe("AppShell", () => {
       </AppShell>,
     );
 
+    const brandLink = screen.getByRole("link", { name: /^Twine$/i });
+
+    expect(brandLink).toHaveAttribute("href", "/");
+    expect(brandLink.querySelector("img")).toHaveAttribute(
+      "src",
+      expect.stringContaining("twine-mark.png"),
+    );
+    expect(screen.queryByText(/Command deck for saved scans/i)).not.toBeInTheDocument();
+
     const dashboardLink = screen.getByRole("link", { name: /Dashboard/i });
     const libraryLink = screen.getByRole("link", { name: /Library/i });
 
@@ -63,5 +71,16 @@ describe("AppShell", () => {
       "active:not-aria-[haspopup]:translate-y-[3px]",
       "active:shadow-[2px_2px_0_0_var(--color-border)]",
     );
+  });
+
+  it("renders a header skeleton while the workspace identity is loading", () => {
+    useQueryMock.mockReturnValue(undefined);
+    const { container } = render(
+      <AppShell>
+        <div>Workspace content</div>
+      </AppShell>,
+    );
+
+    expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(1);
   });
 });

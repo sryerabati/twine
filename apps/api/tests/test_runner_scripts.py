@@ -228,3 +228,14 @@ def test_analyze_writes_artifacts_with_stubbed_context(tmp_path: Path) -> None:
     assert Path(result["artifacts"]["eventsPath"]).exists()
     assert Path(result["artifacts"]["segmentsPath"]).exists()
     assert Path(result["artifacts"]["cutsPath"]).exists()
+
+
+def test_analyze_accepts_mov_inputs(tmp_path: Path) -> None:
+    context = make_context(tmp_path, token="hf_test_token")
+    video_path = tmp_path / "clip.mov"
+    video_path.write_bytes(b"video")
+
+    result = command_analyze(context, "mac", video_path)
+
+    assert result["status"] == "completed"
+    assert result["payload"]["video"]["filename"] == "clip.mov"

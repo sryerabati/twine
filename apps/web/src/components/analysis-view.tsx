@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { RefObject } from "react";
 import { useEffect, useRef, useState } from "react";
-import { LoaderCircle } from "lucide-react";
+import { LoaderCircle, Scissors, WandSparkles } from "lucide-react";
 import {
   CartesianGrid,
   Legend,
@@ -16,17 +16,18 @@ import {
 } from "recharts";
 
 import { BrainScanViewer } from "@/components/brain-scan-viewer";
+import { AnalysisWorkspaceSkeleton } from "@/components/loading-states";
 import { RecommendationTimeline } from "@/components/recommendation-timeline";
 import { ScanSecondaryDetails } from "@/components/scan-secondary-details";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { fetchAnalysis, trimAnalysis } from "@/lib/api";
 import type {
   AnalysisPayload,
   AnalysisResponse,
 } from "@/lib/contracts";
-import { formatSeconds } from "@/lib/format";
+
+type TrimMode = "speech_safe" | "lenient";
 
 type AnalysisViewProps = {
   analysisId: string;
@@ -48,9 +49,7 @@ export function AnalysisView({
 }: AnalysisViewProps) {
   const [response, setResponse] = useState<AnalysisResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [selectedCutIdsByAnalysis, setSelectedCutIdsByAnalysis] = useState<
-    Record<string, string[]>
-  >({});
+  const [trimModeByAnalysis, setTrimModeByAnalysis] = useState<Record<string, TrimMode>>({});
   const [trimPending, setTrimPending] = useState(false);
   const [trimError, setTrimError] = useState<string | null>(null);
   const [activeTimeSec, setActiveTimeSec] = useState(0);
@@ -94,37 +93,41 @@ export function AnalysisView({
     setResponse(next);
   }
 
-  async function handleToggleCut(cutId: string) {
+  const trimMode = deriveTrimMode(
+    response,
+    initialSelectedCutIds,
+    trimModeByAnalysis,
+  );
+  const activeCutIds = deriveActiveCutIds(response, trimMode);
+
+  async function handleTrimModeChange(nextMode: TrimMode) {
     if (response?.status !== "completed" || !response.payload) {
       return;
     }
-    const currentSelectedCutIds = deriveSelectedCutIds(
-      response,
-      initialSelectedCutIds,
-      selectedCutIdsByAnalysis,
-    );
-    const next = currentSelectedCutIds.includes(cutId)
-      ? currentSelectedCutIds.filter((value) => value !== cutId)
-      : [...currentSelectedCutIds, cutId];
-    setSelectedCutIdsByAnalysis((current) => ({
+    const nextCutIds = getTrimCutIds(response.payload, nextMode);
+    setTrimModeByAnalysis((current) => ({
       ...current,
-      [response.analysisId]: next,
+      [response.analysisId]: nextMode,
     }));
     setTrimError(null);
     try {
-      await onPersistSelectedCuts?.(next);
+      await onPersistSelectedCuts?.(nextCutIds);
     } catch (persistError) {
       setTrimError(
         persistError instanceof Error
           ? persistError.message
-          : "Could not save the selected cut plan.",
+          : "Could not save the automatic trim mode.",
       );
     }
   }
 
   async function handleExport() {
-    if (!selectedCutIds.length) {
-      setTrimError("Select at least one cut before exporting.");
+    if (!activeCutIds.length) {
+      setTrimError(
+        trimMode === "speech_safe"
+          ? "No speech-safe deadspace was detected for automatic removal."
+          : "No lenient trim cuts are available on this scan.",
+      );
       return;
     }
 
@@ -132,9 +135,9 @@ export function AnalysisView({
     setTrimError(null);
 
     try {
-      await onPersistSelectedCuts?.(selectedCutIds);
-      const result = await trimAnalysis(analysisId, selectedCutIds);
-      await onPersistExport?.(selectedCutIds, result.trimmedVideoUrl);
+      await onPersistSelectedCuts?.(activeCutIds);
+      const result = await trimAnalysis(analysisId, activeCutIds);
+      await onPersistExport?.(activeCutIds, result.trimmedVideoUrl);
       await reloadAnalysis();
     } catch (exportError) {
       setTrimError(
@@ -145,12 +148,6 @@ export function AnalysisView({
     }
   }
 
-  const selectedCutIds = deriveSelectedCutIds(
-    response,
-    initialSelectedCutIds,
-    selectedCutIdsByAnalysis,
-  );
-
   if (error) {
     return <AnalysisError message={error} />;
   }
@@ -159,6 +156,7 @@ export function AnalysisView({
     return (
       <AnalysisLoading
         analysisId={analysisId}
+        createdAt={response?.createdAt}
         status={response?.status === "running" ? "running" : "queued"}
       />
     );
@@ -171,16 +169,17 @@ export function AnalysisView({
   return (
     <CompletedAnalysis
       activeTimeSec={activeTimeSec}
+      activeCutIds={activeCutIds}
       payload={response.payload}
       previewTimeSec={previewTimeSec}
-      selectedCutIds={selectedCutIds}
+      trimMode={trimMode}
       trimError={trimError}
       trimPending={trimPending}
       videoRef={videoRef}
       onActiveTimeChange={setActiveTimeSec}
       onExport={handleExport}
       onPreviewTimeChange={setPreviewTimeSec}
-      onToggleCut={handleToggleCut}
+      onTrimModeChange={handleTrimModeChange}
     />
   );
 }
@@ -188,44 +187,75 @@ export function AnalysisView({
 function AnalysisLoading({
   analysisId,
   status,
+  createdAt,
 }: {
   analysisId: string;
   status: "queued" | "running";
+  createdAt?: string | null;
 }) {
-  return (
-    <div className="space-y-6">
-      <div className="surface rounded-[2.5rem] p-8 text-foreground">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Analysis workspace</p>
-            <h1 className="mt-2 text-4xl font-semibold tracking-tight text-foreground">
-              Processing analysis
-            </h1>
-            <p className="mt-3 text-sm text-muted-foreground">
-              Waiting for FastAPI to finish the scan output for analysis `{analysisId.slice(0, 8)}`.
-            </p>
-          </div>
-          <Badge variant="secondary" className="w-fit">
-            <LoaderCircle className="mr-2 size-4 animate-spin" />
-            {status === "queued" ? "Queued" : "Running"}
-          </Badge>
-        </div>
-      </div>
+  const progress = useEstimatedScanProgress(status, createdAt);
 
-      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <div className="surface-soft rounded-[2rem] p-6">
-          <Skeleton className="h-72 w-full rounded-[1.6rem]" />
-          <Skeleton className="mt-6 h-64 w-full rounded-[1.6rem]" />
-        </div>
-        <div className="surface-soft rounded-[2rem] p-6">
-          <Skeleton className="h-8 w-40" />
-          <Skeleton className="mt-4 h-28 w-full rounded-[1.4rem]" />
-          <Skeleton className="mt-4 h-28 w-full rounded-[1.4rem]" />
-          <Skeleton className="mt-4 h-28 w-full rounded-[1.4rem]" />
-        </div>
-      </div>
-    </div>
+  return (
+    <AnalysisWorkspaceSkeleton
+      badge={status === "queued" ? "Queued" : "Running"}
+      title="Processing analysis"
+      body={`Waiting for FastAPI to finish the scan output for analysis \`${analysisId.slice(0, 8)}\`.`}
+      progress={progress}
+    />
   );
+}
+
+function useEstimatedScanProgress(
+  status: "queued" | "running",
+  createdAt?: string | null,
+) {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 600);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [createdAt, status]);
+
+  return buildEstimatedScanProgress(status, createdAt, nowMs);
+}
+
+export function buildEstimatedScanProgress(
+  status: "queued" | "running",
+  createdAt: string | null | undefined,
+  nowMs: number,
+) {
+  const createdAtMs = createdAt ? Number(new Date(createdAt)) : Number.NaN;
+  const elapsedSec = Number.isFinite(createdAtMs) ? Math.max(0, (nowMs - createdAtMs) / 1000) : 0;
+
+  if (status === "queued") {
+    const value = 6 + 28 * easeOutProgress(elapsedSec, 4.8);
+    return {
+      value: clampProgress(value, 6, 34),
+      label: "Estimated progress",
+      hint: "Queueing and warming the scan. It moves quickly at first, then settles as the analysis spins up.",
+    };
+  }
+
+  const runningElapsedSec = Math.max(0, elapsedSec - 4);
+  const value = 34 + 58 * easeOutProgress(runningElapsedSec, 18);
+  return {
+    value: clampProgress(value, 34, 92),
+    label: "Estimated progress",
+    hint: "Reading reactions, pacing, and scene changes. The bar slows down near the end and only completes when the scan does.",
+  };
+}
+
+function easeOutProgress(elapsedSec: number, curveSec: number) {
+  return 1 - Math.exp(-elapsedSec / curveSec);
+}
+
+function clampProgress(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
 }
 
 function AnalysisError({ message }: { message: string }) {
@@ -254,31 +284,34 @@ function AnalysisError({ message }: { message: string }) {
 
 function CompletedAnalysis({
   activeTimeSec,
+  activeCutIds,
   payload,
   previewTimeSec,
-  selectedCutIds,
+  trimMode,
   trimError,
   trimPending,
   videoRef,
   onActiveTimeChange,
   onExport,
   onPreviewTimeChange,
-  onToggleCut,
+  onTrimModeChange,
 }: {
   activeTimeSec: number;
+  activeCutIds: string[];
   payload: AnalysisPayload;
   previewTimeSec: number | null;
-  selectedCutIds: string[];
+  trimMode: TrimMode;
   trimError: string | null;
   trimPending: boolean;
   videoRef: RefObject<HTMLVideoElement | null>;
   onActiveTimeChange: (time: number) => void;
   onExport: () => Promise<void>;
   onPreviewTimeChange: (time: number | null) => void;
-  onToggleCut: (cutId: string) => Promise<void>;
+  onTrimModeChange: (mode: TrimMode) => Promise<void>;
 }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const focusTimeSec = previewTimeSec ?? activeTimeSec;
+  const latestExport = payload.exports[payload.exports.length - 1] ?? null;
   const chartData = payload.brainResponse.timeSeries.map((point) => ({
     t: Number(point.stimulusTimeSec.toFixed(2)),
     activation: point.globalActivation,
@@ -352,13 +385,80 @@ function CompletedAnalysis({
             </p>
           </div>
 
-          <Badge variant="secondary" className="w-fit">
-            {selectedCutIds.length} selected
+          <Badge
+            variant="secondary"
+            className={trimMode === "lenient" ? "w-fit bg-primary/15 text-primary" : "w-fit"}
+          >
+            {describeTrimBadge(trimMode, activeCutIds.length)}
           </Badge>
         </div>
 
-        <div className="mt-6 space-y-6">
-          <div className="surface-soft rounded-[2rem] p-4">
+        <div className="mt-6 space-y-8 border-t border-border/70 pt-6">
+          <div>
+            <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="text-sm font-medium text-foreground">Player</p>
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+                  Remove deadspace in one click. Default mode only cuts speech-safe pauses so the
+                  wording stays intact. Turn on the more lenient pass to keep only the important
+                  parts.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-2 lg:items-end">
+                <Button
+                  type="button"
+                  variant={trimMode === "lenient" ? "default" : "outline"}
+                  size="sm"
+                  aria-pressed={trimMode === "lenient"}
+                  onClick={() =>
+                    void onTrimModeChange(trimMode === "lenient" ? "speech_safe" : "lenient")
+                  }
+                >
+                  <WandSparkles data-icon="inline-start" />
+                  More lenient
+                </Button>
+
+                <div className="flex flex-wrap gap-2 lg:justify-end">
+                  <Button
+                    type="button"
+                    size="lg"
+                    onClick={() => void onExport()}
+                    disabled={trimPending || !activeCutIds.length}
+                  >
+                    {trimPending ? (
+                      <>
+                        <LoaderCircle data-icon="inline-start" className="animate-spin" />
+                        Removing deadspace
+                      </>
+                    ) : (
+                      <>
+                        <Scissors data-icon="inline-start" />
+                        Remove deadspace
+                      </>
+                    )}
+                  </Button>
+
+                  {latestExport ? (
+                    <a
+                      href={latestExport.trimmedVideoUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={buttonVariants({ variant: "outline", size: "lg" })}
+                    >
+                      Latest export
+                    </a>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            {trimError ? (
+              <div className="mb-4 rounded-[1.25rem] border-2 border-destructive bg-destructive/10 p-4 text-sm text-destructive">
+                {trimError}
+              </div>
+            ) : null}
+
             <video
               ref={videoRef}
               className="aspect-video w-full rounded-[1.5rem] border-2 border-border bg-black"
@@ -379,29 +479,21 @@ function CompletedAnalysis({
               durationSec={payload.video.durationSec}
               isPlaying={isPlaying}
               segments={payload.timelineSegments}
-              selectedCutIds={selectedCutIds}
-              videoSrc={payload.video.sourceUrl}
+              selectedCutIds={activeCutIds}
               onSeek={seekToTime}
               onTogglePlayback={togglePlayback}
               onPreviewTimeChange={onPreviewTimeChange}
             />
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <SignalStat label="Duration" value={formatSeconds(payload.video.durationSec)} />
-              <SignalStat label="Words" value={`${payload.diagnostics.transcriptWordCount}`} />
-              <SignalStat label="Scenes" value={`${payload.diagnostics.sceneChangeCount}`} />
-              <SignalStat label="Confidence" value={payload.scores.confidence} />
-            </div>
           </div>
 
           <BrainScanViewer
             points={payload.brainResponse.timeSeries}
             currentTimeSec={focusTimeSec}
             title="Brain scan"
-            description="Scrub the video or hover the recommendation timeline to keep the signal view in sync."
+            description="Scrub the edit rail or hover markers to keep the signal view in sync."
           />
 
-          <div className="surface-soft rounded-[2rem] p-5">
+          <div className="border-t border-border/70 pt-6">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-sm font-medium text-foreground">Activation timeline</p>
@@ -469,11 +561,8 @@ function CompletedAnalysis({
 
       <ScanSecondaryDetails
         payload={payload}
-        selectedCutIds={selectedCutIds}
-        trimError={trimError}
-        trimPending={trimPending}
-        onExport={onExport}
-        onToggleCut={onToggleCut}
+        activeCutIds={activeCutIds}
+        trimMode={trimMode}
         onPreviewTimeChange={onPreviewTimeChange}
         onJumpToTime={seekToTime}
       />
@@ -481,29 +570,18 @@ function CompletedAnalysis({
   );
 }
 
-function SignalStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="surface-soft rounded-[1.2rem] px-3 py-3">
-      <p className="text-[0.68rem] uppercase tracking-[0.24em] text-muted-foreground">{label}</p>
-      <p className="mt-2 text-lg font-semibold tracking-tight text-foreground">{value}</p>
-    </div>
-  );
-}
-
-function deriveSelectedCutIds(
+function deriveTrimMode(
   response: AnalysisResponse | null,
   initialSelectedCutIds: string[] | undefined,
-  selectedCutIdsByAnalysis: Record<string, string[]>,
+  trimModeByAnalysis: Record<string, TrimMode>,
 ) {
   if (response?.status !== "completed" || !response.payload) {
-    return [];
+    return "speech_safe";
   }
 
   return (
-    selectedCutIdsByAnalysis[response.analysisId] ??
-    (initialSelectedCutIds && initialSelectedCutIds.length > 0
-      ? initialSelectedCutIds
-      : response.payload.cutPlan.filter((cut) => cut.defaultSelected).map((cut) => cut.id))
+    trimModeByAnalysis[response.analysisId] ??
+    inferTrimModeFromSavedCuts(response.payload, initialSelectedCutIds)
   );
 }
 
@@ -515,4 +593,48 @@ function formatAnalysisError(message: string | null | undefined) {
     return "The selected content-analysis backend could not finish this upload. Check the runbook and local health status, then try again.";
   }
   return message;
+}
+
+function deriveActiveCutIds(
+  response: AnalysisResponse | null,
+  trimMode: TrimMode,
+) {
+  if (response?.status !== "completed" || !response.payload) {
+    return [];
+  }
+
+  return getTrimCutIds(response.payload, trimMode);
+}
+
+function getTrimCutIds(payload: AnalysisPayload, trimMode: TrimMode) {
+  const allCuts = payload.cutPlan.length ? payload.cutPlan : payload.deadspaceCuts;
+  if (trimMode === "lenient") {
+    return allCuts.map((cut) => cut.id);
+  }
+  return allCuts.filter((cut) => cut.defaultSelected).map((cut) => cut.id);
+}
+
+function inferTrimModeFromSavedCuts(
+  payload: AnalysisPayload,
+  savedCutIds: string[] | undefined,
+): TrimMode {
+  if (!savedCutIds?.length) {
+    return "speech_safe";
+  }
+
+  const defaultCutIds = new Set(getTrimCutIds(payload, "speech_safe"));
+  return savedCutIds.some((cutId) => !defaultCutIds.has(cutId))
+    ? "lenient"
+    : "speech_safe";
+}
+
+function describeTrimBadge(trimMode: TrimMode, count: number) {
+  if (count <= 0) {
+    return trimMode === "lenient" ? "No lenient trims" : "No speech-safe trims";
+  }
+
+  const suffix = count === 1 ? "trim" : "trims";
+  return trimMode === "lenient"
+    ? `${count} important-part ${suffix}`
+    : `${count} speech-safe ${suffix}`;
 }
