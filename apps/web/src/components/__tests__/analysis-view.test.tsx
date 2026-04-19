@@ -210,6 +210,30 @@ describe("AnalysisView", () => {
     playSpy.mockRestore();
   });
 
+  it("removes decorative accent shapes from the analysis panels", async () => {
+    const { fetchAnalysis } = await import("@/lib/api");
+    vi.mocked(fetchAnalysis).mockResolvedValue(completedResponse);
+    const user = userEvent.setup();
+    const { container } = render(<AnalysisView analysisId="analysis-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("brain-viewport")).toBeInTheDocument();
+    });
+
+    expect(container.querySelectorAll('[class*="rotate-6"]').length).toBe(0);
+    expect(container.querySelectorAll('[class*="bg-accent"]').length).toBe(0);
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /deadspace cut recommendation at 2\.00s/i,
+      }),
+    );
+
+    expect(await screen.findByTestId("timeline-note-flyout")).toBeInTheDocument();
+    expect(container.querySelectorAll('[class*="rotate-12"]').length).toBe(0);
+    expect(container.querySelectorAll('[class*="bg-accent"]').length).toBe(0);
+  });
+
   it("renders a compact saved-scan header with status, metrics, and export access", () => {
     const { container } = render(
       <ScanSummaryHeader
