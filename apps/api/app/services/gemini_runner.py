@@ -360,6 +360,10 @@ class GeminiRunner:
         prompt = (
             "You are ordering short-form video clips into a coherent rough cut. "
             "Return strict JSON only. Preserve the clip ids exactly as provided. "
+            "Your primary job is to reconstruct the spoken script in chronological order, not to loosely group related topics. "
+            "Use transcript meaning, transcriptStart, and transcriptEnd to decide which line clearly comes before or after another. "
+            "If one clip sounds like a direct answer, reaction, or continuation of the previous clip's last sentence, keep those clips adjacent in that order. "
+            "Do not move a reply away from the sentence it answers just because another clip feels topically similar. "
             "Use transcript meaning and creator storytelling flow to decide the order first. "
             "Also consider metadata such as recordedAt and fileModifiedAt as secondary chronology clues when the transcript alone is ambiguous or when the clips clearly represent a sequence of events. "
             "Do not blindly sort by timestamp if the spoken narrative clearly suggests a better order. "

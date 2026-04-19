@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -9,7 +10,8 @@ from app.core.config import Settings
 
 
 logger = logging.getLogger(__name__)
-_REQUEST_TIMEOUT_SECONDS = 5.0
+_SERVICE_REQUEST_TIMEOUT_SECONDS = 5.0
+_TRANSFER_TIMEOUT_SECONDS = 120.0
 
 
 class ConvexSyncService:
@@ -26,6 +28,8 @@ class ConvexSyncService:
         convex_upload_id: str | None,
         local_upload_id: str,
         duration_sec: float | None,
+        video_storage_id: str | None = None,
+        thumbnail_storage_id: str | None = None,
     ) -> None:
         if not self.enabled or not convex_upload_id:
             return
@@ -35,6 +39,8 @@ class ConvexSyncService:
                 "uploadId": convex_upload_id,
                 "localUploadId": local_upload_id,
                 "durationSec": duration_sec,
+                "videoStorageId": video_storage_id,
+                "thumbnailStorageId": thumbnail_storage_id,
             },
         )
 
@@ -112,6 +118,7 @@ class ConvexSyncService:
         convex_project_id: str | None,
         latest_local_draft_id: str | None,
         latest_export_url: str | None,
+        latest_export_storage_id: str | None,
         storyline_summary: str | None,
         ordering_confidence: str | None,
         warning_count: int | None,
@@ -124,11 +131,72 @@ class ConvexSyncService:
                 "projectId": convex_project_id,
                 "latestLocalDraftId": latest_local_draft_id,
                 "latestExportUrl": latest_export_url,
+                "latestExportStorageId": latest_export_storage_id,
                 "storylineSummary": storyline_summary,
                 "orderingConfidence": ordering_confidence,
                 "warningCount": warning_count,
             },
         )
+
+    def create_storage_upload_url(self) -> str:
+        response = self._post_json_response("/service/storage/upload-url", {})
+        upload_url = response.get("uploadUrl")
+        if not isinstance(upload_url, str) or not upload_url:
+            raise RuntimeError("Convex did not return an upload URL.")
+        return upload_url
+
+    def resolve_storage_urls(self, storage_ids: list[str]) -> dict[str, str | None]:
+        unique_storage_ids = list(dict.fromkeys(storage_id for storage_id in storage_ids if storage_id))
+        if not unique_storage_ids:
+            return {}
+        response = self._post_json_response("/service/storage/urls", {"storageIds": unique_storage_ids})
+        payload = response.get("urls")
+        if not isinstance(payload, dict):
+            raise RuntimeError("Convex did not return storage URLs.")
+        return {
+            storage_id: (value if isinstance(value, str) else None)
+            for storage_id, value in payload.items()
+        }
+
+    def upload_file(self, path: Path, *, content_type: str | None = None) -> str:
+        if not self.enabled:
+            raise RuntimeError("Convex storage is not configured.")
+        upload_url = self.create_storage_upload_url()
+        with path.open("rb") as file_handle:
+            try:
+                response = httpx.post(
+                    upload_url,
+                    content=file_handle,
+                    headers={"content-type": content_type or "application/octet-stream"},
+                    timeout=_TRANSFER_TIMEOUT_SECONDS,
+                )
+            except httpx.HTTPError as exc:
+                raise RuntimeError(f"Convex upload failed for {path.name}: {exc}") from exc
+        if response.status_code >= 400:
+            raise RuntimeError(
+                f"Convex upload failed for {path.name}: status={response.status_code}"
+            )
+        storage_id = response.json().get("storageId")
+        if not isinstance(storage_id, str) or not storage_id:
+            raise RuntimeError(f"Convex upload did not return a storageId for {path.name}.")
+        return storage_id
+
+    def download_file(self, storage_id: str, destination: Path) -> None:
+        if not self.enabled:
+            raise RuntimeError("Convex storage is not configured.")
+        url = self.resolve_storage_urls([storage_id]).get(storage_id)
+        if not url:
+            raise FileNotFoundError(f"Convex storage file {storage_id!r} was not found.")
+        try:
+            response = httpx.get(url, timeout=_TRANSFER_TIMEOUT_SECONDS)
+        except httpx.HTTPError as exc:
+            raise RuntimeError(f"Convex download failed for {storage_id}: {exc}") from exc
+        if response.status_code >= 400:
+            raise RuntimeError(
+                f"Convex download failed for {storage_id}: status={response.status_code}"
+            )
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(response.content)
 
     def _post(self, path: str, payload: dict[str, Any]) -> None:
         if not self.enabled:
@@ -144,7 +212,7 @@ class ConvexSyncService:
                     "content-type": "application/json",
                     "x-service-secret": self.settings.convex_service_secret or "",
                 },
-                timeout=_REQUEST_TIMEOUT_SECONDS,
+                timeout=_SERVICE_REQUEST_TIMEOUT_SECONDS,
             )
         except httpx.HTTPError as exc:
             logger.warning("Convex sync failed for %s: %s", path, exc)
@@ -155,3 +223,25 @@ class ConvexSyncService:
                 path,
                 response.status_code,
             )
+
+    def _post_json_response(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+        if not self.enabled:
+            raise RuntimeError("Convex storage is not configured.")
+        compact_payload = {key: value for key, value in payload.items() if value is not None}
+        base = (self.settings.convex_site_url or "").rstrip("/")
+        url = f"{base}{path}"
+        try:
+            response = httpx.post(
+                url,
+                json=compact_payload,
+                headers={
+                    "content-type": "application/json",
+                    "x-service-secret": self.settings.convex_service_secret or "",
+                },
+                timeout=_SERVICE_REQUEST_TIMEOUT_SECONDS,
+            )
+        except httpx.HTTPError as exc:
+            raise RuntimeError(f"Convex request failed for {path}: {exc}") from exc
+        if response.status_code >= 400:
+            raise RuntimeError(f"Convex request failed for {path}: status={response.status_code}")
+        return response.json()

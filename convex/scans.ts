@@ -106,7 +106,9 @@ async function summarizeScan(ctx: QueryCtx, row: Doc<"scans">): Promise<ScanSumm
     analysisUrl: row.analysisUrl ?? null,
     overviewRecommendation: row.overviewRecommendation ?? null,
     selectedCutIds: row.selectedCutIds ?? [],
-    latestExportUrl: row.latestExportUrl ?? null,
+    latestExportUrl: row.latestExportStorageId
+      ? await ctx.storage.getUrl(row.latestExportStorageId)
+      : row.latestExportUrl ?? null,
     lastExportedAt: row.lastExportedAt ?? null,
     errorMessage: row.errorMessage ?? null,
     createdAt: row.createdAt,
@@ -343,6 +345,7 @@ export const saveExportMetadata = mutation({
     scanId: v.id("scans"),
     selectedCutIds: v.array(v.string()),
     latestExportUrl: v.string(),
+    latestExportStorageId: v.optional(v.id("_storage")),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -356,6 +359,7 @@ export const saveExportMetadata = mutation({
     await ctx.db.patch(args.scanId, {
       selectedCutIds: args.selectedCutIds,
       latestExportUrl: args.latestExportUrl,
+      latestExportStorageId: args.latestExportStorageId,
       lastExportedAt: Date.now(),
       updatedAt: Date.now(),
     });

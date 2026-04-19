@@ -194,8 +194,12 @@ describe("AnalysisView", () => {
 
     const playButton = screen.getByRole("button", { name: /play video/i });
     const scrubSurface = screen.getByTestId("timeline-scrub-surface");
+    const timelineShell = screen.getByTestId("timeline-shell");
+    const noteCount = within(timeline).getByText("1 notes");
     expect(playButton.className).toContain("bg-primary");
     expect(scrubSurface).toBeInTheDocument();
+    expect(timelineShell.className).toContain("surface");
+    expect(noteCount.className).toContain("sticker");
     expect(screen.getByTestId("timeline-playhead")).toBeInTheDocument();
     expect(screen.queryByTestId("video-timeline-fill")).not.toBeInTheDocument();
     expect(screen.queryByTestId("video-timeline-thumb")).not.toBeInTheDocument();
@@ -419,7 +423,7 @@ describe("AnalysisView", () => {
       originalDurationSec: 12,
       trimmedDurationSec: 11,
       removedSeconds: 1,
-      appliedCuts: [completedResponse.payload.cutPlan[0]],
+      appliedCuts: [completedResponse.payload!.cutPlan[0]],
     });
     const persistSelectedCuts = vi.fn().mockResolvedValue(undefined);
     const persistExport = vi.fn().mockResolvedValue(undefined);
@@ -446,6 +450,7 @@ describe("AnalysisView", () => {
     expect(persistExport).toHaveBeenCalledWith(
       ["deadspace-1"],
       "/storage/trimmed-default.mp4",
+      null,
     );
   });
 
@@ -458,7 +463,7 @@ describe("AnalysisView", () => {
       originalDurationSec: 12,
       trimmedDurationSec: 10,
       removedSeconds: 2,
-      appliedCuts: completedResponse.payload.cutPlan,
+      appliedCuts: completedResponse.payload!.cutPlan,
     });
     const persistSelectedCuts = vi.fn().mockResolvedValue(undefined);
     const user = userEvent.setup();

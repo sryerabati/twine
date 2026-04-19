@@ -25,6 +25,8 @@ class VideoAsset(BaseModel):
     filename: str
     sourceUrl: str
     thumbnailUrl: str
+    sourceStorageId: str | None = None
+    thumbnailStorageId: str | None = None
     durationSec: float
     width: int
     height: int
@@ -121,6 +123,7 @@ class ExportArtifact(BaseModel):
     exportId: str
     createdAt: datetime
     trimmedVideoUrl: str
+    trimmedVideoStorageId: str | None = None
     selectedCutIds: list[str]
     removedSeconds: float
     trimmedDurationSec: float
@@ -150,6 +153,7 @@ class ArtifactLinks(BaseModel):
     eventsCsvUrl: str
     segmentsJsonUrl: str
     trimmedVideoUrl: str | None = None
+    trimmedVideoStorageId: str | None = None
 
 
 class Diagnostics(BaseModel):
@@ -220,6 +224,7 @@ class TrimRequest(BaseModel):
 class TrimResponse(BaseModel):
     analysisId: str
     trimmedVideoUrl: str
+    trimmedVideoStorageId: str | None = None
     originalDurationSec: float
     trimmedDurationSec: float
     removedSeconds: float
@@ -271,6 +276,7 @@ class EditorGenerateRequest(BaseModel):
 
 class EditorDraftExport(BaseModel):
     videoUrl: str
+    videoStorageId: str | None = None
     durationSec: float
 
 

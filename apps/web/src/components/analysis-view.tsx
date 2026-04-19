@@ -37,6 +37,7 @@ type AnalysisViewProps = {
   onPersistExport?: (
     selectedCutIds: string[],
     latestExportUrl: string,
+    latestExportStorageId?: string | null,
   ) => Promise<void> | void;
 };
 
@@ -137,7 +138,11 @@ export function AnalysisView({
     try {
       await onPersistSelectedCuts?.(activeCutIds);
       const result = await trimAnalysis(analysisId, activeCutIds);
-      await onPersistExport?.(activeCutIds, result.trimmedVideoUrl);
+      await onPersistExport?.(
+        activeCutIds,
+        result.trimmedVideoUrl,
+        result.trimmedVideoStorageId ?? null,
+      );
       await reloadAnalysis();
     } catch (exportError) {
       setTrimError(

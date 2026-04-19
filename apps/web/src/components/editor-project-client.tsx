@@ -355,6 +355,10 @@ export function EditorProjectClient({ projectId }: { projectId: string }) {
     draftPresentation.stage !== "failed";
   const draftFailed = draftPresentation?.stage === "failed";
   const untitledProject = currentProject.title.trim() === DEFAULT_PROJECT_TITLE;
+  const visibleProjectError =
+    currentProject.status === "failed" && !draftResponse?.payload
+      ? currentProject.errorMessage
+      : null;
 
   const canGenerate =
     currentProject.clips.length >= 2 &&
@@ -562,24 +566,13 @@ export function EditorProjectClient({ projectId }: { projectId: string }) {
             </div>
           </div>
 
-          <div className="flex flex-col items-start gap-3 lg:items-end">
-            <Button onClick={() => void handleGenerate()} disabled={!canGenerate}>
-              {generating ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : <Sparkles data-icon="inline-start" />}
-              Generate rough cut
-            </Button>
-            {!canGenerate ? (
-              <p className="text-sm text-muted-foreground">
-                Add at least two clips and wait for each upload to finish before generating.
-              </p>
-            ) : null}
-          </div>
         </div>
 
         {actionError ? <p className="mt-4 text-sm text-destructive">{actionError}</p> : null}
         {titleError ? <p className="mt-4 text-sm text-destructive">{titleError}</p> : null}
         {draftError ? <p className="mt-4 text-sm text-destructive">{draftError}</p> : null}
-        {currentProject.errorMessage ? (
-          <p className="mt-4 text-sm text-destructive">{currentProject.errorMessage}</p>
+        {visibleProjectError ? (
+          <p className="mt-4 text-sm text-destructive">{visibleProjectError}</p>
         ) : null}
       </section>
 
@@ -659,6 +652,22 @@ export function EditorProjectClient({ projectId }: { projectId: string }) {
         </div>
 
         {uploadError ? <p className="mt-4 text-sm text-destructive">{uploadError}</p> : null}
+
+        <div className="mt-6 flex flex-col gap-3 border-t border-border/70 pt-6 lg:items-end">
+          <Button className="w-full sm:w-auto" onClick={() => void handleGenerate()} disabled={!canGenerate}>
+            {generating ? (
+              <LoaderCircle data-icon="inline-start" className="animate-spin" />
+            ) : (
+              <Sparkles data-icon="inline-start" />
+            )}
+            Generate rough cut
+          </Button>
+          {!canGenerate ? (
+            <p className="text-sm text-muted-foreground lg:text-right">
+              Add at least two clips and wait for each upload to finish before generating.
+            </p>
+          ) : null}
+        </div>
       </section>
 
       <section

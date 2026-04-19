@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setPathname } from "next/navigation";
 
@@ -42,6 +42,14 @@ describe("AppShell", () => {
       "src",
       expect.stringContaining("twine-mark.png"),
     );
+    expect(brandLink.querySelector("img")).toHaveClass("translate-x-[4%]");
+    expect(brandLink).toHaveClass("gap-4");
+    expect(brandLink.querySelector("img")?.parentElement).toHaveClass(
+      "size-13",
+      "rounded-[1.55rem]",
+      "bg-white",
+    );
+    expect(within(brandLink).getByText(/^Twine$/i)).toHaveClass("text-[1.9rem]");
     expect(screen.queryByText(/Command deck for saved scans/i)).not.toBeInTheDocument();
 
     const dashboardLink = screen.getByRole("link", { name: /Dashboard/i });

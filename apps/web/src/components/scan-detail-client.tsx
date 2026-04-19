@@ -65,8 +65,14 @@ export function ScanDetailClient({ scanId }: { scanId: string }) {
           onPersistSelectedCuts={async (selectedCutIds) => {
             await saveSelectedCuts({ scanId, selectedCutIds } as never);
           }}
-          onPersistExport={async (selectedCutIds, latestExportUrl) => {
-            await saveExportMetadata({ scanId, selectedCutIds, latestExportUrl } as never);
+          onPersistExport={async (selectedCutIds, latestExportUrl, latestExportStorageId) => {
+            const payload = {
+              scanId,
+              selectedCutIds,
+              latestExportUrl,
+              ...(latestExportStorageId ? { latestExportStorageId } : {}),
+            };
+            await saveExportMetadata(payload as never);
           }}
         />
       ) : (
@@ -74,8 +80,14 @@ export function ScanDetailClient({ scanId }: { scanId: string }) {
           initialSelectedCutIds={scan.selectedCutIds}
           localUploadId={scan.localUploadId}
           scanId={scanId}
-          onPersistExport={async (selectedCutIds, latestExportUrl) => {
-            await saveExportMetadata({ scanId, selectedCutIds, latestExportUrl } as never);
+          onPersistExport={async (selectedCutIds, latestExportUrl, latestExportStorageId) => {
+            const payload = {
+              scanId,
+              selectedCutIds,
+              latestExportUrl,
+              ...(latestExportStorageId ? { latestExportStorageId } : {}),
+            };
+            await saveExportMetadata(payload as never);
           }}
           onPersistSelectedCuts={async (selectedCutIds) => {
             await saveSelectedCuts({ scanId, selectedCutIds } as never);
@@ -97,7 +109,11 @@ function RecoveredScanAnalysis({
   localUploadId: string | null;
   initialSelectedCutIds: string[];
   onPersistSelectedCuts: (selectedCutIds: string[]) => Promise<void>;
-  onPersistExport: (selectedCutIds: string[], latestExportUrl: string) => Promise<void>;
+  onPersistExport: (
+    selectedCutIds: string[],
+    latestExportUrl: string,
+    latestExportStorageId?: string | null,
+  ) => Promise<void>;
 }) {
   const [recoveredAnalysisId, setRecoveredAnalysisId] = useState<string | null>(null);
   const [recoveryError, setRecoveryError] = useState<string | null>(null);

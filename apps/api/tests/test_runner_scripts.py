@@ -143,6 +143,8 @@ def make_settings(tmp_path: Path, *, token: str | None) -> Settings:
         huggingface_hub_token=token,
         ffmpeg_bin="ffmpeg",
         ffprobe_bin="ffprobe",
+        convex_site_url=None,
+        convex_service_secret=None,
     )
 
 

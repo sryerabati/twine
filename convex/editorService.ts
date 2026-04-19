@@ -34,6 +34,8 @@ export const updateProjectStatus = internalMutation({
     }
     if (args.errorMessage !== undefined) {
       patch.errorMessage = args.errorMessage.slice(0, 500);
+    } else if (args.status !== "failed") {
+      patch.errorMessage = "";
     }
 
     await ctx.db.patch(args.projectId, patch);
@@ -45,6 +47,7 @@ export const attachDraftSummary = internalMutation({
     projectId: v.id("editorProjects"),
     latestLocalDraftId: v.optional(v.string()),
     latestExportUrl: v.optional(v.string()),
+    latestExportStorageId: v.optional(v.id("_storage")),
     storylineSummary: v.optional(v.string()),
     orderingConfidence: v.optional(ORDERING_CONFIDENCE),
     warningCount: v.optional(v.number()),
@@ -63,6 +66,9 @@ export const attachDraftSummary = internalMutation({
     }
     if (args.latestExportUrl !== undefined) {
       patch.latestExportUrl = args.latestExportUrl;
+    }
+    if (args.latestExportStorageId !== undefined) {
+      patch.latestExportStorageId = args.latestExportStorageId;
     }
     if (args.storylineSummary !== undefined) {
       patch.storylineSummary = args.storylineSummary;

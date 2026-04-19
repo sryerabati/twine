@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -61,6 +61,60 @@ describe("EditorProjectClient", () => {
 
     expect(screen.getByRole("button", { name: /Generate rough cut/i })).toBeDisabled();
     expect(screen.getByText(/Add at least two clips/i)).toBeInTheDocument();
+  });
+
+  it("renders the generate rough cut button beneath the uploaded clips", () => {
+    useQueryMock.mockReturnValue({
+      _id: "project-1",
+      title: "Draft one",
+      status: "drafting",
+      clipCount: 2,
+      latestLocalDraftId: null,
+      latestExportUrl: null,
+      storylineSummary: null,
+      orderingConfidence: null,
+      warningCount: 0,
+      errorMessage: null,
+      createdAt: 1,
+      updatedAt: 2,
+      clips: [
+        {
+          _id: "clip-row-1",
+          uploadId: "upload-1",
+          localUploadId: "local-upload-1",
+          filename: "intro.mp4",
+          durationSec: 12,
+          sourceOrder: 0,
+          createdAt: 1,
+        },
+        {
+          _id: "clip-row-2",
+          uploadId: "upload-2",
+          localUploadId: "local-upload-2",
+          filename: "cta.mp4",
+          durationSec: 9,
+          sourceOrder: 1,
+          createdAt: 2,
+        },
+      ],
+    });
+    useMutationMock.mockReturnValue(vi.fn());
+
+    render(<EditorProjectClient projectId="project-1" />);
+
+    const clipsSection = screen
+      .getByRole("heading", { name: /Upload and manage your sequence/i })
+      .closest("section");
+    const lastClip = screen.getByText("cta.mp4").closest("article");
+
+    expect(clipsSection).not.toBeNull();
+    expect(lastClip).not.toBeNull();
+
+    const generateButton = within(clipsSection as HTMLElement).getByRole("button", {
+      name: /Generate rough cut/i,
+    });
+
+    expect(lastClip!.compareDocumentPosition(generateButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("renders the completed draft review when the latest payload is available", async () => {

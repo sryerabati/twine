@@ -31,7 +31,7 @@ describe("LandingClient", () => {
     expect(screen.getByText(/Read the room before you post\./i)).toBeInTheDocument();
     expect(
       screen.getByRole("heading", {
-        name: /A decision tool for short-form video\./i,
+        name: /A decision and editing tool for short-form video\./i,
       }),
     ).toBeInTheDocument();
     expect(
@@ -39,6 +39,10 @@ describe("LandingClient", () => {
         name: /Built for people shipping content on a schedule\./i,
       }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/turn raw clips into a rough cut with the AI editor/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Build a rough cut/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /UGC creators/i })).toBeInTheDocument();
     expect(screen.getByTestId("brain-viewport")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Log in/i })).toBeInTheDocument();

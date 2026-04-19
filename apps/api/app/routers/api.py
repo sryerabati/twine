@@ -129,6 +129,19 @@ async def upload_video(
         storage.delete_upload(paths.upload_id)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    try:
+        stored_source = storage.store_media_file(
+            paths.source_path,
+            content_type=file.content_type or "video/mp4",
+        )
+        stored_thumbnail = storage.store_media_file(
+            paths.thumbnail_path,
+            content_type="image/jpeg",
+        )
+    except RuntimeError as exc:
+        storage.delete_upload(paths.upload_id)
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
     video = storage.video_asset_from_upload(
         upload_id=paths.upload_id,
         filename=file.filename,
@@ -138,14 +151,22 @@ async def upload_video(
         size_bytes=metadata.size_bytes,
         recorded_at=metadata.recorded_at,
         file_modified_at=client_modified_at or metadata.file_modified_at,
+        source_storage_id=stored_source.storage_id,
+        thumbnail_storage_id=stored_thumbnail.storage_id,
+        source_url=stored_source.url,
+        thumbnail_url=stored_thumbnail.url,
     )
-    response = UploadResponse(uploadId=paths.upload_id, video=video)
+    response = storage.hydrate_upload_response(UploadResponse(uploadId=paths.upload_id, video=video))
     storage.write_upload_metadata(response)
     context.convex_sync.attach_upload_local_id(
         convex_upload_id=convex_upload_id,
         local_upload_id=paths.upload_id,
         duration_sec=metadata.duration_sec,
+        video_storage_id=stored_source.storage_id,
+        thumbnail_storage_id=stored_thumbnail.storage_id,
     )
+    if stored_source.storage_id or stored_thumbnail.storage_id:
+        storage.delete_upload_cache(paths.upload_id)
     return response
 
 
@@ -237,7 +258,7 @@ def get_analysis(
                 detail="Analysis is marked completed but its payload is missing.",
             ) from None
         record = record.model_copy(update={"payload": payload})
-    return record
+    return storage.hydrate_analysis_response(record)
 
 
 @router.get("/analysis/by-upload/{upload_id}", response_model=AnalysisResponse)
@@ -386,9 +407,20 @@ def trim_analysis(
     except MediaInspectionError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    try:
+        stored_trimmed_video = storage.store_media_file(
+            analysis_paths.trimmed_video_path,
+            content_type="video/mp4",
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
     # Patch the payload so later reads surface the trimmed artifact.
     updated_artifacts = payload.artifacts.model_copy(
-        update={"trimmedVideoUrl": storage.to_storage_url(analysis_paths.trimmed_video_path)}
+        update={
+            "trimmedVideoUrl": stored_trimmed_video.url,
+            "trimmedVideoStorageId": stored_trimmed_video.storage_id,
+        }
     )
     updated_diagnostics = payload.diagnostics.model_copy(
         update={"trimmedDurationSec": round(new_duration, 2)}
@@ -398,7 +430,8 @@ def trim_analysis(
         ExportArtifact(
             exportId=uuid4().hex,
             createdAt=datetime.now(UTC),
-            trimmedVideoUrl=storage.to_storage_url(analysis_paths.trimmed_video_path),
+            trimmedVideoUrl=stored_trimmed_video.url,
+            trimmedVideoStorageId=stored_trimmed_video.storage_id,
             selectedCutIds=[cut.id for cut in selected_cuts],
             removedSeconds=round(payload.video.durationSec - new_duration, 2),
             trimmedDurationSec=round(new_duration, 2),
@@ -417,10 +450,13 @@ def trim_analysis(
     # that the getter returns to clients.
     refreshed_record = record.model_copy(update={"payload": updated_payload})
     storage.write_analysis_record(refreshed_record)
+    if stored_trimmed_video.storage_id:
+        analysis_paths.trimmed_video_path.unlink(missing_ok=True)
 
     return TrimResponse(
         analysisId=analysis_id,
         trimmedVideoUrl=updated_artifacts.trimmedVideoUrl or "",
+        trimmedVideoStorageId=stored_trimmed_video.storage_id,
         originalDurationSec=round(payload.video.durationSec, 2),
         trimmedDurationSec=round(new_duration, 2),
         removedSeconds=round(payload.video.durationSec - new_duration, 2),

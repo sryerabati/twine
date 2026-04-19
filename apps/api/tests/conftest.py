@@ -79,12 +79,16 @@ class StubMediaService:
         transcript_density: list[float],
     ) -> MediaFeatures:
         count = len(windows)
+        def series(values: list[float] | list[bool]) -> list[float] | list[bool]:
+            if not values:
+                return [0.0] * count
+            return [values[min(index, len(values) - 1)] for index in range(count)]
         return MediaFeatures(
-            audio_energy=[0.7, 0.9, 0.2, 0.15, 0.85, 0.25][:count],
-            motion_scores=[0.3, 0.8, 0.1, 0.08, 0.7, 0.2][:count],
+            audio_energy=series([0.7, 0.9, 0.2, 0.15, 0.85, 0.25]),
+            motion_scores=series([0.3, 0.8, 0.1, 0.08, 0.7, 0.2]),
             transcript_density=transcript_density,
-            scene_changes=[False, True, False, False, True, False][:count],
-            silence_overlap=[False, False, True, True, False, False][:count],
+            scene_changes=series([False, True, False, False, True, False]),
+            silence_overlap=series([False, False, True, True, False, False]),
             silence_ranges=[(2.0, 3.4)],
             scene_change_count=2,
         )
@@ -207,13 +211,16 @@ def test_settings(tmp_path: Path) -> Settings:
         huggingface_hub_token=None,
         ffmpeg_bin="ffmpeg",
         ffprobe_bin="ffprobe",
+        convex_site_url=None,
+        convex_service_secret=None,
         require_convex_ids=False,
     )
 
 
 @pytest.fixture
 def test_context(test_settings: Settings) -> APIContext:
-    storage = StorageService(test_settings)
+    convex_sync = ConvexSyncService(test_settings)
+    storage = StorageService(test_settings, convex_sync=convex_sync)
     media = StubMediaService(
         VideoMetadata(
             duration_sec=12.0,
@@ -235,7 +242,7 @@ def test_context(test_settings: Settings) -> APIContext:
         runner=runner,
         engine=engine,
         jobs=jobs,
-        convex_sync=ConvexSyncService(test_settings),
+        convex_sync=convex_sync,
         editor_ai=editor_ai,
         editor_jobs=editor_jobs,
     )

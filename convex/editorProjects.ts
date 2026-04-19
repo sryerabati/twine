@@ -63,11 +63,13 @@ async function buildProjectSummary(
     status: project.status,
     clipCount,
     latestLocalDraftId: project.latestLocalDraftId ?? null,
-    latestExportUrl: project.latestExportUrl ?? null,
+    latestExportUrl: project.latestExportStorageId
+      ? await ctx.storage.getUrl(project.latestExportStorageId)
+      : project.latestExportUrl ?? null,
     storylineSummary: project.storylineSummary ?? null,
     orderingConfidence: project.orderingConfidence ?? null,
     warningCount: project.warningCount ?? 0,
-    errorMessage: project.errorMessage ?? null,
+    errorMessage: project.errorMessage?.trim() ? project.errorMessage : null,
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,
   };
@@ -136,6 +138,7 @@ export const addClip = mutation({
     await ctx.db.patch(args.projectId, {
       status: "drafting",
       warningCount: 0,
+      errorMessage: "",
       updatedAt: now,
     });
     return clipId;
@@ -173,6 +176,7 @@ export const removeClip = mutation({
     await ctx.db.patch(args.projectId, {
       status: "drafting",
       warningCount: 0,
+      errorMessage: "",
       updatedAt: Date.now(),
     });
     return args.clipId;
@@ -317,6 +321,7 @@ export const queueGeneration = mutation({
 
     await ctx.db.patch(project._id, {
       status: "queued",
+      errorMessage: "",
       updatedAt: Date.now(),
     });
 

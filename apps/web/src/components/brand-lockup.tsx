@@ -12,14 +12,18 @@ type BrandLockupProps = {
 
 const variantStyles = {
   nav: {
-    root: "gap-3",
-    mark: "size-11 rounded-[1.35rem]",
+    root: "gap-4",
+    mark: "size-13 rounded-[1.55rem]",
+    surface:
+      "border border-white/70 bg-white ring-primary/20 shadow-[0_18px_40px_-24px_rgba(255,255,255,0.7)]",
     meta: "text-[0.6rem] tracking-[0.28em]",
-    title: "text-[1.55rem] tracking-[-0.11em]",
+    title: "text-[1.9rem] tracking-[-0.11em]",
   },
   hero: {
     root: "gap-4",
     mark: "size-14 rounded-[1.65rem] md:size-16",
+    surface:
+      "border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.12),rgba(53,184,95,0.12)_55%,rgba(7,16,10,0.02))] ring-primary/15 shadow-[0_18px_40px_-24px_rgba(53,184,95,0.9)]",
     meta: "text-[0.66rem] tracking-[0.34em] md:text-[0.72rem]",
     title: "text-[2.2rem] tracking-[-0.12em] md:text-[2.7rem]",
   },
@@ -36,7 +40,8 @@ export function BrandLockup({
     <>
       <span
         className={cn(
-          "relative flex shrink-0 items-center justify-center overflow-hidden border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.12),rgba(53,184,95,0.12)_55%,rgba(7,16,10,0.02))] ring-1 ring-primary/15 shadow-[0_18px_40px_-24px_rgba(53,184,95,0.9)]",
+          "relative flex shrink-0 items-center justify-center overflow-hidden ring-1",
+          styles.surface,
           styles.mark,
         )}
       >
@@ -46,7 +51,7 @@ export function BrandLockup({
           aria-hidden
           width={72}
           height={72}
-          className="size-[90%] object-contain drop-shadow-[0_16px_18px_rgba(5,7,5,0.55)]"
+          className="size-[90%] object-contain translate-x-[4%] drop-shadow-[0_16px_18px_rgba(5,7,5,0.55)]"
         />
       </span>
       <span className="flex min-w-0 flex-col">

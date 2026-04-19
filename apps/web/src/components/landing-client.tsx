@@ -15,9 +15,9 @@ const workflowSignals = [
       "Put variations head to head when you're choosing between hooks, trims, captions, or CTAs.",
   },
   {
-    label: "Ship with context",
+    label: "Build a rough cut",
     description:
-      "Give creators, editors, and brand partners a shared reason for why one version is stronger.",
+      "Upload raw clips and let the AI editor trim deadspace, order the story, and render a reviewable first pass.",
   },
 ];
 
@@ -25,17 +25,17 @@ const audiences = [
   {
     title: "UGC creators",
     description:
-      "Pressure-test hooks, offers, and story flow before you post or send a cut back to a brand.",
+      "Pressure-test hooks, offers, and story flow before you post, or turn loose footage into a faster first draft.",
   },
   {
     title: "Content teams",
     description:
-      "Move through variations faster and stop turning edit reviews into opinion battles.",
+      "Move from raw clips to a reviewable cut faster and stop turning edit reviews into opinion battles.",
   },
   {
     title: "Editors and strategists",
     description:
-      "See where attention slips, explain it clearly, and hand over a stronger next version.",
+      "See where attention slips, shape a transcript-led rough cut, and hand over a stronger next version.",
   },
 ];
 
@@ -49,7 +49,8 @@ export function LandingClient() {
               Read the room before you post.
             </h1>
             <p className="mt-5 max-w-[40rem] text-lg leading-8 text-muted-foreground">
-              Drop in one video or make two compete. Twine tells you which one will actually land.
+              Drop in one video, make two compete, or turn raw clips into a rough cut with the AI
+              editor before your team spends time on the wrong version.
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-4">
               <PublicAuthLink className="inline-flex items-center justify-center rounded-full border-2 border-primary bg-primary px-6 py-3 text-base font-semibold text-primary-foreground shadow-[6px_6px_0_0_var(--shadow-stamp)] transition-transform hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[4px_4px_0_0_var(--shadow-stamp)]" />
@@ -71,21 +72,24 @@ export function LandingClient() {
               What Twine is
             </p>
             <h2 className="mt-4 max-w-[12ch] font-heading text-4xl leading-tight tracking-[-0.06em] text-foreground md:text-5xl">
-              A decision tool for short-form video.
+              A decision and editing tool for short-form video.
             </h2>
           </div>
 
           <div className="space-y-8">
             <div className="max-w-2xl space-y-5 text-base leading-8 text-muted-foreground md:text-lg">
               <p>
-                Twine is built for content and UGC creators who have to make posting decisions
-                fast. Instead of waiting for live performance to tell you what worked, it helps you
-                judge the strength of a cut before it ships.
+                Twine is built for content and UGC creators who need to decide what to post and
+                shape a stronger cut fast. Instead of waiting for live performance to tell you what
+                worked, it helps you judge an edit before it ships and build a first draft while
+                you are still staring at raw footage.
               </p>
               <p>
                 Run a single scan when you want a read on one edit, or compare two versions when
-                you are choosing between hooks, trims, captions, or CTAs. The goal is simple:
-                clearer creative calls, less guessing, and fewer weak posts making it out the door.
+                you are choosing between hooks, trims, captions, or CTAs. When you need a first
+                pass, start an AI editor project to trim deadspace, find a transcript-driven order,
+                and render a rough cut you can actually review. The goal is simple: clearer
+                creative calls, faster revisions, and fewer weak posts making it out the door.
               </p>
             </div>
 
@@ -113,8 +117,8 @@ export function LandingClient() {
               Built for people shipping content on a schedule.
             </h2>
             <p className="mt-5 text-base leading-8 text-muted-foreground md:text-lg">
-              Twine is most useful when the work is frequent, subjective, and high volume, exactly
-              the environment most creator teams already live in.
+              Twine is most useful when the work is frequent, subjective, and high volume, and
+              when your team needs both faster feedback and a faster first pass.
             </p>
           </div>
 
@@ -138,8 +142,9 @@ export function LandingClient() {
               Post with a stronger point of view
             </p>
             <p className="mt-4 text-lg leading-8 text-foreground">
-              If your team is choosing between cuts by instinct alone, Twine gives you a faster way
-              to decide what deserves to ship.
+              If your team is choosing between cuts by instinct alone or building first drafts from
+              scratch every time, Twine gives you a faster way to scan, compare, and generate what
+              deserves to ship.
             </p>
           </div>
           <PublicAuthLink

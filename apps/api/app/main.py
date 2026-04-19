@@ -19,7 +19,8 @@ from app.services.tribe_runner import TribeRunner
 
 def build_context(settings=None) -> APIContext:
     resolved_settings = settings or get_settings()
-    storage = StorageService(resolved_settings)
+    convex_sync = ConvexSyncService(resolved_settings)
+    storage = StorageService(resolved_settings, convex_sync=convex_sync)
     media = MediaService(resolved_settings)
     runner = (
         GeminiRunner(resolved_settings)
@@ -27,7 +28,6 @@ def build_context(settings=None) -> APIContext:
         else TribeRunner(resolved_settings)
     )
     engine = AnalysisEngine(storage, media)
-    convex_sync = ConvexSyncService(resolved_settings)
     jobs = AnalysisJobService(storage, runner, engine, convex_sync)
     editor_ai = (
         NvidiaEditorAI(resolved_settings, media)

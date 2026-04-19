@@ -69,6 +69,7 @@ const schema = defineSchema({
     overviewRecommendation: v.optional(v.string()),
     selectedCutIds: v.optional(v.array(v.string())),
     latestExportUrl: v.optional(v.string()),
+    latestExportStorageId: v.optional(v.id("_storage")),
     lastExportedAt: v.optional(v.number()),
     errorMessage: v.optional(v.string()),
     createdAt: v.number(),
@@ -91,6 +92,7 @@ const schema = defineSchema({
     ),
     latestLocalDraftId: v.optional(v.string()),
     latestExportUrl: v.optional(v.string()),
+    latestExportStorageId: v.optional(v.id("_storage")),
     storylineSummary: v.optional(v.string()),
     orderingConfidence: v.optional(
       v.union(v.literal("low"), v.literal("medium"), v.literal("high")),

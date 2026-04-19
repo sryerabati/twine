@@ -61,6 +61,8 @@ http.route({
         uploadId: string;
         localUploadId: string;
         durationSec?: number;
+        videoStorageId?: string;
+        thumbnailStorageId?: string;
       }>(request);
       if (!body.uploadId || !body.localUploadId) {
         return new Response("uploadId and localUploadId are required.", {
@@ -71,8 +73,52 @@ http.route({
         uploadId: body.uploadId as never,
         localUploadId: body.localUploadId,
         durationSec: body.durationSec,
+        videoStorageId: body.videoStorageId as never,
+        thumbnailStorageId: body.thumbnailStorageId as never,
       });
       return new Response(null, { status: 204 });
+    } catch (err) {
+      if (err instanceof Response) return err;
+      return new Response("Internal error.", { status: 500 });
+    }
+  }),
+});
+
+http.route({
+  path: "/service/storage/upload-url",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      assertServiceSecret(request);
+      const uploadUrl = await ctx.storage.generateUploadUrl();
+      return Response.json({ uploadUrl });
+    } catch (err) {
+      if (err instanceof Response) return err;
+      return new Response("Internal error.", { status: 500 });
+    }
+  }),
+});
+
+http.route({
+  path: "/service/storage/urls",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      assertServiceSecret(request);
+      const body = await parseJson<{ storageIds: string[] }>(request);
+      if (!Array.isArray(body.storageIds) || body.storageIds.length === 0) {
+        return new Response("storageIds is required.", { status: 400 });
+      }
+
+      const urls = Object.fromEntries(
+        await Promise.all(
+          body.storageIds.map(async (storageId) => [
+            storageId,
+            await ctx.storage.getUrl(storageId as never),
+          ]),
+        ),
+      );
+      return Response.json({ urls });
     } catch (err) {
       if (err instanceof Response) return err;
       return new Response("Internal error.", { status: 500 });
@@ -185,6 +231,7 @@ http.route({
         projectId: string;
         latestLocalDraftId?: string;
         latestExportUrl?: string;
+        latestExportStorageId?: string;
         storylineSummary?: string;
         orderingConfidence?: "low" | "medium" | "high";
         warningCount?: number;
@@ -196,6 +243,7 @@ http.route({
         projectId: body.projectId as never,
         latestLocalDraftId: body.latestLocalDraftId,
         latestExportUrl: body.latestExportUrl,
+        latestExportStorageId: body.latestExportStorageId as never,
         storylineSummary: body.storylineSummary,
         orderingConfidence: body.orderingConfidence,
         warningCount: body.warningCount,

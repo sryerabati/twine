@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+import re
 
 from app.models.contracts import (
     AnalysisResponse,
@@ -31,6 +32,7 @@ class PreparedEditorClip:
     recorded_at: datetime | None
     file_modified_at: datetime | None
     transcript_preview: str
+    transcript_tail: str
     summary: str
     speech_coverage: float
     warnings: list[str]
@@ -245,9 +247,14 @@ class EditorDraftJobService:
                 )
                 for index, clip in enumerate(ordered_clips, start=1)
             ]
+            stored_draft_video = self.storage.store_media_file(
+                draft_paths.video_path,
+                content_type="video/mp4",
+            )
             payload = EditorDraftPayload(
                 export=EditorDraftExport(
-                    videoUrl=self.storage.to_storage_url(draft_paths.video_path),
+                    videoUrl=stored_draft_video.url,
+                    videoStorageId=stored_draft_video.storage_id,
                     durationSec=round(total_duration, 2),
                 ),
                 storylineSummary=storyline_summary,
@@ -278,10 +285,13 @@ class EditorDraftJobService:
                 convex_project_id=project_id,
                 latest_local_draft_id=draft_id,
                 latest_export_url=payload.export.videoUrl,
+                latest_export_storage_id=payload.export.videoStorageId,
                 storyline_summary=payload.storylineSummary,
                 ordering_confidence=payload.orderingConfidence,
                 warning_count=len(payload.warnings),
             )
+            if stored_draft_video.storage_id:
+                draft_paths.video_path.unlink(missing_ok=True)
         except (GeminiIntegrationError, TribeIntegrationError, FileNotFoundError, MediaInspectionError, RuntimeError) as exc:
             current_record = self.storage.read_editor_draft_record(draft_id)
             failed = EditorDraftResponse(
@@ -343,6 +353,7 @@ class EditorDraftJobService:
         transcript_preview = self._transcript_preview_from_segments(speech_segments) or str(
             ai_summary.get("transcriptPreview") or ""
         )
+        transcript_tail = self._transcript_tail_from_segments(speech_segments) or transcript_preview
         transcript_word_count = 0
 
         if isinstance(self.runner, TribeRunner):
@@ -354,6 +365,10 @@ class EditorDraftJobService:
             transcript_preview = (
                 self._transcript_preview_from_events(result)
                 or transcript_preview
+            )
+            transcript_tail = (
+                self._transcript_tail_from_events(result)
+                or transcript_tail
             )
             transcript_word_count = plan.transcript_word_count
         else:
@@ -387,6 +402,7 @@ class EditorDraftJobService:
             recorded_at=recorded_at,
             file_modified_at=file_modified_at,
             transcript_preview=transcript_preview,
+            transcript_tail=transcript_tail,
             summary=summary,
             speech_coverage=max(speech_coverage, 0.0),
             warnings=self._dedupe_warnings(warnings),
@@ -411,6 +427,8 @@ class EditorDraftJobService:
                         "sourceOrder": clip.source_order,
                         "summary": clip.summary,
                         "transcriptPreview": clip.transcript_preview,
+                        "transcriptStart": clip.transcript_preview,
+                        "transcriptEnd": clip.transcript_tail,
                         "speechCoverage": clip.speech_coverage,
                         "recordedAt": self._serialize_datetime(clip.recorded_at),
                         "fileModifiedAt": self._serialize_datetime(clip.file_modified_at),
@@ -440,8 +458,14 @@ class EditorDraftJobService:
             storyline_summary = str(ordering.get("storylineSummary") or storyline_summary)
             ordering_confidence = str(ordering.get("orderingConfidence") or ordering_confidence)
             warnings.extend(str(item) for item in ordering.get("warnings", []))
+            ordered_clips, repaired_clip_ids = self._repair_direct_script_followups(ordered_clips, clips)
 
             for clip in ordered_clips:
+                if clip.descriptor.clipId in repaired_clip_ids:
+                    clip.rationale = (
+                        "Kept immediately after the prior clip because the script reads like a direct response or continuation."
+                    )
+                    continue
                 if clip.descriptor.clipId in rationale_by_clip:
                     clip.rationale = rationale_by_clip[clip.descriptor.clipId]
                     continue
@@ -460,6 +484,28 @@ class EditorDraftJobService:
         for clip in ordered_clips:
             clip.warnings = self._dedupe_warnings(clip.warnings)
         return ordered_clips, storyline_summary, ordering_confidence, self._dedupe_warnings(warnings)
+
+    def _repair_direct_script_followups(
+        self,
+        ordered_clips: list[PreparedEditorClip],
+        original_clips: list[PreparedEditorClip],
+    ) -> tuple[list[PreparedEditorClip], set[str]]:
+        repaired = list(ordered_clips)
+        repaired_clip_ids: set[str] = set()
+        chronology = sorted(original_clips, key=self._fallback_order_key)
+        for first, second in zip(chronology, chronology[1:]):
+            if not self._should_lock_script_pair(first, second):
+                continue
+            first_index = self._clip_index(repaired, first.descriptor.clipId)
+            second_index = self._clip_index(repaired, second.descriptor.clipId)
+            if first_index < 0 or second_index < 0 or second_index == first_index + 1:
+                continue
+            moving = repaired.pop(second_index)
+            if second_index < first_index:
+                first_index -= 1
+            repaired.insert(first_index + 1, moving)
+            repaired_clip_ids.add(moving.descriptor.clipId)
+        return repaired, repaired_clip_ids
 
     def _build_ordered_clip_payload(
         self,
@@ -520,6 +566,153 @@ class EditorDraftJobService:
             if len(words) >= 18:
                 break
         return " ".join(words[:18]).strip()
+
+    @staticmethod
+    def _transcript_tail_from_events(result: TribeRunResult) -> str:
+        if "text" not in result.events:
+            return ""
+        words = [str(value).strip() for value in result.events["text"].tolist() if str(value).strip()]
+        return " ".join(words[-18:]).strip()
+
+    @staticmethod
+    def _transcript_tail_from_segments(speech_segments: list[tuple[float, float, str]]) -> str:
+        words: list[str] = []
+        for _, _, text in speech_segments:
+            words.extend(part for part in text.split() if part.strip())
+        return " ".join(words[-18:]).strip()
+
+    @staticmethod
+    def _clip_index(clips: list[PreparedEditorClip], clip_id: str) -> int:
+        for index, clip in enumerate(clips):
+            if clip.descriptor.clipId == clip_id:
+                return index
+        return -1
+
+    def _should_lock_script_pair(
+        self,
+        first: PreparedEditorClip,
+        second: PreparedEditorClip,
+    ) -> bool:
+        if first.speech_coverage < 0.2 or second.speech_coverage < 0.2:
+            return False
+        handoff = first.transcript_tail or first.transcript_preview
+        response = second.transcript_preview or second.summary
+        if not handoff.strip() or not response.strip():
+            return False
+        shared_anchor_count = self._shared_anchor_count(handoff, response)
+        question_or_handoff = self._looks_like_question_or_handoff(handoff)
+        response_like = self._looks_like_response_or_continuation(response)
+        if question_or_handoff and shared_anchor_count >= 1:
+            return True
+        if response_like and (question_or_handoff or shared_anchor_count >= 1):
+            return True
+        return False
+
+    @staticmethod
+    def _looks_like_question_or_handoff(text: str) -> bool:
+        normalized = text.strip().lower()
+        if not normalized:
+            return False
+        if "?" in normalized:
+            return True
+        if normalized.endswith((" and", " so", " because", " but")):
+            return True
+        return any(
+            phrase in normalized
+            for phrase in (
+                "one last question",
+                "quick question",
+                "how did",
+                "why did",
+                "what did",
+                "what was",
+                "how was",
+                "tell me",
+                "walk me through",
+                "can you explain",
+                "can you talk about",
+            )
+        )
+
+    @staticmethod
+    def _looks_like_response_or_continuation(text: str) -> bool:
+        normalized = text.strip().lower()
+        if not normalized:
+            return False
+        first_three = " ".join(re.findall(r"[a-z0-9']+", normalized)[:3])
+        return any(
+            first_three.startswith(prefix)
+            for prefix in (
+                "yeah",
+                "yes",
+                "yep",
+                "no",
+                "right",
+                "exactly",
+                "totally",
+                "absolutely",
+                "definitely",
+                "honestly",
+                "basically",
+                "so",
+                "and",
+                "but",
+                "because",
+                "that's",
+                "that is",
+                "this is",
+                "it is",
+                "to answer",
+                "the answer",
+            )
+        )
+
+    @staticmethod
+    def _shared_anchor_count(left: str, right: str) -> int:
+        stop_words = {
+            "a",
+            "an",
+            "about",
+            "and",
+            "are",
+            "because",
+            "did",
+            "for",
+            "from",
+            "had",
+            "have",
+            "how",
+            "i",
+            "is",
+            "it",
+            "last",
+            "of",
+            "on",
+            "one",
+            "or",
+            "question",
+            "so",
+            "that",
+            "the",
+            "this",
+            "to",
+            "was",
+            "we",
+            "what",
+            "you",
+            "your",
+        }
+        left_tokens = {
+            token
+            for token in re.findall(r"[a-z0-9']+", left.lower())
+            if len(token) > 2 and token not in stop_words
+        }
+        right_tokens = {
+            token
+            for token in re.findall(r"[a-z0-9']+", right.lower())
+            if len(token) > 2 and token not in stop_words
+        }
+        return len(left_tokens & right_tokens)
 
     @staticmethod
     def _speech_segments_from_ai(

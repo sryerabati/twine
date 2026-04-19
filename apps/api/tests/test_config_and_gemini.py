@@ -30,6 +30,8 @@ def make_gemini_settings(
         huggingface_hub_token=None,
         ffmpeg_bin="ffmpeg",
         ffprobe_bin="ffprobe",
+        convex_site_url=None,
+        convex_service_secret=None,
     )
 
 
@@ -57,6 +59,8 @@ def test_relative_storage_paths_resolve_from_repo_root() -> None:
         huggingface_hub_token=None,
         ffmpeg_bin="ffmpeg",
         ffprobe_bin="ffprobe",
+        convex_site_url=None,
+        convex_service_secret=None,
     )
 
     assert settings.uploads_dir == REPO_ROOT / "storage" / "uploads"

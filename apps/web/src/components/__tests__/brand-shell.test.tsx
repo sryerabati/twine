@@ -26,12 +26,19 @@ describe("BrandShell", () => {
   });
 
   it("renders a single primary login CTA for signed-out visitors", () => {
-    render(
+    const { container } = render(
       <BrandShell>
         <div>home</div>
       </BrandShell>,
     );
 
+    expect(container.querySelector("header > div")).toHaveClass(
+      "max-w-[90rem]",
+      "px-8",
+      "sm:px-10",
+      "lg:px-16",
+      "xl:px-20",
+    );
     expect(screen.getByRole("link", { name: /^Twine$/i })).toHaveAttribute("href", "/");
     expect(screen.getByRole("link", { name: /Log in/i })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Open dashboard/i })).not.toBeInTheDocument();

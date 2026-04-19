@@ -69,7 +69,11 @@ class NvidiaEditorAI:
 
         prompt = (
             "Return strict JSON only. Do not wrap the JSON in markdown. "
-            "Order these short-form creator clips into the most coherent final sequence using transcript meaning and story flow first. "
+            "Order these short-form creator clips into the most coherent final sequence by reconstructing the spoken script in chronological order. "
+            "Use transcript meaning, transcriptStart, and transcriptEnd to decide which clip clearly leads into the next one. "
+            "If one clip sounds like a direct answer, reaction, or continuation of the previous clip's last sentence, keep those clips adjacent in that order. "
+            "Do not move a reply away from the sentence it answers just because another clip feels topically similar. "
+            "Use transcript meaning and story flow first. "
             "Also consider metadata such as recordedAt and fileModifiedAt as secondary chronology clues when the clips appear to describe a sequence or when the transcript alone is ambiguous. "
             "Do not blindly sort by timestamp if the spoken narrative clearly suggests a better order. "
             "Respond with exactly these keys: storylineSummary, orderingConfidence, orderedClips, warnings. "

@@ -20,6 +20,7 @@ from app.models.contracts import (
     UploadResponse,
     VideoAsset,
 )
+from app.services.convex_sync import ConvexSyncService
 
 
 @dataclass
@@ -54,9 +55,20 @@ class EditorDraftPaths:
     video_path: Path
 
 
+@dataclass
+class StoredMedia:
+    storage_id: str | None
+    url: str
+
+
 class StorageService:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        convex_sync: ConvexSyncService | None = None,
+    ) -> None:
         self.settings = settings
+        self.convex_sync = convex_sync
         self.ensure_directories()
 
     def ensure_directories(self) -> None:
@@ -156,27 +168,73 @@ class StorageService:
         if len(analysis_id) > 64:
             raise FileNotFoundError(f"Analysis {analysis_id!r} not found")
 
-    def upload_paths(self, upload_id: str) -> UploadPaths:
+    def _upload_directory(self, upload_id: str) -> Path:
         self._validate_analysis_id(upload_id)
-        directory = self.settings.uploads_dir / upload_id
+        return self.settings.uploads_dir / upload_id
+
+    def _upload_metadata_path(self, upload_id: str) -> Path:
+        return self._upload_directory(upload_id) / "upload.json"
+
+    def _download_cached_upload_file(
+        self,
+        *,
+        upload_id: str,
+        storage_id: str | None,
+        destination: Path,
+        label: str,
+    ) -> None:
+        if storage_id is None or self.convex_sync is None or not self.convex_sync.enabled:
+            raise FileNotFoundError(f"Upload {upload_id} {label} not found")
+        self.convex_sync.download_file(storage_id, destination)
+
+    def upload_paths(self, upload_id: str) -> UploadPaths:
+        directory = self._upload_directory(upload_id)
+        metadata_path = directory / "upload.json"
         source_candidates = sorted(directory.glob("source.*"))
-        if not source_candidates:
-            raise FileNotFoundError(f"Upload {upload_id} not found")
+        upload_metadata: UploadResponse | None = None
+        if source_candidates:
+            source_path = source_candidates[0]
+        else:
+            if not metadata_path.exists():
+                raise FileNotFoundError(f"Upload {upload_id} not found")
+            upload_metadata = self.read_upload_metadata(upload_id)
+            suffix = Path(upload_metadata.video.filename).suffix.lower() or ".mp4"
+            source_path = directory / f"source{suffix}"
+            if not source_path.exists():
+                self._download_cached_upload_file(
+                    upload_id=upload_id,
+                    storage_id=upload_metadata.video.sourceStorageId,
+                    destination=source_path,
+                    label="source",
+                )
+        thumbnail_path = directory / "thumbnail.jpg"
+        if not thumbnail_path.exists() and metadata_path.exists():
+            upload_metadata = upload_metadata or self.read_upload_metadata(upload_id)
+            if upload_metadata.video.thumbnailStorageId:
+                self._download_cached_upload_file(
+                    upload_id=upload_id,
+                    storage_id=upload_metadata.video.thumbnailStorageId,
+                    destination=thumbnail_path,
+                    label="thumbnail",
+                )
         return UploadPaths(
             upload_id=upload_id,
             directory=directory,
-            source_path=source_candidates[0],
-            thumbnail_path=directory / "thumbnail.jpg",
-            metadata_path=directory / "upload.json",
+            source_path=source_path,
+            thumbnail_path=thumbnail_path,
+            metadata_path=metadata_path,
         )
 
     def write_upload_metadata(self, payload: UploadResponse) -> None:
-        paths = self.upload_paths(payload.uploadId)
-        dump_json(paths.metadata_path, payload.model_dump(mode="json"))
+        metadata_path = self._upload_metadata_path(payload.uploadId)
+        metadata_path.parent.mkdir(parents=True, exist_ok=True)
+        dump_json(metadata_path, payload.model_dump(mode="json"))
 
     def read_upload_metadata(self, upload_id: str) -> UploadResponse:
-        paths = self.upload_paths(upload_id)
-        return UploadResponse.model_validate(load_json(paths.metadata_path))
+        metadata_path = self._upload_metadata_path(upload_id)
+        if not metadata_path.exists():
+            raise FileNotFoundError(f"Upload {upload_id} not found")
+        return UploadResponse.model_validate(load_json(metadata_path))
 
     def init_analysis_record(self, analysis_id: str) -> AnalysisResponse:
         now = datetime.now(UTC)
@@ -273,7 +331,7 @@ class StorageService:
 
         if latest is None:
             raise FileNotFoundError(f"No completed analysis found for upload {upload_id!r}")
-        return latest
+        return self.hydrate_analysis_response(latest)
 
     def find_latest_editor_draft_for_project(self, project_id: str) -> EditorDraftResponse:
         latest: EditorDraftResponse | None = None
@@ -298,7 +356,7 @@ class StorageService:
 
         if latest is None:
             raise FileNotFoundError(f"No editor drafts found for project {project_id!r}")
-        return latest
+        return self.hydrate_editor_draft_response(latest)
 
     def write_segments(self, analysis_id: str, payload: list[dict[str, Any]]) -> None:
         dump_json(self.analysis_paths(analysis_id).segments_path, payload)
@@ -337,6 +395,114 @@ class StorageService:
         relative = path.relative_to(self.settings.storage_root)
         return f"/storage/{relative.as_posix()}"
 
+    def store_media_file(self, path: Path, *, content_type: str | None = None) -> StoredMedia:
+        if self.convex_sync is not None and self.convex_sync.enabled:
+            storage_id = self.convex_sync.upload_file(path, content_type=content_type)
+            url = self.convex_sync.resolve_storage_urls([storage_id]).get(storage_id)
+            if not url:
+                raise RuntimeError(f"Convex did not return a URL for {path.name}.")
+            return StoredMedia(storage_id=storage_id, url=url)
+        return StoredMedia(storage_id=None, url=self.to_storage_url(path))
+
+    def delete_upload_cache(self, upload_id: str) -> None:
+        directory = self._upload_directory(upload_id)
+        for source_path in directory.glob("source.*"):
+            source_path.unlink(missing_ok=True)
+        (directory / "thumbnail.jpg").unlink(missing_ok=True)
+
+    def hydrate_upload_response(self, response: UploadResponse) -> UploadResponse:
+        if self.convex_sync is None or not self.convex_sync.enabled:
+            return response
+        storage_ids = [
+            storage_id
+            for storage_id in [
+                response.video.sourceStorageId,
+                response.video.thumbnailStorageId,
+            ]
+            if storage_id
+        ]
+        if not storage_ids:
+            return response
+        try:
+            urls = self.convex_sync.resolve_storage_urls(storage_ids)
+        except RuntimeError:
+            return response
+        video = response.video.model_copy(
+            update={
+                "sourceUrl": urls.get(response.video.sourceStorageId) or response.video.sourceUrl,
+                "thumbnailUrl": urls.get(response.video.thumbnailStorageId)
+                or response.video.thumbnailUrl,
+            }
+        )
+        return response.model_copy(update={"video": video})
+
+    def hydrate_analysis_response(self, record: AnalysisResponse) -> AnalysisResponse:
+        if self.convex_sync is None or not self.convex_sync.enabled or record.payload is None:
+            return record
+        storage_ids = [
+            storage_id
+            for storage_id in [
+                record.payload.video.sourceStorageId,
+                record.payload.video.thumbnailStorageId,
+                record.payload.artifacts.trimmedVideoStorageId,
+                *(export.trimmedVideoStorageId for export in record.payload.exports),
+            ]
+            if storage_id
+        ]
+        if not storage_ids:
+            return record
+        try:
+            urls = self.convex_sync.resolve_storage_urls(storage_ids)
+        except RuntimeError:
+            return record
+        payload = record.payload
+        video = payload.video.model_copy(
+            update={
+                "sourceUrl": urls.get(payload.video.sourceStorageId) or payload.video.sourceUrl,
+                "thumbnailUrl": urls.get(payload.video.thumbnailStorageId)
+                or payload.video.thumbnailUrl,
+            }
+        )
+        artifacts = payload.artifacts.model_copy(
+            update={
+                "trimmedVideoUrl": urls.get(payload.artifacts.trimmedVideoStorageId)
+                or payload.artifacts.trimmedVideoUrl,
+            }
+        )
+        exports = [
+            export.model_copy(
+                update={
+                    "trimmedVideoUrl": urls.get(export.trimmedVideoStorageId)
+                    or export.trimmedVideoUrl,
+                }
+            )
+            for export in payload.exports
+        ]
+        next_payload = payload.model_copy(
+            update={
+                "video": video,
+                "artifacts": artifacts,
+                "exports": exports,
+            }
+        )
+        return record.model_copy(update={"payload": next_payload})
+
+    def hydrate_editor_draft_response(self, record: EditorDraftResponse) -> EditorDraftResponse:
+        if self.convex_sync is None or not self.convex_sync.enabled or record.payload is None:
+            return record
+        storage_id = record.payload.export.videoStorageId
+        if not storage_id:
+            return record
+        try:
+            url = self.convex_sync.resolve_storage_urls([storage_id]).get(storage_id)
+        except RuntimeError:
+            return record
+        if not url:
+            return record
+        export = record.payload.export.model_copy(update={"videoUrl": url})
+        payload = record.payload.model_copy(update={"export": export})
+        return record.model_copy(update={"payload": payload})
+
     def video_asset_from_upload(
         self,
         upload_id: str,
@@ -348,13 +514,19 @@ class StorageService:
         *,
         recorded_at: datetime | None = None,
         file_modified_at: datetime | None = None,
+        source_storage_id: str | None = None,
+        thumbnail_storage_id: str | None = None,
+        source_url: str | None = None,
+        thumbnail_url: str | None = None,
     ) -> VideoAsset:
         paths = self.upload_paths(upload_id)
         return VideoAsset(
             uploadId=upload_id,
             filename=filename,
-            sourceUrl=self.to_storage_url(paths.source_path),
-            thumbnailUrl=self.to_storage_url(paths.thumbnail_path),
+            sourceUrl=source_url or self.to_storage_url(paths.source_path),
+            thumbnailUrl=thumbnail_url or self.to_storage_url(paths.thumbnail_path),
+            sourceStorageId=source_storage_id,
+            thumbnailStorageId=thumbnail_storage_id,
             durationSec=duration_sec,
             width=width,
             height=height,

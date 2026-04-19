@@ -31,6 +31,8 @@ export type VideoAsset = {
   filename: string;
   sourceUrl: string;
   thumbnailUrl: string;
+  sourceStorageId?: string | null;
+  thumbnailStorageId?: string | null;
   durationSec: number;
   width: number;
   height: number;
@@ -109,6 +111,7 @@ export type ExportArtifact = {
   exportId: string;
   createdAt: string;
   trimmedVideoUrl: string;
+  trimmedVideoStorageId?: string | null;
   selectedCutIds: string[];
   removedSeconds: number;
   trimmedDurationSec: number;
@@ -157,6 +160,7 @@ export type AnalysisPayload = {
     eventsCsvUrl: string;
     segmentsJsonUrl: string;
     trimmedVideoUrl: string | null;
+    trimmedVideoStorageId?: string | null;
   };
   diagnostics: {
     device: string;
@@ -217,6 +221,7 @@ export type TrimRequest = {
 export type TrimResponse = {
   analysisId: string;
   trimmedVideoUrl: string;
+  trimmedVideoStorageId?: string | null;
   originalDurationSec: number;
   trimmedDurationSec: number;
   removedSeconds: number;
@@ -323,6 +328,7 @@ export type OrderedDraftClip = {
 export type EditorDraftPayload = {
   export: {
     videoUrl: string;
+    videoStorageId?: string | null;
     durationSec: number;
   };
   storylineSummary: string;
