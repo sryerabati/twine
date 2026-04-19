@@ -1,9 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { startTransition, useEffect, useState } from "react";
 import { useMutation } from "convex/react";
-import { ArrowUpRight, GitCompareArrows, LoaderCircle, Upload } from "lucide-react";
+import { GitCompareArrows, LoaderCircle, Upload } from "lucide-react";
 
 import { UploadDropzone } from "@/components/upload-dropzone";
 import { Badge } from "@/components/ui/badge";
@@ -227,23 +226,7 @@ export function UploadWorkbench({
         </div>
 
         <div className="mt-6 flex flex-col gap-4 border-t border-border/70 pt-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-3">
-            <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-              {mode === "single"
-                ? "The upload row is created first, then analysis starts against that scan."
-                : "Both files upload first, then one compare scan is persisted and linked to both analyses."}
-            </p>
-
-            <div className="flex flex-wrap items-center gap-3 text-sm text-primary/70">
-              <span>No bundled sample clip.</span>
-              <Link href="/runbook" className="inline-flex items-center gap-1 text-primary transition-colors hover:text-accent-foreground">
-                Prepare a test MP4
-                <ArrowUpRight className="size-4" />
-              </Link>
-            </div>
-
-            {actionError ? <p className="text-sm text-destructive">{actionError}</p> : null}
-          </div>
+          <div>{actionError ? <p className="text-sm text-destructive">{actionError}</p> : null}</div>
 
           {mode === "single" ? (
             <Button onClick={handleSingle} disabled={singleDisabled}>

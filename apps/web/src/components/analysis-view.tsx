@@ -251,7 +251,7 @@ export function buildEstimatedScanProgress(
   return {
     value: clampProgress(value, 34, 92),
     label: "Estimated progress",
-    hint: "Reading reactions, pacing, and scene changes. The bar slows down near the end and only completes when the scan does.",
+    hint: "Reading reactions, pacing, and scene changes. Finalizing the scan output so the workspace can open.",
   };
 }
 
@@ -317,6 +317,7 @@ function CompletedAnalysis({
   const [isPlaying, setIsPlaying] = useState(false);
   const focusTimeSec = previewTimeSec ?? activeTimeSec;
   const latestExport = payload.exports[payload.exports.length - 1] ?? null;
+  const playerSourceUrl = latestExport?.trimmedVideoUrl ?? payload.video.sourceUrl;
   const chartData = payload.brainResponse.timeSeries.map((point) => ({
     t: Number(point.stimulusTimeSec.toFixed(2)),
     activation: point.globalActivation,
@@ -469,7 +470,7 @@ function CompletedAnalysis({
               className="aspect-video w-full rounded-[1.5rem] border-2 border-border bg-black"
               preload="metadata"
               playsInline
-              src={payload.video.sourceUrl}
+              src={playerSourceUrl}
               onClick={() => void togglePlayback()}
               onLoadedMetadata={(event) => onActiveTimeChange(event.currentTarget.currentTime)}
               onPlay={() => setIsPlaying(true)}

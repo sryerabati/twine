@@ -11,20 +11,32 @@ import { isConvexConfigured } from "@/lib/convex";
 
 export function AuthGate({ children }: { children: ReactNode }) {
   if (!isConvexConfigured()) {
-    return <ConvexSetupPanel />;
+    return (
+      <CenteredAuthFrame>
+        <ConvexSetupPanel />
+      </CenteredAuthFrame>
+    );
   }
 
   return (
     <>
       <AuthLoading>
-        <AuthLoadingPanel />
+        <CenteredAuthFrame>
+          <AuthLoadingPanel />
+        </CenteredAuthFrame>
       </AuthLoading>
       <Unauthenticated>
-        <LoginPanel />
+        <CenteredAuthFrame>
+          <LoginPanel />
+        </CenteredAuthFrame>
       </Unauthenticated>
       <Authenticated>{children}</Authenticated>
     </>
   );
+}
+
+function CenteredAuthFrame({ children }: { children: ReactNode }) {
+  return <div className="mx-auto flex min-h-screen w-full items-center justify-center px-6 py-10">{children}</div>;
 }
 
 function AuthLoadingPanel() {

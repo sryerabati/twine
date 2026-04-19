@@ -124,6 +124,18 @@
     box-shadow: 2px 2px 0 0 var(--shadow-stamp);
   }
 
+  .poster-grid {
+    background-image:
+      linear-gradient(rgba(134, 216, 158, 0.08) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(134, 216, 158, 0.08) 1px, transparent 1px);
+    background-position: center;
+    background-size: 34px 34px;
+  }
+
+  .hero-blob {
+    border-radius: 42% 58% 63% 37% / 36% 42% 58% 64%;
+  }
+
   .skeleton-flow {
     position: relative;
     isolation: isolate;
@@ -208,5 +220,15 @@
 @keyframes skeleton-flow {
   100% {
     transform: translateX(100%);
+  }
+}
+
+@keyframes float-card {
+  0%,
+  100% {
+    transform: translateY(0px) rotate(var(--float-rotate, 0deg));
+  }
+  50% {
+    transform: translateY(-10px) rotate(calc(var(--float-rotate, 0deg) + 1.5deg));
   }
 }

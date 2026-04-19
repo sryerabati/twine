@@ -333,6 +333,17 @@ describe("AnalysisView", () => {
     expect(later.value).toBeLessThan(100);
   });
 
+  it("uses neutral loading copy while a scan is running", () => {
+    const running = buildEstimatedScanProgress(
+      "running",
+      "2026-04-19T12:00:00.000Z",
+      new Date("2026-04-19T12:00:12.000Z").getTime(),
+    );
+
+    expect(running.hint).not.toMatch(/slows down near the end/i);
+    expect(running.hint).toMatch(/Finalizing the scan output so the workspace can open\./i);
+  });
+
   it("seeks the video from the custom timeline", async () => {
     const { fetchAnalysis } = await import("@/lib/api");
     vi.mocked(fetchAnalysis).mockResolvedValue(completedResponse);
@@ -445,7 +456,34 @@ describe("AnalysisView", () => {
 
   it("removes deadspace from the player box using the default speech-safe cuts", async () => {
     const { fetchAnalysis, trimAnalysis } = await import("@/lib/api");
-    vi.mocked(fetchAnalysis).mockResolvedValue(completedResponse);
+    vi.mocked(fetchAnalysis)
+      .mockResolvedValueOnce(completedResponse)
+      .mockResolvedValueOnce({
+        ...completedResponse,
+        payload: {
+          ...completedResponse.payload!,
+          exports: [
+            {
+              exportId: "export-1",
+              createdAt: "2026-04-19T10:00:00.000Z",
+              trimmedVideoUrl: "/storage/trimmed-default.mp4",
+              trimmedVideoStorageId: null,
+              selectedCutIds: ["deadspace-1"],
+              removedSeconds: 1,
+              trimmedDurationSec: 11,
+            },
+          ],
+          artifacts: {
+            ...completedResponse.payload!.artifacts,
+            trimmedVideoUrl: "/storage/trimmed-default.mp4",
+            trimmedVideoStorageId: null,
+          },
+          diagnostics: {
+            ...completedResponse.payload!.diagnostics,
+            trimmedDurationSec: 11,
+          },
+        },
+      });
     vi.mocked(trimAnalysis).mockResolvedValue({
       analysisId: "analysis-1",
       trimmedVideoUrl: "/storage/trimmed-default.mp4",
@@ -481,11 +519,44 @@ describe("AnalysisView", () => {
       "/storage/trimmed-default.mp4",
       null,
     );
+    await waitFor(() => {
+      expect(document.querySelector("video")).toHaveAttribute(
+        "src",
+        "/storage/trimmed-default.mp4",
+      );
+    });
   });
 
   it("can switch to the lenient trim mode before removing deadspace", async () => {
     const { fetchAnalysis, trimAnalysis } = await import("@/lib/api");
-    vi.mocked(fetchAnalysis).mockResolvedValue(completedResponse);
+    vi.mocked(fetchAnalysis)
+      .mockResolvedValueOnce(completedResponse)
+      .mockResolvedValueOnce({
+        ...completedResponse,
+        payload: {
+          ...completedResponse.payload!,
+          exports: [
+            {
+              exportId: "export-1",
+              createdAt: "2026-04-19T10:00:00.000Z",
+              trimmedVideoUrl: "/storage/trimmed-lenient.mp4",
+              trimmedVideoStorageId: null,
+              selectedCutIds: ["deadspace-1", "low-value-1"],
+              removedSeconds: 2,
+              trimmedDurationSec: 10,
+            },
+          ],
+          artifacts: {
+            ...completedResponse.payload!.artifacts,
+            trimmedVideoUrl: "/storage/trimmed-lenient.mp4",
+            trimmedVideoStorageId: null,
+          },
+          diagnostics: {
+            ...completedResponse.payload!.diagnostics,
+            trimmedDurationSec: 10,
+          },
+        },
+      });
     vi.mocked(trimAnalysis).mockResolvedValue({
       analysisId: "analysis-1",
       trimmedVideoUrl: "/storage/trimmed-lenient.mp4",
@@ -521,6 +592,12 @@ describe("AnalysisView", () => {
         "deadspace-1",
         "low-value-1",
       ]);
+    });
+    await waitFor(() => {
+      expect(document.querySelector("video")).toHaveAttribute(
+        "src",
+        "/storage/trimmed-lenient.mp4",
+      );
     });
   });
 

@@ -1,156 +1,140 @@
 "use client";
 
-import { LandingBrainModel } from "@/components/landing-brain-model";
+import { LandingBridge } from "@/components/landing-bridge";
+import { LandingEditorVisual } from "@/components/landing-editor-visual";
+import { LandingFeatureLane } from "@/components/landing-feature-lane";
+import { LandingHero } from "@/components/landing-hero";
 import { PublicAuthLink } from "@/components/auth/public-auth-link";
 
-const workflowSignals = [
+const bridgeMarkers = [
   {
-    label: "Scan one cut",
+    label: "Read one cut",
     description:
-      "Upload a single video to read hook pressure, pacing, and clarity before it goes live.",
+      "See hook pressure, pacing, and clarity before the post goes live and the comments do the diagnosing for you.",
   },
   {
     label: "Compare two edits",
     description:
-      "Put variations head to head when you're choosing between hooks, trims, captions, or CTAs.",
+      "Put hooks, trims, captions, or CTAs head to head when instinct alone is not enough to choose.",
   },
   {
-    label: "Build a rough cut",
+    label: "Build the next pass",
     description:
-      "Upload raw clips and let the AI editor trim deadspace, order the story, and render a reviewable first pass.",
+      "Turn raw clips into a rough cut with transcript-guided ordering, deadspace trims, and a version your team can actually review.",
   },
 ];
 
-const audiences = [
+const analysisPoints = [
   {
-    title: "UGC creators",
+    label: "Hook pressure",
     description:
-      "Pressure-test hooks, offers, and story flow before you post, or turn loose footage into a faster first draft.",
+      "Catch whether the opening earns the next few seconds before the post is already out in the world.",
   },
   {
-    title: "Content teams",
+    label: "A/B judgment",
     description:
-      "Move from raw clips to a reviewable cut faster and stop turning edit reviews into opinion battles.",
+      "Put two directions side by side when the team is split between versions and vibes are not enough.",
   },
   {
-    title: "Editors and strategists",
+    label: "Clarity drift",
     description:
-      "See where attention slips, shape a transcript-led rough cut, and hand over a stronger next version.",
+      "See where messaging softens, pacing slips, or the offer loses its shape before the cut ships.",
+  },
+];
+
+const editorPoints = [
+  {
+    label: "Transcript-led rough cut",
+    description:
+      "Start from what was actually said so the first pass has structure instead of just trims.",
+  },
+  {
+    label: "Deadspace trim",
+    description:
+      "Strip the obvious pauses and drag so your first review starts closer to the right rhythm.",
+  },
+  {
+    label: "Story order",
+    description:
+      "Hand over a cut with a workable sequence, not a folder of clips and a hope that someone finds the arc.",
   },
 ];
 
 export function LandingClient() {
   return (
     <main className="overflow-x-hidden bg-background">
-      <section>
-        <div className="mx-auto grid min-h-[calc(100svh-73px)] max-w-[90rem] items-center gap-14 px-8 py-12 sm:px-10 lg:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)] lg:gap-24 lg:px-16 lg:py-16 xl:gap-28 xl:px-20">
-          <div className="max-w-[44rem]">
-            <h1 className="max-w-[13.4ch] font-heading text-6xl leading-[0.9] tracking-[-0.06em] text-foreground md:text-7xl lg:text-[5.9rem]">
-              Read the room before you post.
-            </h1>
-            <p className="mt-5 max-w-[40rem] text-lg leading-8 text-muted-foreground">
-              Drop in one video, make two compete, or turn raw clips into a rough cut with the AI
-              editor before your team spends time on the wrong version.
-            </p>
-            <div className="mt-9 flex flex-wrap items-center gap-4">
-              <PublicAuthLink className="inline-flex items-center justify-center rounded-full border-2 border-primary bg-primary px-6 py-3 text-base font-semibold text-primary-foreground shadow-[6px_6px_0_0_var(--shadow-stamp)] transition-transform hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[4px_4px_0_0_var(--shadow-stamp)]" />
-            </div>
-          </div>
-
-          <div className="flex w-full justify-center lg:justify-end">
-            <div className="w-full max-w-[40rem] xl:max-w-[43rem]">
-              <LandingBrainModel />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="border-y border-primary/15 bg-[linear-gradient(180deg,rgba(18,22,20,0.98),rgba(18,22,20,0.7))]">
-        <div className="mx-auto grid max-w-[76rem] gap-10 px-10 py-16 sm:px-12 lg:grid-cols-[0.84fr_1.16fr] lg:px-20 lg:py-20 xl:px-24">
-          <div className="max-w-md">
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-primary/70">
-              What Twine is
-            </p>
-            <h2 className="mt-4 max-w-[12ch] font-heading text-4xl leading-tight tracking-[-0.06em] text-foreground md:text-5xl">
-              A decision and editing tool for short-form video.
-            </h2>
-          </div>
-
-          <div className="space-y-8">
-            <div className="max-w-2xl space-y-5 text-base leading-8 text-muted-foreground md:text-lg">
-              <p>
-                Twine is built for content and UGC creators who need to decide what to post and
-                shape a stronger cut fast. Instead of waiting for live performance to tell you what
-                worked, it helps you judge an edit before it ships and build a first draft while
-                you are still staring at raw footage.
-              </p>
-              <p>
-                Run a single scan when you want a read on one edit, or compare two versions when
-                you are choosing between hooks, trims, captions, or CTAs. When you need a first
-                pass, start an AI editor project to trim deadspace, find a transcript-driven order,
-                and render a rough cut you can actually review. The goal is simple: clearer
-                creative calls, faster revisions, and fewer weak posts making it out the door.
-              </p>
-            </div>
-
-            <dl className="grid gap-6 sm:grid-cols-3">
-              {workflowSignals.map((item) => (
-                <div key={item.label} className="border-t border-primary/25 pt-4">
-                  <dt className="text-sm font-semibold uppercase tracking-[0.2em] text-primary/75">
-                    {item.label}
-                  </dt>
-                  <dd className="mt-3 text-sm leading-7 text-muted-foreground">{item.description}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-[76rem] px-10 py-16 sm:px-12 lg:px-20 lg:py-20 xl:px-24">
-        <div className="grid gap-10 lg:grid-cols-[0.86fr_1.14fr]">
-          <div className="max-w-md">
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-primary/70">
-              Who it is for
-            </p>
-            <h2 className="mt-4 max-w-[13ch] font-heading text-4xl leading-tight tracking-[-0.06em] text-foreground md:text-5xl">
-              Built for people shipping content on a schedule.
-            </h2>
-            <p className="mt-5 text-base leading-8 text-muted-foreground md:text-lg">
-              Twine is most useful when the work is frequent, subjective, and high volume, and
-              when your team needs both faster feedback and a faster first pass.
-            </p>
-          </div>
-
-          <div className="grid gap-6 md:grid-cols-3">
-            {audiences.map((audience) => (
-              <article key={audience.title} className="border-l-2 border-primary/25 pl-5">
-                <h3 className="text-xl font-semibold tracking-[-0.04em] text-foreground">
-                  {audience.title}
-                </h3>
-                <p className="mt-4 text-sm leading-7 text-muted-foreground">
-                  {audience.description}
+      <LandingHero />
+      <LandingBridge markers={bridgeMarkers} />
+      <LandingFeatureLane
+        eyebrow="Scan lane"
+        title="Scan the cut before it goes live."
+        body="Pick the hook, pace, and framing that actually deserves to ship. Twine helps teams pressure-test one edit or compare two versions before live performance makes the call for you."
+        bullets={analysisPoints}
+        tone="analysis"
+        visual={
+          <div className="surface relative overflow-hidden rounded-[2.1rem] p-5 md:p-6">
+            <span className="sticker absolute left-4 top-4 px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-secondary-foreground">
+              Scan board
+            </span>
+            <div className="grid gap-4 pt-10">
+              <div className="surface-soft rounded-[1.5rem] p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/80">
+                  Pick the winner
                 </p>
-              </article>
-            ))}
-          </div>
-        </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-[1.2rem] border-2 border-primary bg-primary/12 px-4 py-5">
+                    <p className="text-sm font-semibold text-foreground">Cut A</p>
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                      Sharper hook, clearer offer, stronger opening pace.
+                    </p>
+                  </div>
+                  <div className="rounded-[1.2rem] border-2 border-border bg-background/65 px-4 py-5">
+                    <p className="text-sm font-semibold text-foreground">Cut B</p>
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                      Slower start, softer transition into the proof beat.
+                    </p>
+                  </div>
+                </div>
+              </div>
 
-        <div className="mt-14 flex flex-col gap-6 border-t border-primary/15 pt-8 lg:flex-row lg:items-end lg:justify-between">
+              <div className="grid gap-4 sm:grid-cols-3">
+                {["Hook pressure", "Pacing", "Clarity"].map((item) => (
+                  <div key={item} className="surface-soft rounded-[1.4rem] p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/80">
+                      {item}
+                    </p>
+                    <div className="mt-4 h-2 rounded-full bg-primary/15">
+                      <div className="h-2 rounded-full bg-primary" style={{ width: "72%" }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        }
+      />
+      <LandingFeatureLane
+        eyebrow="Build lane"
+        title="Build the first pass while the footage is still fresh."
+        body="Cut deadspace, find the story, and hand over a usable first pass while raw clips are still easy to shape. The editor lane turns scattered footage into something your team can react to immediately."
+        bullets={editorPoints}
+        tone="editor"
+        visual={<LandingEditorVisual />}
+      />
+
+      <section className="mx-auto max-w-[84rem] px-6 pb-18 pt-8 sm:px-10 lg:px-16 xl:px-20">
+        <div className="surface flex flex-col gap-6 rounded-[2.2rem] px-6 py-8 lg:flex-row lg:items-end lg:justify-between lg:px-8">
           <div className="max-w-2xl">
-            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-primary/70">
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-primary/75">
               Post with a stronger point of view
             </p>
             <p className="mt-4 text-lg leading-8 text-foreground">
-              If your team is choosing between cuts by instinct alone or building first drafts from
-              scratch every time, Twine gives you a faster way to scan, compare, and generate what
-              deserves to ship.
+              Scan the version you have. Build the version you need next. Twine keeps both moves in
+              one playful workflow instead of splitting judgment and editing into separate tools.
             </p>
           </div>
           <PublicAuthLink
             className="inline-flex items-center justify-center rounded-full border-2 border-primary bg-primary px-6 py-3 text-base font-semibold text-primary-foreground shadow-[6px_6px_0_0_var(--shadow-stamp)] transition-transform hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[4px_4px_0_0_var(--shadow-stamp)]"
-            authenticatedLabel="Open dashboard"
-            unauthenticatedLabel="Start with Twine"
           />
         </div>
       </section>

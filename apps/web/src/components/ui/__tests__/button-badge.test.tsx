@@ -15,6 +15,21 @@ describe("cartoon visual primitives", () => {
     );
   });
 
+  it("presses the primary button straight down into its base", () => {
+    render(<Button>Start scan</Button>);
+
+    expect(screen.getByRole("button", { name: /Start scan/i })).toHaveClass(
+      "hover:translate-y-[1px]",
+      "hover:shadow-[4px_3px_0_0_var(--color-primary)]",
+      "active:not-aria-[haspopup]:translate-y-[4px]",
+      "active:shadow-[4px_0_0_0_var(--color-primary)]",
+    );
+    expect(screen.getByRole("button", { name: /Start scan/i })).not.toHaveClass(
+      "hover:translate-x-[1px]",
+      "active:not-aria-[haspopup]:translate-x-[2px]",
+    );
+  });
+
   it("renders outline buttons as flat secondary controls", () => {
     render(<Button variant="outline">Browse files</Button>);
 

@@ -46,12 +46,13 @@ describe("AuthGate", () => {
   it("renders the login panel when the user is signed out", () => {
     authState = "unauthenticated";
     process.env.NEXT_PUBLIC_CONVEX_URL = "https://example.convex.cloud";
-    render(
+    const { container } = render(
       <AuthGate>
         <div>private area</div>
       </AuthGate>,
     );
     expect(screen.getByText(/Sign in to Twine/i)).toBeInTheDocument();
+    expect(container.firstElementChild).toHaveClass("mx-auto", "flex", "min-h-screen", "items-center");
     expect(screen.queryByText(/private area/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/What happens after login/i)).not.toBeInTheDocument();
   });
