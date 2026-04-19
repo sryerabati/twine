@@ -151,7 +151,7 @@ def analyze_video(
     storage = context.storage
     jobs = context.jobs
     settings = context.settings
-    if settings.require_convex_ids and not request.convexScanId:
+    if settings.require_convex_ids and request.syncToConvexScan and not request.convexScanId:
         raise HTTPException(
             status_code=400,
             detail="convexScanId is required. Log in and let the app create a pending scan first.",
@@ -165,14 +165,15 @@ def analyze_video(
         storage.read_upload_metadata(request.uploadId)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Upload not found.") from exc
+    convex_scan_id = request.convexScanId if request.syncToConvexScan else None
     paths = storage.create_analysis_paths()
     record = storage.init_analysis_record(paths.analysis_id)
     context.convex_sync.update_scan_status(
-        convex_scan_id=request.convexScanId,
+        convex_scan_id=convex_scan_id,
         status="queued",
         local_analysis_id=paths.analysis_id,
     )
-    jobs.enqueue(paths.analysis_id, request.uploadId, request.convexScanId)
+    jobs.enqueue(paths.analysis_id, request.uploadId, convex_scan_id)
     return record
 
 

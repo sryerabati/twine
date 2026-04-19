@@ -15,6 +15,12 @@ const navigation = [
   { href: "/app/library", label: "Library" },
 ];
 
+const navButtonClassName =
+  "rounded-full border-[#19241d] bg-card text-foreground shadow-[5px_5px_0_0_var(--color-border)] hover:border-primary hover:bg-primary hover:text-primary-foreground hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[3px_3px_0_0_var(--color-border)] active:border-primary active:bg-secondary active:text-secondary-foreground active:shadow-[2px_2px_0_0_var(--color-border)] active:not-aria-[haspopup]:translate-x-[3px] active:not-aria-[haspopup]:translate-y-[3px]";
+
+const activeNavButtonClassName =
+  "border-primary bg-secondary text-secondary-foreground translate-x-[3px] translate-y-[3px] shadow-[2px_2px_0_0_var(--color-border)] hover:border-primary hover:bg-secondary hover:text-secondary-foreground hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-[2px_2px_0_0_var(--color-border)] active:border-primary active:bg-secondary active:text-secondary-foreground active:shadow-[2px_2px_0_0_var(--color-border)] active:not-aria-[haspopup]:translate-x-[3px] active:not-aria-[haspopup]:translate-y-[3px]";
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { signOut } = useAuthActions();
@@ -22,19 +28,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const userLabel = currentUser?.name?.trim() || currentUser?.email || "Workspace";
 
   return (
-    <div className="flex min-h-screen flex-col bg-[radial-gradient(circle_at_top_left,rgba(244,114,182,0.16),transparent_26%),radial-gradient(circle_at_top_right,rgba(251,191,36,0.08),transparent_18%),linear-gradient(180deg,#0a0910_0%,#09070d_48%,#050507_100%)] text-foreground">
-      <header className="sticky top-0 z-30 border-b border-white/10 bg-black/55 backdrop-blur-xl">
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
+      <header className="sticky top-0 z-30 border-b-2 border-border bg-background">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex items-center gap-4">
             <Link href="/" className="flex items-center gap-3">
-              <span className="flex size-10 items-center justify-center rounded-2xl border border-white/10 bg-[linear-gradient(135deg,rgba(244,114,182,0.95),rgba(236,72,153,0.62))] text-white shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_18px_42px_rgba(236,72,153,0.24)]">
+              <span className="flex size-10 items-center justify-center rounded-full border-2 border-primary bg-primary text-primary-foreground shadow-[4px_4px_0_0_var(--color-primary)]">
                 <ScanEye className="size-5" />
               </span>
               <div className="leading-tight">
-                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/90">
-                  VibeCheck
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-primary">
+                  Twine
                 </p>
-                <p className="text-xs text-white/55">Command deck for saved scans</p>
+                <p className="text-xs text-primary/70">Command deck for saved scans</p>
               </div>
             </Link>
             <nav className="hidden items-center gap-1 md:flex">
@@ -46,9 +52,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <Link
                     key={item.href}
                     href={item.href}
+                    aria-current={active ? "page" : undefined}
                     className={cn(
-                      buttonVariants({ variant: active ? "default" : "ghost", size: "sm" }),
-                      "rounded-full",
+                      buttonVariants({ variant: "ghost", size: "sm" }),
+                      navButtonClassName,
+                      active && activeNavButtonClassName,
                     )}
                   >
                     {item.label}
@@ -60,14 +68,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           <div className="flex items-center gap-2">
             {currentUser?.email ? (
-              <div className="hidden rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/70 lg:block">
+              <div className="hidden rounded-full border-2 border-border bg-secondary px-3 py-1.5 text-xs text-secondary-foreground shadow-[2px_2px_0_0_var(--shadow-stamp)] lg:block">
                 {userLabel}
               </div>
             ) : null}
             <Button
               variant="outline"
               size="sm"
-              className="rounded-full border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white"
               onClick={() => void signOut()}
             >
               <LogOut data-icon="inline-start" />

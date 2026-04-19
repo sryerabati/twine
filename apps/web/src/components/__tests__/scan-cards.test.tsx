@@ -69,4 +69,24 @@ describe("SavedScanCards", () => {
       "/app/scans/scan-single-1",
     );
   });
+
+  it("keeps long filenames wrappable inside the card layout", () => {
+    const longFilenameScan: SavedScanSummary = {
+      ...baseScan,
+      _id: "scan-single-2",
+      filename: "snaptik_7623937651409784095_v3.mp4snaptik_7623937651409784095_v3.mp4",
+      secondaryFilename: null,
+    };
+
+    render(<SavedScanCards scans={[longFilenameScan]} title="Saved scans" />);
+
+    const heading = screen.getByRole("heading", {
+      name: /snaptik_7623937651409784095_v3\.mp4snaptik_7623937651409784095_v3\.mp4/i,
+    });
+    const article = heading.closest("article");
+
+    expect(heading.className).toContain("[overflow-wrap:anywhere]");
+    expect(article?.className).toContain("min-w-0");
+    expect(article?.className).toContain("h-full");
+  });
 });

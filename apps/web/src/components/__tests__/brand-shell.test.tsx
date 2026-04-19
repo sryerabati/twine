@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { LandingClient } from "@/components/landing-client";
+import { BrandShell } from "@/components/brand-shell";
 
 let authState: "authenticated" | "unauthenticated" = "unauthenticated";
 const previousConvexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
@@ -15,7 +15,7 @@ vi.mock("convex/react", () => ({
     authState === "unauthenticated" ? <>{children}</> : null,
 }));
 
-describe("LandingClient", () => {
+describe("BrandShell", () => {
   beforeEach(() => {
     authState = "unauthenticated";
     process.env.NEXT_PUBLIC_CONVEX_URL = "https://example.convex.cloud";
@@ -25,24 +25,26 @@ describe("LandingClient", () => {
     process.env.NEXT_PUBLIC_CONVEX_URL = previousConvexUrl;
   });
 
-  it("renders a login CTA for signed-out visitors", () => {
-    render(<LandingClient />);
+  it("renders a single primary login CTA for signed-out visitors", () => {
+    render(
+      <BrandShell>
+        <div>home</div>
+      </BrandShell>,
+    );
 
-    expect(screen.getByText(/^Twine$/i)).toBeInTheDocument();
-    expect(screen.getByText(/Read the room before you post\./i)).toBeInTheDocument();
-    expect(screen.getByTestId("brain-viewport")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^Twine$/i })).toHaveAttribute("href", "/");
     expect(screen.getByRole("link", { name: /Log in/i })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Open dashboard/i })).not.toBeInTheDocument();
-    expect(screen.queryByText(/Cortent/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Product preview/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Know what hits before you ship\./i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Vibe radar/i)).not.toBeInTheDocument();
   });
 
   it("renders an open dashboard CTA for authenticated visitors", () => {
     authState = "authenticated";
 
-    render(<LandingClient />);
+    render(
+      <BrandShell>
+        <div>home</div>
+      </BrandShell>,
+    );
 
     expect(screen.getByRole("link", { name: /Open dashboard/i })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Log in/i })).not.toBeInTheDocument();

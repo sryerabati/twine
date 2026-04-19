@@ -128,6 +128,22 @@ def test_analyze_accepts_convex_scan_id_when_strict(
     assert response.status_code == 202
 
 
+def test_analyze_accepts_detached_run_without_convex_scan_id_when_strict(
+    strict_client: TestClient,
+) -> None:
+    upload = strict_client.post(
+        "/api/upload",
+        files={"file": ("clip.mp4", BytesIO(b"fake-mp4"), "video/mp4")},
+        data={"convexUploadId": "kg123abc"},
+    ).json()
+
+    response = strict_client.post(
+        "/api/analyze",
+        json={"uploadId": upload["uploadId"], "syncToConvexScan": False},
+    )
+    assert response.status_code == 202
+
+
 def test_analyze_rejects_invalid_convex_scan_id(
     strict_client: TestClient,
 ) -> None:

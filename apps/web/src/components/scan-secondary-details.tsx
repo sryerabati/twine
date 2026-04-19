@@ -33,30 +33,30 @@ export function ScanSecondaryDetails({
   const latestExport = payload.exports[payload.exports.length - 1] ?? null;
 
   return (
-    <section className="rounded-[2.4rem] border border-white/10 bg-slate-900/80 p-6 text-slate-50 shadow-[0_28px_90px_rgba(15,23,42,0.3)]">
+    <section className="surface rounded-[2.4rem] p-6 text-foreground">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-xs uppercase tracking-[0.28em] text-slate-400">
+          <h2 className="text-xs uppercase tracking-[0.28em] text-muted-foreground">
             Secondary details
           </h2>
-          <p className="mt-2 text-sm leading-6 text-slate-300">Cuts, guidance, and exports.</p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">Cuts, guidance, and exports.</p>
         </div>
-        <Badge variant="secondary" className="bg-white/10 text-slate-200">
+        <Badge variant="secondary">
           {selectedCutIds.length} selected
         </Badge>
       </div>
 
       <div className="mt-6 grid gap-4 xl:grid-cols-[1.04fr_0.96fr]">
-        <div className="rounded-[1.7rem] border border-white/10 bg-white/5 p-4">
+        <div className="surface-soft rounded-[1.7rem] p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-sm font-medium text-white">Guidance</p>
-              <p className="mt-1 text-sm leading-6 text-slate-300">
+              <p className="text-sm font-medium text-foreground">Guidance</p>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
                 The action board stays compact so the strongest notes remain visible without
                 taking over the page.
               </p>
             </div>
-            <Badge variant="secondary" className="bg-white/10 text-slate-200">
+            <Badge variant="secondary">
               Action board
             </Badge>
           </div>
@@ -69,11 +69,11 @@ export function ScanSecondaryDetails({
           </div>
         </div>
 
-        <div className="rounded-[1.7rem] border border-white/10 bg-white/5 p-4">
+        <div className="surface-soft rounded-[1.7rem] p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-sm font-medium text-white">Cuts</p>
-              <p className="mt-1 text-sm leading-6 text-slate-300">
+              <p className="text-sm font-medium text-foreground">Cuts</p>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
                 Deadspace stays selected by default. Optional AI trims remain review-only until
                 you choose them.
               </p>
@@ -95,16 +95,16 @@ export function ScanSecondaryDetails({
                 />
               ))
             ) : (
-              <p className="text-sm text-slate-300">
+              <p className="text-sm text-muted-foreground">
                 No deterministic deadspace cut crossed the threshold on this scan.
               </p>
             )}
           </div>
 
-          <Separator className="my-5 bg-white/10" />
+          <Separator className="my-5 bg-border" />
 
           <div>
-            <p className="text-sm font-medium text-white">Optional AI trims</p>
+            <p className="text-sm font-medium text-foreground">Optional AI trims</p>
             <div className="mt-4 space-y-3">
               {payload.lowValueCuts.length ? (
                 payload.lowValueCuts.map((cut) => (
@@ -117,7 +117,7 @@ export function ScanSecondaryDetails({
                   />
                 ))
               ) : (
-                <p className="text-sm text-slate-300">
+                <p className="text-sm text-muted-foreground">
                   No extra low-value sections were suggested by the AI on this run.
                 </p>
               )}
@@ -128,7 +128,6 @@ export function ScanSecondaryDetails({
             <Button
               onClick={() => void onExport()}
               disabled={trimPending || !selectedCutIds.length}
-              className="bg-white text-slate-950 hover:bg-slate-200"
             >
               {trimPending ? (
                 <>
@@ -147,10 +146,7 @@ export function ScanSecondaryDetails({
                 href={latestExport.trimmedVideoUrl}
                 target="_blank"
                 rel="noreferrer"
-                className={cn(
-                  buttonVariants({ variant: "outline" }),
-                  "border-white/10 bg-white/5 text-slate-50 hover:bg-white/10 hover:text-white",
-                )}
+                className={buttonVariants({ variant: "outline" })}
               >
                 <Download data-icon="inline-start" />
                 Latest export
@@ -159,7 +155,7 @@ export function ScanSecondaryDetails({
           </div>
 
           {trimError ? (
-            <div className="mt-4 flex items-start gap-2 rounded-[1.25rem] border border-rose-500/20 bg-rose-500/10 p-4 text-sm text-rose-200">
+            <div className="mt-4 flex items-start gap-2 rounded-[1.25rem] border-2 border-destructive bg-destructive/10 p-4 text-sm text-destructive">
               <AlertTriangle className="mt-0.5 size-4" />
               <span>{trimError}</span>
             </div>
@@ -168,12 +164,13 @@ export function ScanSecondaryDetails({
       </div>
 
       <div className="mt-6 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-        <section className="rounded-[1.7rem] border border-white/10 bg-white/5 p-4">
+        <section className="surface-soft rounded-[1.7rem] p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-medium text-white">Timeline segments</p>
-              <p className="mt-1 text-sm leading-6 text-slate-300">
-                Hover a row to sync the signal view. Click to jump the video.
+              <p className="text-sm font-medium text-foreground">Detailed segment notes</p>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                Use the marker timeline above for quick hover previews, then scan these rows when
+                you want the full list. Click a row to jump the video.
               </p>
             </div>
           </div>
@@ -190,16 +187,16 @@ export function ScanSecondaryDetails({
                 />
               ))
             ) : (
-              <p className="text-sm text-slate-300">
+              <p className="text-sm text-muted-foreground">
                 The backend returned no timeline segments for this analysis.
               </p>
             )}
           </div>
         </section>
 
-        <section className="rounded-[1.7rem] border border-white/10 bg-white/5 p-4">
-          <p className="text-sm font-medium text-white">Downloads</p>
-          <p className="mt-1 text-sm leading-6 text-slate-300">
+        <section className="surface-soft rounded-[1.7rem] p-4">
+          <p className="text-sm font-medium text-foreground">Downloads</p>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
             Keep the raw artifacts close without promoting them into the main workspace.
           </p>
 
@@ -220,23 +217,23 @@ export function ScanSecondaryDetails({
 
           {payload.exports.length ? (
             <>
-              <Separator className="my-5 bg-white/10" />
+              <Separator className="my-5 bg-border" />
               <div className="space-y-3">
-                <p className="text-sm font-medium text-white">Past exports</p>
+                <p className="text-sm font-medium text-foreground">Past exports</p>
                 {payload.exports
                   .slice()
                   .reverse()
                   .map((exportItem) => (
                     <div
                       key={exportItem.exportId}
-                      className="rounded-[1.35rem] border border-white/10 bg-slate-950/50 p-4"
+                      className="surface rounded-[1.35rem] p-4"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="font-medium text-white">
+                          <p className="font-medium text-foreground">
                             Trimmed to {formatSeconds(exportItem.trimmedDurationSec)}
                           </p>
-                          <p className="text-sm text-slate-300">
+                          <p className="text-sm text-muted-foreground">
                             Removed {formatSeconds(exportItem.removedSeconds)} •{" "}
                             {formatDateTime(exportItem.createdAt)}
                           </p>
@@ -245,15 +242,12 @@ export function ScanSecondaryDetails({
                           href={exportItem.trimmedVideoUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className={cn(
-                            buttonVariants({ variant: "outline", size: "sm" }),
-                            "border-white/10 bg-white/5 text-slate-50 hover:bg-white/10 hover:text-white",
-                          )}
+                          className={buttonVariants({ variant: "outline", size: "sm" })}
                         >
                           Open
                         </a>
                       </div>
-                      <p className="mt-3 text-sm text-slate-300">
+                      <p className="mt-3 text-sm text-muted-foreground">
                         Cut set: {exportItem.selectedCutIds.join(", ")}
                       </p>
                     </div>
@@ -269,18 +263,18 @@ export function ScanSecondaryDetails({
 
 function ActionColumn({ title, items }: { title: string; items: string[] }) {
   return (
-    <div className="rounded-[1.35rem] border border-white/10 bg-slate-950/40 p-4">
-      <p className="text-xs uppercase tracking-[0.24em] text-slate-400">{title}</p>
+    <div className="surface rounded-[1.35rem] p-4">
+      <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">{title}</p>
       <div className="mt-3 flex flex-col gap-2">
         {items.length ? (
           items.map((item) => (
-            <div key={item} className="flex items-start gap-2 text-sm text-slate-300">
+            <div key={item} className="flex items-start gap-2 text-sm text-muted-foreground">
               <Check className="mt-0.5 size-4 text-primary" />
               <span>{item}</span>
             </div>
           ))
         ) : (
-          <p className="text-sm text-slate-300">No items in this lane.</p>
+          <p className="text-sm text-muted-foreground">No items in this lane.</p>
         )}
       </div>
     </div>
@@ -302,31 +296,33 @@ function SelectableCutCard({
     <button
       type="button"
       className={cn(
-        "w-full rounded-[1.45rem] border p-4 text-left transition-colors",
+        "w-full rounded-[1.45rem] border-2 p-4 text-left transition-[transform,box-shadow,border-color,background-color]",
         selected
-          ? "border-primary/40 bg-primary/10"
-          : "border-white/10 bg-slate-950/40 hover:border-white/20",
+          ? "border-primary bg-primary text-primary-foreground shadow-[4px_4px_0_0_var(--color-primary)]"
+          : "border-border bg-card text-foreground shadow-[4px_4px_0_0_var(--shadow-stamp)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[3px_3px_0_0_var(--shadow-stamp)]",
       )}
       onClick={() => void onToggle(cut.id)}
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-[0.24em] text-slate-400">{title}</p>
-          <p className="mt-2 font-semibold text-white">
+          <p className={cn("text-xs uppercase tracking-[0.24em]", selected ? "text-primary-foreground/80" : "text-muted-foreground")}>{title}</p>
+          <p className={cn("mt-2 font-semibold", selected ? "text-primary-foreground" : "text-foreground")}>
             {formatSeconds(cut.start)} to {formatSeconds(cut.end)}
           </p>
         </div>
         <span
           className={cn(
-            "rounded-full px-3 py-1 text-xs font-medium",
-            selected ? "bg-primary text-primary-foreground" : "bg-white/10 text-slate-200",
+            "rounded-full border-2 px-3 py-1 text-xs font-medium",
+            selected
+              ? "border-primary bg-white text-primary"
+              : "border-border bg-secondary text-secondary-foreground",
           )}
         >
           {selected ? "Selected" : "Optional"}
         </span>
       </div>
-      <p className="mt-3 text-sm text-slate-300">{cut.reason}</p>
-      <p className="mt-2 text-sm text-white">{cut.recommendedAction}</p>
+      <p className={cn("mt-3 text-sm", selected ? "text-primary-foreground/80" : "text-muted-foreground")}>{cut.reason}</p>
+      <p className={cn("mt-2 text-sm", selected ? "text-primary-foreground" : "text-foreground")}>{cut.recommendedAction}</p>
     </button>
   );
 }
@@ -347,7 +343,7 @@ function TimelineRow({
   return (
     <button
       type="button"
-      className="w-full rounded-[1.45rem] border border-white/10 bg-slate-950/40 p-4 text-left transition-colors hover:border-white/20"
+      className="w-full rounded-[1.45rem] border-2 border-border bg-card p-4 text-left text-foreground shadow-[4px_4px_0_0_var(--shadow-stamp)] transition-[transform,box-shadow,border-color] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[3px_3px_0_0_var(--shadow-stamp)]"
       onMouseEnter={() => onHover(midpoint)}
       onMouseLeave={() => onHover(null)}
       onClick={() => onJump(segment.start)}
@@ -355,10 +351,10 @@ function TimelineRow({
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary" className="bg-white/10 text-slate-200">
+            <Badge variant="secondary">
               {segment.label}
             </Badge>
-            <Badge variant="secondary" className="bg-white/10 text-slate-200">
+            <Badge variant="secondary">
               {formatSeconds(segment.start)} to {formatSeconds(segment.end)}
             </Badge>
             {selected ? (
@@ -367,7 +363,7 @@ function TimelineRow({
               </Badge>
             ) : null}
           </div>
-          <p className="mt-3 font-medium text-white">{segment.reason}</p>
+          <p className="mt-3 font-medium text-foreground">{segment.reason}</p>
         </div>
         <span
           className={cn(
@@ -382,7 +378,7 @@ function TimelineRow({
           {segment.severity}
         </span>
       </div>
-      <p className="mt-2 text-sm text-slate-300">{segment.recommendedAction}</p>
+      <p className="mt-2 text-sm text-muted-foreground">{segment.recommendedAction}</p>
     </button>
   );
 }
@@ -391,10 +387,7 @@ function ExportLink({ href, label }: { href: string; label: string }) {
   return (
     <a
       href={href}
-      className={cn(
-        buttonVariants({ variant: "outline", size: "sm" }),
-        "justify-start border-white/10 bg-white/5 text-slate-50 hover:bg-white/10 hover:text-white",
-      )}
+      className={cn(buttonVariants({ variant: "outline", size: "sm" }), "justify-start")}
       target="_blank"
       rel="noreferrer"
     >

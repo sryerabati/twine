@@ -39,6 +39,7 @@ class UploadResponse(BaseModel):
 class AnalyzeRequest(BaseModel):
     uploadId: str
     convexScanId: str | None = None
+    syncToConvexScan: bool = True
 
 
 class HemisphereHeatmap(BaseModel):

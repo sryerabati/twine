@@ -16,6 +16,7 @@ import {
 } from "recharts";
 
 import { BrainScanViewer } from "@/components/brain-scan-viewer";
+import { RecommendationTimeline } from "@/components/recommendation-timeline";
 import { ScanSecondaryDetails } from "@/components/scan-secondary-details";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -26,7 +27,6 @@ import type {
   AnalysisResponse,
 } from "@/lib/contracts";
 import { formatSeconds } from "@/lib/format";
-import { cn } from "@/lib/utils";
 
 type AnalysisViewProps = {
   analysisId: string;
@@ -194,18 +194,18 @@ function AnalysisLoading({
 }) {
   return (
     <div className="space-y-6">
-      <div className="rounded-[2.5rem] border border-white/10 bg-slate-950/90 p-8 text-slate-50 shadow-[0_36px_120px_rgba(15,23,42,0.35)]">
+      <div className="surface rounded-[2.5rem] p-8 text-foreground">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-400">Analysis workspace</p>
-            <h1 className="mt-2 text-4xl font-semibold tracking-tight text-white">
+            <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Analysis workspace</p>
+            <h1 className="mt-2 text-4xl font-semibold tracking-tight text-foreground">
               Processing analysis
             </h1>
-            <p className="mt-3 text-sm text-slate-300">
+            <p className="mt-3 text-sm text-muted-foreground">
               Waiting for FastAPI to finish the scan output for analysis `{analysisId.slice(0, 8)}`.
             </p>
           </div>
-          <Badge variant="secondary" className="rounded-full bg-white/10 text-slate-200">
+          <Badge variant="secondary" className="w-fit">
             <LoaderCircle className="mr-2 size-4 animate-spin" />
             {status === "queued" ? "Queued" : "Running"}
           </Badge>
@@ -213,11 +213,11 @@ function AnalysisLoading({
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <div className="rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-[0_20px_70px_rgba(15,23,42,0.2)]">
+        <div className="surface-soft rounded-[2rem] p-6">
           <Skeleton className="h-72 w-full rounded-[1.6rem]" />
           <Skeleton className="mt-6 h-64 w-full rounded-[1.6rem]" />
         </div>
-        <div className="rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-[0_20px_70px_rgba(15,23,42,0.2)]">
+        <div className="surface-soft rounded-[2rem] p-6">
           <Skeleton className="h-8 w-40" />
           <Skeleton className="mt-4 h-28 w-full rounded-[1.4rem]" />
           <Skeleton className="mt-4 h-28 w-full rounded-[1.4rem]" />
@@ -230,33 +230,21 @@ function AnalysisLoading({
 
 function AnalysisError({ message }: { message: string }) {
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 rounded-[2.5rem] border border-white/10 bg-slate-950/90 p-8 text-slate-50 shadow-[0_36px_120px_rgba(15,23,42,0.35)]">
-      <Badge variant="secondary" className="w-fit rounded-full bg-rose-500/15 text-rose-200">
+    <div className="surface mx-auto flex w-full max-w-4xl flex-col gap-6 rounded-[2.5rem] p-8 text-foreground">
+      <Badge variant="destructive" className="w-fit">
         Analysis failed
       </Badge>
       <div>
-        <h1 className="text-4xl font-semibold tracking-tight text-white">
+        <h1 className="text-4xl font-semibold tracking-tight text-foreground">
           The backend returned an actionable error.
         </h1>
-        <p className="mt-4 max-w-3xl text-base leading-7 text-slate-300">{message}</p>
+        <p className="mt-4 max-w-3xl text-base leading-7 text-muted-foreground">{message}</p>
       </div>
       <div className="flex flex-wrap gap-3">
-        <Link
-          href="/app"
-          className={cn(
-            buttonVariants({ variant: "default" }),
-            "bg-white text-slate-950 hover:bg-slate-200",
-          )}
-        >
+        <Link href="/app" className={buttonVariants({ variant: "default" })}>
           Back to app
         </Link>
-        <Link
-          href="/runbook"
-          className={cn(
-            buttonVariants({ variant: "outline" }),
-            "border-white/10 bg-white/5 text-slate-50 hover:bg-white/10 hover:text-white",
-          )}
-        >
+        <Link href="/runbook" className={buttonVariants({ variant: "outline" })}>
           Open runbook
         </Link>
       </div>
@@ -289,6 +277,7 @@ function CompletedAnalysis({
   onPreviewTimeChange: (time: number | null) => void;
   onToggleCut: (cutId: string) => Promise<void>;
 }) {
+  const [isPlaying, setIsPlaying] = useState(false);
   const focusTimeSec = previewTimeSec ?? activeTimeSec;
   const chartData = payload.brainResponse.timeSeries.map((point) => ({
     t: Number(point.stimulusTimeSec.toFixed(2)),
@@ -297,47 +286,106 @@ function CompletedAnalysis({
     audio: point.audioEnergy,
   }));
 
-  function jumpToTime(time: number) {
+  useEffect(() => {
+    if (!isPlaying) {
+      return;
+    }
+
+    let frameId = 0;
+
+    const syncPlayback = () => {
+      const currentTime = videoRef.current?.currentTime;
+      if (currentTime !== undefined) {
+        onActiveTimeChange(currentTime);
+      }
+      if (videoRef.current && !videoRef.current.paused && !videoRef.current.ended) {
+        frameId = requestAnimationFrame(syncPlayback);
+      }
+    };
+
+    frameId = requestAnimationFrame(syncPlayback);
+    return () => {
+      cancelAnimationFrame(frameId);
+    };
+  }, [isPlaying, onActiveTimeChange, videoRef]);
+
+  function seekToTime(time: number) {
     if (videoRef.current) {
       videoRef.current.currentTime = time;
-      videoRef.current.play().catch(() => {
-        videoRef.current?.pause();
-      });
     }
     onActiveTimeChange(time);
   }
 
+  async function togglePlayback() {
+    if (!videoRef.current) {
+      return;
+    }
+
+    if (videoRef.current.paused || videoRef.current.ended) {
+      try {
+        await videoRef.current.play();
+        setIsPlaying(true);
+      } catch {
+        videoRef.current.pause();
+        setIsPlaying(false);
+      }
+      return;
+    }
+
+    videoRef.current.pause();
+    setIsPlaying(false);
+  }
+
   return (
     <div className="space-y-8">
-      <section className="rounded-[2.5rem] border border-white/10 bg-slate-950/95 p-6 text-slate-50 shadow-[0_36px_120px_rgba(15,23,42,0.45)]">
+      <section className="surface rounded-[2.5rem] p-6 text-foreground">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h2 className="text-xs uppercase tracking-[0.28em] text-slate-400">
+            <h2 className="text-xs uppercase tracking-[0.28em] text-muted-foreground">
               Primary analysis
             </h2>
-            <h1 className="mt-3 text-4xl font-semibold tracking-tight text-white">
+            <h1 className="mt-3 text-4xl font-semibold tracking-tight text-foreground">
               {payload.video.filename}
             </h1>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
               {payload.summary.overallRecommendation}
             </p>
           </div>
 
-          <Badge variant="secondary" className="bg-white/10 text-slate-200">
+          <Badge variant="secondary" className="w-fit">
             {selectedCutIds.length} selected
           </Badge>
         </div>
 
         <div className="mt-6 space-y-6">
-          <div className="rounded-[2rem] border border-white/10 bg-white/5 p-4">
+          <div className="surface-soft rounded-[2rem] p-4">
             <video
               ref={videoRef}
-              className="aspect-video w-full rounded-[1.5rem] border border-white/10 bg-black"
-              controls
+              className="aspect-video w-full rounded-[1.5rem] border-2 border-border bg-black"
               preload="metadata"
+              playsInline
               src={payload.video.sourceUrl}
+              onClick={() => void togglePlayback()}
+              onLoadedMetadata={(event) => onActiveTimeChange(event.currentTarget.currentTime)}
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              onEnded={() => setIsPlaying(false)}
+              onSeeked={(event) => onActiveTimeChange(event.currentTarget.currentTime)}
               onTimeUpdate={(event) => onActiveTimeChange(event.currentTarget.currentTime)}
             />
+
+            <RecommendationTimeline
+              currentTimeSec={activeTimeSec}
+              durationSec={payload.video.durationSec}
+              isPlaying={isPlaying}
+              segments={payload.timelineSegments}
+              selectedCutIds={selectedCutIds}
+              videoSrc={payload.video.sourceUrl}
+              onSeek={seekToTime}
+              onTogglePlayback={togglePlayback}
+              onPreviewTimeChange={onPreviewTimeChange}
+            />
+
             <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <SignalStat label="Duration" value={formatSeconds(payload.video.durationSec)} />
               <SignalStat label="Words" value={`${payload.diagnostics.transcriptWordCount}`} />
@@ -350,14 +398,14 @@ function CompletedAnalysis({
             points={payload.brainResponse.timeSeries}
             currentTimeSec={focusTimeSec}
             title="Brain scan"
-            description="Scrub the video or hover a timeline row to keep the signal view in sync."
+            description="Scrub the video or hover the recommendation timeline to keep the signal view in sync."
           />
 
-          <div className="rounded-[2rem] border border-white/10 bg-white/5 p-5">
+          <div className="surface-soft rounded-[2rem] p-5">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-sm font-medium text-white">Activation timeline</p>
-                <p className="mt-1 text-sm leading-6 text-slate-300">
+                <p className="text-sm font-medium text-foreground">Activation timeline</p>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
                   Global activation, motion, and audio context.
                 </p>
               </div>
@@ -365,23 +413,29 @@ function CompletedAnalysis({
             <div className="mt-4 h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData}>
-                  <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                  <CartesianGrid stroke="rgba(255,247,251,0.08)" vertical={false} />
                   <XAxis
                     dataKey="t"
                     tickLine={false}
                     axisLine={false}
                     tickFormatter={(value) => `${value}s`}
+                    tick={{ fill: "var(--color-muted-foreground)", fontSize: 12 }}
                   />
-                  <YAxis tickLine={false} axisLine={false} domain={[0, 1]} />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    domain={[0, 1]}
+                    tick={{ fill: "var(--color-muted-foreground)", fontSize: 12 }}
+                  />
                   <Tooltip
                     contentStyle={{
                       borderRadius: 18,
-                      borderColor: "rgba(255,255,255,0.08)",
-                      backgroundColor: "rgba(15,23,42,0.96)",
-                      color: "white",
+                      borderColor: "var(--color-border)",
+                      backgroundColor: "var(--color-card)",
+                      color: "var(--color-foreground)",
                     }}
                   />
-                  <Legend />
+                  <Legend wrapperStyle={{ color: "var(--color-muted-foreground)" }} />
                   <Line
                     type="monotone"
                     dataKey="activation"
@@ -421,7 +475,7 @@ function CompletedAnalysis({
         onExport={onExport}
         onToggleCut={onToggleCut}
         onPreviewTimeChange={onPreviewTimeChange}
-        onJumpToTime={jumpToTime}
+        onJumpToTime={seekToTime}
       />
     </div>
   );
@@ -429,9 +483,9 @@ function CompletedAnalysis({
 
 function SignalStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[1.2rem] border border-white/10 bg-slate-950/45 px-3 py-3">
-      <p className="text-[0.68rem] uppercase tracking-[0.24em] text-slate-400">{label}</p>
-      <p className="mt-2 text-lg font-semibold tracking-tight text-white">{value}</p>
+    <div className="surface-soft rounded-[1.2rem] px-3 py-3">
+      <p className="text-[0.68rem] uppercase tracking-[0.24em] text-muted-foreground">{label}</p>
+      <p className="mt-2 text-lg font-semibold tracking-tight text-foreground">{value}</p>
     </div>
   );
 }

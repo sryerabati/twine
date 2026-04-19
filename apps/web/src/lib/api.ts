@@ -38,14 +38,21 @@ export async function uploadVideo(
 
 export async function startAnalysis(
   uploadId: string,
-  convexScanId?: string,
+  options?: {
+    convexScanId?: string;
+    syncToConvexScan?: boolean;
+  },
 ): Promise<AnalysisResponse> {
   return request<AnalysisResponse>("/api/analyze", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ uploadId, convexScanId }),
+    body: JSON.stringify({
+      uploadId,
+      convexScanId: options?.convexScanId,
+      syncToConvexScan: options?.syncToConvexScan ?? true,
+    }),
   });
 }
 

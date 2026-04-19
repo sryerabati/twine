@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AnalysisView } from "@/components/analysis-view";
@@ -171,6 +172,38 @@ describe("AnalysisView", () => {
     vi.clearAllMocks();
   });
 
+  it("replaces native video controls with a custom transport timeline", async () => {
+    const { fetchAnalysis } = await import("@/lib/api");
+    vi.mocked(fetchAnalysis).mockResolvedValue(completedResponse);
+    const user = userEvent.setup();
+    const playSpy = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockResolvedValue(undefined);
+
+    render(<AnalysisView analysisId="analysis-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("brain-viewport")).toBeInTheDocument();
+    });
+
+    const video = document.querySelector("video");
+    const timeline = screen.getByTestId("recommendation-timeline");
+    expect(video).not.toBeNull();
+    expect(video).not.toHaveAttribute("controls");
+    expect(within(timeline).queryByText("Deadspace cut")).not.toBeInTheDocument();
+
+    const playButton = screen.getByRole("button", { name: /play video/i });
+    const slider = screen.getByRole("slider", { name: /video timeline/i });
+    expect(playButton.className).toContain("bg-primary");
+    expect(screen.getByTestId("video-timeline-fill").className).toContain("bg-primary");
+    expect(slider).toBeInTheDocument();
+
+    await user.click(playButton);
+
+    expect(playSpy).toHaveBeenCalled();
+    playSpy.mockRestore();
+  });
+
   it("renders a compact saved-scan header with status, metrics, and export access", () => {
     render(
       <ScanSummaryHeader
@@ -218,6 +251,10 @@ describe("AnalysisView", () => {
     render(<AnalysisView analysisId="analysis-1" pollIntervalMs={5} />);
 
     expect(await screen.findByText(/Processing analysis/i)).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("brain-viewport")).toBeInTheDocument();
+    });
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: /primary analysis/i })).toBeInTheDocument();
       expect(screen.getByRole("heading", { name: /secondary details/i })).toBeInTheDocument();
@@ -227,6 +264,79 @@ describe("AnalysisView", () => {
     expect(screen.queryByRole("link", { name: /Raw predictions/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/TRIBE/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Gemini/i)).not.toBeInTheDocument();
+  });
+
+  it("seeks the video from the custom timeline", async () => {
+    const { fetchAnalysis } = await import("@/lib/api");
+    vi.mocked(fetchAnalysis).mockResolvedValue(completedResponse);
+
+    render(<AnalysisView analysisId="analysis-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("brain-viewport")).toBeInTheDocument();
+    });
+
+    const slider = screen.getByRole("slider", { name: /video timeline/i });
+    const video = document.querySelector("video") as HTMLVideoElement | null;
+    expect(video).not.toBeNull();
+
+    vi.spyOn(slider, "getBoundingClientRect").mockReturnValue({
+      x: 0,
+      y: 0,
+      width: 240,
+      height: 24,
+      top: 0,
+      left: 0,
+      right: 240,
+      bottom: 24,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.pointerDown(slider, { clientX: 120, pointerId: 1 });
+    fireEvent.pointerUp(window, { pointerId: 1 });
+
+    expect(video?.currentTime).toBeCloseTo(6, 1);
+  });
+
+  it("shows recommendation details above the rail and renders a frame strip", async () => {
+    const { fetchAnalysis } = await import("@/lib/api");
+    vi.mocked(fetchAnalysis).mockResolvedValue(completedResponse);
+    const user = userEvent.setup();
+
+    render(<AnalysisView analysisId="analysis-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("brain-viewport")).toBeInTheDocument();
+    });
+
+    const marker = screen.getByRole("button", {
+      name: /deadspace cut recommendation/i,
+    });
+
+    expect(screen.getAllByTestId("timeline-frame").length).toBeGreaterThan(0);
+    expect(screen.queryByTestId("timeline-recommendation-panel")).not.toBeInTheDocument();
+
+    await user.hover(marker);
+
+    const panel = await screen.findByTestId("timeline-recommendation-panel");
+    expect(within(panel).getByText("Quiet stretch.")).toBeInTheDocument();
+    expect(within(panel).getByText("Cut the deadspace.")).toBeInTheDocument();
+    expect(within(panel).getByText("Changes needed")).toBeInTheDocument();
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+    await user.unhover(marker);
+
+    expect(screen.getByTestId("timeline-recommendation-panel")).toBeInTheDocument();
+
+    await new Promise((resolve) => window.setTimeout(resolve, 160));
+    expect(screen.getByTestId("timeline-recommendation-panel")).toBeInTheDocument();
+
+    await waitFor(
+      () => {
+        expect(screen.queryByTestId("timeline-recommendation-panel")).not.toBeInTheDocument();
+      },
+      { timeout: 1000 },
+    );
   });
 
   it("renders a provider-neutral failed-analysis message", async () => {

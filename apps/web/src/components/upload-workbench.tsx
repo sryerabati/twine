@@ -114,7 +114,9 @@ export function UploadWorkbench({
     try {
       const asset = await prepareUpload(single.file);
       const scanId = (await createPendingScan({ uploadId: asset.convexUploadId } as never)) as string;
-      const analysis = await startAnalysis(asset.uploadId, scanId);
+      const analysis = await startAnalysis(asset.uploadId, {
+        convexScanId: scanId,
+      });
 
       setSingle({ file: single.file, status: "analyzing" });
       startTransition(() => {
@@ -148,8 +150,8 @@ export function UploadWorkbench({
       } as never)) as string;
 
       const [analysisA, analysisB] = await Promise.all([
-        startAnalysis(primaryAsset.uploadId),
-        startAnalysis(secondaryAsset.uploadId),
+        startAnalysis(primaryAsset.uploadId, { syncToConvexScan: false }),
+        startAnalysis(secondaryAsset.uploadId, { syncToConvexScan: false }),
       ]);
 
       await attachCompareAnalysisIds({
@@ -171,29 +173,22 @@ export function UploadWorkbench({
   }
 
   return (
-    <section className="relative overflow-hidden rounded-[2.4rem] border border-white/10 bg-slate-950 p-6 text-slate-100 shadow-[0_32px_120px_rgba(2,6,23,0.45)] lg:p-8">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(244,114,182,0.18),transparent_34%),radial-gradient(circle_at_bottom_left,rgba(244,114,182,0.08),transparent_32%)]" />
-      <div className="relative">
+    <section className="surface rounded-[2.4rem] p-6 text-foreground lg:p-8">
+      <div>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-2">
-            <Badge
-              variant="secondary"
-              className="rounded-full border border-pink-300/20 bg-pink-500/15 text-pink-100"
-            >
+            <Badge variant="secondary">
               Upload workspace
             </Badge>
-            <h2 className="max-w-2xl text-3xl font-semibold tracking-tight text-white">
+            <h2 className="max-w-2xl text-3xl font-semibold tracking-tight text-foreground">
               Drop a clip. Save a scan.
             </h2>
-            <p className="max-w-2xl text-sm leading-6 text-slate-300">
+            <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
               Single upload is the default path. A/B test stays available, but out of the way.
             </p>
           </div>
 
-          <Badge
-            variant="secondary"
-            className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-slate-200"
-          >
+          <Badge variant="outline" className="px-3 py-1 text-foreground">
             {healthSummary}
           </Badge>
         </div>
@@ -219,10 +214,10 @@ export function UploadWorkbench({
         </div>
 
         {healthError ? (
-          <p className="mt-3 text-sm text-rose-300">Health check failed: {healthError}</p>
+          <p className="mt-3 text-sm text-destructive">Health check failed: {healthError}</p>
         ) : null}
 
-        <div className="mt-6">
+        <div className="mt-6 border-t border-border/70 pt-6">
           {mode === "single" ? (
             <UploadDropzone
               label="Single upload clip"
@@ -251,12 +246,24 @@ export function UploadWorkbench({
           )}
         </div>
 
-        <div className="mt-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <p className="text-sm leading-6 text-slate-300">
-            {mode === "single"
-              ? "The upload row is created first, then analysis starts against that scan."
-              : "Both files upload first, then one compare scan is persisted and linked to both analyses."}
-          </p>
+        <div className="mt-6 flex flex-col gap-4 border-t border-border/70 pt-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-3">
+            <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+              {mode === "single"
+                ? "The upload row is created first, then analysis starts against that scan."
+                : "Both files upload first, then one compare scan is persisted and linked to both analyses."}
+            </p>
+
+            <div className="flex flex-wrap items-center gap-3 text-sm text-primary/70">
+              <span>No bundled sample clip.</span>
+              <Link href="/runbook" className="inline-flex items-center gap-1 text-primary transition-colors hover:text-accent-foreground">
+                Prepare a test MP4
+                <ArrowUpRight className="size-4" />
+              </Link>
+            </div>
+
+            {actionError ? <p className="text-sm text-destructive">{actionError}</p> : null}
+          </div>
 
           {mode === "single" ? (
             <Button onClick={handleSingle} disabled={singleDisabled}>
@@ -287,16 +294,6 @@ export function UploadWorkbench({
               )}
             </Button>
           )}
-        </div>
-
-        {actionError ? <p className="mt-4 text-sm text-rose-300">{actionError}</p> : null}
-
-        <div className="mt-6 flex flex-wrap items-center gap-3 text-sm text-slate-400">
-          <span>No bundled sample clip.</span>
-          <Link href="/runbook" className="inline-flex items-center gap-1 text-pink-200 hover:text-pink-100">
-            Prepare a test MP4
-            <ArrowUpRight className="size-4" />
-          </Link>
         </div>
       </div>
     </section>

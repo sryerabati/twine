@@ -19,10 +19,10 @@ export function ScanDetailClient({ scanId }: { scanId: string }) {
 
   if (scan === undefined) {
     return (
-      <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-4 rounded-[2.5rem] border border-white/10 bg-slate-950/90 px-8 py-16 text-center text-slate-50 shadow-[0_36px_120px_rgba(15,23,42,0.35)]">
+      <div className="surface mx-auto flex w-full max-w-3xl flex-col items-center gap-4 rounded-[2.5rem] px-8 py-16 text-center text-foreground">
         <LoaderCircle className="size-8 animate-spin text-primary" />
-        <h1 className="text-3xl font-semibold tracking-tight text-white">Loading scan workspace</h1>
-        <p className="max-w-xl text-sm text-slate-300">
+        <h1 className="text-3xl font-semibold tracking-tight text-foreground">Loading scan workspace</h1>
+        <p className="max-w-xl text-sm text-muted-foreground">
           Fetching the saved scan record from Convex so the editor can restore its last known
           state.
         </p>
@@ -32,10 +32,10 @@ export function ScanDetailClient({ scanId }: { scanId: string }) {
 
   if (scan === null) {
     return (
-      <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-4 rounded-[2.5rem] border border-white/10 bg-slate-950/90 px-8 py-16 text-center text-slate-50 shadow-[0_36px_120px_rgba(15,23,42,0.35)]">
+      <div className="surface mx-auto flex w-full max-w-3xl flex-col items-center gap-4 rounded-[2.5rem] px-8 py-16 text-center text-foreground">
         <FileWarning className="size-8 text-rose-300" />
-        <h1 className="text-3xl font-semibold tracking-tight text-white">Scan not found</h1>
-        <p className="max-w-xl text-sm text-slate-300">
+        <h1 className="text-3xl font-semibold tracking-tight text-foreground">Scan not found</h1>
+        <p className="max-w-xl text-sm text-muted-foreground">
           This scan either does not exist or is not owned by the active account.
         </p>
       </div>
@@ -157,20 +157,18 @@ function RecoveredScanAnalysis({
   }
 
   return (
-    <div className="rounded-[2.5rem] border border-white/10 bg-slate-950/90 p-8 text-slate-50 shadow-[0_24px_80px_rgba(15,23,42,0.25)]">
-      <div className="inline-flex rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-slate-200">
+    <div className="surface rounded-[2.5rem] p-8 text-foreground">
+      <div className="sticker inline-flex px-3 py-1 text-xs font-medium text-secondary-foreground">
         Analysis pending
       </div>
-      <h2 className="mt-4 text-3xl font-semibold tracking-tight text-white">
+      <h2 className="mt-4 text-3xl font-semibold tracking-tight text-foreground">
         Analysis is still attaching.
       </h2>
-      <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
+      <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
         The saved scan exists, but the completed Python payload has not synced yet. This view keeps
         checking the local upload record until the analysis appears.
       </p>
-      {recoveryError ? (
-        <p className="mt-4 text-sm text-rose-300">{recoveryError}</p>
-      ) : null}
+      {recoveryError ? <p className="mt-4 text-sm text-destructive">{recoveryError}</p> : null}
     </div>
   );
 }

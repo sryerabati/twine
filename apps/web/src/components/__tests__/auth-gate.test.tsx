@@ -51,7 +51,7 @@ describe("AuthGate", () => {
         <div>private area</div>
       </AuthGate>,
     );
-    expect(screen.getByText(/Sign in to VibeCheck/i)).toBeInTheDocument();
+    expect(screen.getByText(/Sign in to Twine/i)).toBeInTheDocument();
     expect(screen.queryByText(/private area/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/What happens after login/i)).not.toBeInTheDocument();
   });

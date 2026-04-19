@@ -22,9 +22,9 @@ const monoFont = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "VibeCheck",
+  title: "Twine",
   description:
-    "VibeCheck scans creative signal, compares cuts, and tells you what to ship next.",
+    "Twine scans creative signal, compares cuts, and tells you what to ship next.",
 };
 
 export default function RootLayout({
