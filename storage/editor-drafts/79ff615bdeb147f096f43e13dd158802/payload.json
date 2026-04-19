@@ -1,0 +1,119 @@
+{
+  "export": {
+    "videoUrl": "/storage/editor-drafts/79ff615bdeb147f096f43e13dd158802/draft.mp4",
+    "durationSec": 15.53
+  },
+  "storylineSummary": "The video describes the sequential process of creating a rough cut: first, combining individual raw clips, then using AI to remove dead space and refine pacing, and finally ordering the story into a complete rough cut ready for review.",
+  "orderingConfidence": "high",
+  "orderedClips": [
+    {
+      "clipId": "clip-1",
+      "uploadId": "pending-upload-1",
+      "filename": "clip-1.mp4",
+      "sourceOrder": 2,
+      "resolvedOrder": 1,
+      "rationale": "This clip explicitly states 'First' and describes the initial step of combining separate raw clips into one coherent video, establishing the beginning of the process.",
+      "transcriptPreview": "First, this editor takes separate raw clips and turns them into one coherent video.",
+      "summary": "The speaker explains that an editor takes individual raw video clips and combines them to create a single coherent video.",
+      "speechCoverage": 0.7,
+      "removedSeconds": 2.66,
+      "trimmedDurationSec": 5.34,
+      "outputStartSec": 0.0,
+      "outputEndSec": 5.34,
+      "warnings": [],
+      "appliedCuts": [
+        {
+          "id": "deadspace-1",
+          "type": "deadspace",
+          "start": 0.0,
+          "end": 1.33,
+          "reason": "Likely deadspace from low activation, low motion, and low audio energy.",
+          "defaultSelected": true,
+          "recommendedAction": "Cut roughly 1.3s or cover it with a harder transition."
+        },
+        {
+          "id": "deadspace-2",
+          "type": "deadspace",
+          "start": 6.67,
+          "end": 8.0,
+          "reason": "Likely deadspace from low activation, low motion, and low audio energy.",
+          "defaultSelected": true,
+          "recommendedAction": "Cut roughly 1.3s or cover it with a harder transition."
+        }
+      ]
+    },
+    {
+      "clipId": "clip-2",
+      "uploadId": "pending-upload-2",
+      "filename": "clip-2.mp4",
+      "sourceOrder": 0,
+      "resolvedOrder": 2,
+      "rationale": "This clip uses the word 'Then' indicating a subsequent step, detailing how AI is used to remove dead space and awkward pauses to ensure tight pacing, logically following the initial combining of clips.",
+      "transcriptPreview": "Then the AI removes dead space and awkward pauses, so the pacing stays tight.",
+      "summary": "The speaker explains that AI is used to remove dead space and awkward pauses, ensuring the pacing remains tight.",
+      "speechCoverage": 0.74,
+      "removedSeconds": 2.54,
+      "trimmedDurationSec": 5.09,
+      "outputStartSec": 5.34,
+      "outputEndSec": 10.43,
+      "warnings": [],
+      "appliedCuts": [
+        {
+          "id": "deadspace-1",
+          "type": "deadspace",
+          "start": 0.0,
+          "end": 1.27,
+          "reason": "Likely deadspace from low activation, low motion, and low audio energy.",
+          "defaultSelected": true,
+          "recommendedAction": "Cut roughly 1.3s or cover it with a harder transition."
+        },
+        {
+          "id": "deadspace-2",
+          "type": "deadspace",
+          "start": 6.36,
+          "end": 7.63,
+          "reason": "Likely deadspace from low activation, low motion, and low audio energy.",
+          "defaultSelected": true,
+          "recommendedAction": "Cut roughly 1.3s or cover it with a harder transition."
+        }
+      ]
+    },
+    {
+      "clipId": "clip-3",
+      "uploadId": "pending-upload-3",
+      "filename": "clip-3.mp4",
+      "sourceOrder": 1,
+      "resolvedOrder": 3,
+      "rationale": "This clip uses 'Finally' to describe the concluding step of ordering the story into a full rough cut that is ready for review and export, completing the described process.",
+      "transcriptPreview": "Finally, it orders the story into a full rough cut that is ready to review and export.",
+      "summary": "The speaker explains the final step of organizing a story into a complete rough cut, which is then ready for review and export.",
+      "speechCoverage": 0.83,
+      "removedSeconds": 2.54,
+      "trimmedDurationSec": 5.1,
+      "outputStartSec": 10.43,
+      "outputEndSec": 15.53,
+      "warnings": [],
+      "appliedCuts": [
+        {
+          "id": "deadspace-1",
+          "type": "deadspace",
+          "start": 0.0,
+          "end": 1.27,
+          "reason": "Likely deadspace from low activation, low motion, and low audio energy.",
+          "defaultSelected": true,
+          "recommendedAction": "Cut roughly 1.3s or cover it with a harder transition."
+        },
+        {
+          "id": "deadspace-2",
+          "type": "deadspace",
+          "start": 6.37,
+          "end": 7.64,
+          "reason": "Likely deadspace from low activation, low motion, and low audio energy.",
+          "defaultSelected": true,
+          "recommendedAction": "Cut roughly 1.3s or cover it with a harder transition."
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}

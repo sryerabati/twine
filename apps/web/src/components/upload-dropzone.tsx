@@ -15,7 +15,9 @@ type UploadDropzoneProps = {
   status?: "idle" | "uploading" | "analyzing";
   disabled?: boolean;
   accept?: string;
+  multiple?: boolean;
   onFileChange: (file: File) => void;
+  onFilesChange?: (files: File[]) => void;
   className?: string;
 };
 
@@ -26,7 +28,9 @@ export function UploadDropzone({
   status = "idle",
   disabled = false,
   accept = "video/mp4,video/*",
+  multiple = false,
   onFileChange,
+  onFilesChange,
   className,
 }: UploadDropzoneProps) {
   const inputId = useId();
@@ -43,18 +47,26 @@ export function UploadDropzone({
     inputRef.current?.click();
   }
 
-  function commitFile(nextFile: File | null | undefined) {
-    if (!nextFile || busy) {
+  function commitFiles(nextFiles: FileList | File[] | null | undefined) {
+    if (!nextFiles || busy) {
       return;
     }
-    onFileChange(nextFile);
+    const files = Array.from(nextFiles).filter(Boolean);
+    if (!files.length) {
+      return;
+    }
+    if (multiple && onFilesChange) {
+      onFilesChange(files);
+      return;
+    }
+    onFileChange(files[0]);
   }
 
   function handleDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
     event.stopPropagation();
     setIsDragging(false);
-    commitFile(event.dataTransfer.files[0]);
+    commitFiles(event.dataTransfer.files);
   }
 
   return (
@@ -99,9 +111,10 @@ export function UploadDropzone({
         id={inputId}
         type="file"
         accept={accept}
+        multiple={multiple}
         className="sr-only"
         onChange={(event: ChangeEvent<HTMLInputElement>) => {
-          commitFile(event.target.files?.[0]);
+          commitFiles(event.target.files);
           event.currentTarget.value = "";
         }}
       />

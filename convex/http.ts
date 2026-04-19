@@ -146,4 +146,66 @@ http.route({
   }),
 });
 
+http.route({
+  path: "/service/editor-project/status",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      assertServiceSecret(request);
+      const body = await parseJson<{
+        projectId: string;
+        status: "drafting" | "queued" | "running" | "completed" | "failed";
+        latestLocalDraftId?: string;
+        errorMessage?: string;
+      }>(request);
+      if (!body.projectId || !body.status) {
+        return new Response("projectId and status are required.", { status: 400 });
+      }
+      await ctx.runMutation(internal.editorService.updateProjectStatus, {
+        projectId: body.projectId as never,
+        status: body.status,
+        latestLocalDraftId: body.latestLocalDraftId,
+        errorMessage: body.errorMessage,
+      });
+      return new Response(null, { status: 204 });
+    } catch (err) {
+      if (err instanceof Response) return err;
+      return new Response("Internal error.", { status: 500 });
+    }
+  }),
+});
+
+http.route({
+  path: "/service/editor-project/draft-summary",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      assertServiceSecret(request);
+      const body = await parseJson<{
+        projectId: string;
+        latestLocalDraftId?: string;
+        latestExportUrl?: string;
+        storylineSummary?: string;
+        orderingConfidence?: "low" | "medium" | "high";
+        warningCount?: number;
+      }>(request);
+      if (!body.projectId) {
+        return new Response("projectId is required.", { status: 400 });
+      }
+      await ctx.runMutation(internal.editorService.attachDraftSummary, {
+        projectId: body.projectId as never,
+        latestLocalDraftId: body.latestLocalDraftId,
+        latestExportUrl: body.latestExportUrl,
+        storylineSummary: body.storylineSummary,
+        orderingConfidence: body.orderingConfidence,
+        warningCount: body.warningCount,
+      });
+      return new Response(null, { status: 204 });
+    } catch (err) {
+      if (err instanceof Response) return err;
+      return new Response("Internal error.", { status: 500 });
+    }
+  }),
+});
+
 export default http;

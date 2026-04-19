@@ -258,3 +258,73 @@ export type SavedScanSummary = {
 };
 
 export type SavedScanRecord = SavedScanSummary;
+
+export type EditorProjectStatus = "drafting" | "queued" | "running" | "completed" | "failed";
+
+export type EditorProjectClip = {
+  _id: string;
+  uploadId: string;
+  localUploadId: string | null;
+  filename: string;
+  durationSec: number | null;
+  sourceOrder: number;
+  createdAt: number;
+};
+
+export type EditorProjectSummary = {
+  _id: string;
+  title: string;
+  status: EditorProjectStatus;
+  clipCount: number;
+  latestLocalDraftId: string | null;
+  latestExportUrl: string | null;
+  storylineSummary: string | null;
+  orderingConfidence: ConfidenceBand | null;
+  warningCount: number;
+  errorMessage: string | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type EditorProjectDetail = EditorProjectSummary & {
+  clips: EditorProjectClip[];
+};
+
+export type OrderedDraftClip = {
+  clipId: string;
+  uploadId: string;
+  filename: string;
+  sourceOrder: number;
+  resolvedOrder: number;
+  rationale: string;
+  transcriptPreview: string;
+  summary: string;
+  speechCoverage: number;
+  removedSeconds: number;
+  trimmedDurationSec: number;
+  outputStartSec: number;
+  outputEndSec: number;
+  warnings: string[];
+  appliedCuts: DeadspaceCut[];
+};
+
+export type EditorDraftPayload = {
+  export: {
+    videoUrl: string;
+    durationSec: number;
+  };
+  storylineSummary: string;
+  orderingConfidence: ConfidenceBand;
+  orderedClips: OrderedDraftClip[];
+  warnings: string[];
+};
+
+export type EditorDraftResponse = {
+  draftId: string;
+  projectId: string;
+  status: "queued" | "running" | "completed" | "failed";
+  createdAt: string;
+  updatedAt: string;
+  error: string | null;
+  payload: EditorDraftPayload | null;
+};

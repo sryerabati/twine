@@ -10,7 +10,7 @@ from app.routers.api import router
 from app.services.analysis_engine import AnalysisEngine
 from app.services.convex_sync import ConvexSyncService
 from app.services.gemini_runner import GeminiRunner
-from app.services.jobs import AnalysisJobService
+from app.services.jobs import AnalysisJobService, EditorDraftJobService
 from app.services.media import MediaService
 from app.services.storage import StorageService
 from app.services.tribe_runner import TribeRunner
@@ -28,6 +28,15 @@ def build_context(settings=None) -> APIContext:
     engine = AnalysisEngine(storage, media)
     convex_sync = ConvexSyncService(resolved_settings)
     jobs = AnalysisJobService(storage, runner, engine, convex_sync)
+    editor_ai = GeminiRunner(resolved_settings)
+    editor_jobs = EditorDraftJobService(
+        storage=storage,
+        runner=runner,
+        media=media,
+        engine=engine,
+        editor_ai=editor_ai,
+        convex_sync=convex_sync,
+    )
     return APIContext(
         settings=resolved_settings,
         storage=storage,
@@ -36,6 +45,8 @@ def build_context(settings=None) -> APIContext:
         engine=engine,
         jobs=jobs,
         convex_sync=convex_sync,
+        editor_ai=editor_ai,
+        editor_jobs=editor_jobs,
     )
 
 

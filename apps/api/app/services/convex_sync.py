@@ -86,6 +86,50 @@ class ConvexSyncService:
             },
         )
 
+    def update_editor_project_status(
+        self,
+        *,
+        convex_project_id: str | None,
+        status: str,
+        latest_local_draft_id: str | None = None,
+        error_message: str | None = None,
+    ) -> None:
+        if not self.enabled or not convex_project_id:
+            return
+        self._post(
+            "/service/editor-project/status",
+            {
+                "projectId": convex_project_id,
+                "status": status,
+                "latestLocalDraftId": latest_local_draft_id,
+                "errorMessage": str(error_message)[:500] if error_message is not None else None,
+            },
+        )
+
+    def attach_editor_draft_summary(
+        self,
+        *,
+        convex_project_id: str | None,
+        latest_local_draft_id: str | None,
+        latest_export_url: str | None,
+        storyline_summary: str | None,
+        ordering_confidence: str | None,
+        warning_count: int | None,
+    ) -> None:
+        if not self.enabled or not convex_project_id:
+            return
+        self._post(
+            "/service/editor-project/draft-summary",
+            {
+                "projectId": convex_project_id,
+                "latestLocalDraftId": latest_local_draft_id,
+                "latestExportUrl": latest_export_url,
+                "storylineSummary": storyline_summary,
+                "orderingConfidence": ordering_confidence,
+                "warningCount": warning_count,
+            },
+        )
+
     def _post(self, path: str, payload: dict[str, Any]) -> None:
         if not self.enabled:
             return

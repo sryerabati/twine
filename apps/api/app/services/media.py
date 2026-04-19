@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import tempfile
 import wave
 from dataclasses import dataclass
 from pathlib import Path
@@ -35,6 +36,23 @@ class MediaFeatures:
     silence_overlap: list[bool]
     silence_ranges: list[tuple[float, float]]
     scene_change_count: int
+
+
+@dataclass
+class SequenceClipPlan:
+    clip_id: str
+    source_path: Path
+    cuts: list[tuple[float, float]]
+    total_duration_sec: float
+
+
+@dataclass
+class SequenceClipTiming:
+    clip_id: str
+    trimmed_duration_sec: float
+    removed_seconds: float
+    output_start_sec: float
+    output_end_sec: float
 
 
 class MediaService:
@@ -189,6 +207,77 @@ class MediaService:
 
         new_duration = sum(end - start for start, end in keep_ranges)
         return float(new_duration)
+
+    def assemble_sequence(
+        self,
+        *,
+        output_path: Path,
+        clips: list[SequenceClipPlan],
+    ) -> tuple[float, list[SequenceClipTiming]]:
+        if not clips:
+            raise MediaInspectionError("At least one clip is required to assemble a draft.")
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with tempfile.TemporaryDirectory() as temp_dir_name:
+            temp_dir = Path(temp_dir_name)
+            concat_list_path = temp_dir / "concat.txt"
+            concat_lines: list[str] = []
+            timings: list[SequenceClipTiming] = []
+            cursor = 0.0
+
+            for index, clip in enumerate(clips):
+                trimmed_path = temp_dir / f"clip-{index:02d}.mp4"
+                trimmed_duration = self.trim_deadspace(
+                    source_path=clip.source_path,
+                    output_path=trimmed_path,
+                    cuts=clip.cuts,
+                    total_duration_sec=clip.total_duration_sec,
+                )
+                removed_seconds = round(max(0.0, clip.total_duration_sec - trimmed_duration), 2)
+                concat_lines.append(f"file '{trimmed_path.as_posix()}'")
+                timings.append(
+                    SequenceClipTiming(
+                        clip_id=clip.clip_id,
+                        trimmed_duration_sec=round(trimmed_duration, 2),
+                        removed_seconds=removed_seconds,
+                        output_start_sec=round(cursor, 2),
+                        output_end_sec=round(cursor + trimmed_duration, 2),
+                    )
+                )
+                cursor += trimmed_duration
+
+            concat_list_path.write_text("\n".join(concat_lines) + "\n", encoding="utf-8")
+            cmd = [
+                self.settings.ffmpeg_bin,
+                "-y",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                str(concat_list_path),
+                "-c:v",
+                "libx264",
+                "-preset",
+                "veryfast",
+                "-crf",
+                "22",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "160k",
+                "-movflags",
+                "+faststart",
+                str(output_path),
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            if result.returncode != 0:
+                raise MediaInspectionError(
+                    "ffmpeg concat failed. Check backend logs for the full ffmpeg output."
+                )
+
+        return round(sum(timing.trimmed_duration_sec for timing in timings), 2), timings
 
     @staticmethod
     def _invert_cuts(

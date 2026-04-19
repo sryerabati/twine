@@ -26,6 +26,7 @@ from scripts.runner_common import (
     command_download,
     probe_runtime,
 )
+from tests.conftest import ImmediateEditorJobService, StubEditorAI
 
 
 class StubMediaService:
@@ -165,6 +166,8 @@ def make_context(
     runner = StubRunner(install_present=install_present)
     engine = AnalysisEngine(storage, media)
     convex_sync = ConvexSyncService(settings)
+    editor_ai = StubEditorAI()
+    editor_jobs = ImmediateEditorJobService(storage, runner, media, engine, editor_ai)
     return APIContext(
         settings=settings,
         storage=storage,
@@ -173,6 +176,8 @@ def make_context(
         engine=engine,
         jobs=None,
         convex_sync=convex_sync,
+        editor_ai=editor_ai,
+        editor_jobs=editor_jobs,
     )
 
 

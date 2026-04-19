@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 const navigation = [
   { href: "/app", label: "Dashboard" },
   { href: "/app/library", label: "Library" },
+  { href: "/app/editor", label: "AI Editor" },
 ];
 
 const navButtonClassName =

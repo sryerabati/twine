@@ -12,7 +12,14 @@ from fastapi import UploadFile
 
 from app.core.config import Settings
 from app.core.serialization import dump_json, load_json
-from app.models.contracts import AnalysisPayload, AnalysisResponse, UploadResponse, VideoAsset
+from app.models.contracts import (
+    AnalysisPayload,
+    AnalysisResponse,
+    EditorDraftPayload,
+    EditorDraftResponse,
+    UploadResponse,
+    VideoAsset,
+)
 
 
 @dataclass
@@ -38,6 +45,15 @@ class AnalysisPaths:
     trimmed_video_path: Path
 
 
+@dataclass
+class EditorDraftPaths:
+    draft_id: str
+    directory: Path
+    record_path: Path
+    payload_path: Path
+    video_path: Path
+
+
 class StorageService:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -47,6 +63,7 @@ class StorageService:
         self.settings.uploads_dir.mkdir(parents=True, exist_ok=True)
         self.settings.results_dir.mkdir(parents=True, exist_ok=True)
         self.settings.cache_dir.mkdir(parents=True, exist_ok=True)
+        (self.settings.storage_root / "editor-drafts").mkdir(parents=True, exist_ok=True)
 
     def create_upload_paths(self, filename: str) -> UploadPaths:
         upload_id = uuid4().hex
@@ -92,6 +109,18 @@ class StorageService:
             trimmed_video_path=directory / "trimmed.mp4",
         )
 
+    def create_editor_draft_paths(self) -> EditorDraftPaths:
+        draft_id = uuid4().hex
+        directory = self.settings.storage_root / "editor-drafts" / draft_id
+        directory.mkdir(parents=True, exist_ok=True)
+        return EditorDraftPaths(
+            draft_id=draft_id,
+            directory=directory,
+            record_path=directory / "record.json",
+            payload_path=directory / "payload.json",
+            video_path=directory / "draft.mp4",
+        )
+
     def analysis_paths(self, analysis_id: str) -> AnalysisPaths:
         self._validate_analysis_id(analysis_id)
         directory = self.settings.results_dir / analysis_id
@@ -106,6 +135,17 @@ class StorageService:
             segments_path=directory / "segments.json",
             cuts_path=directory / "cut-list.json",
             trimmed_video_path=directory / "trimmed.mp4",
+        )
+
+    def editor_draft_paths(self, draft_id: str) -> EditorDraftPaths:
+        self._validate_analysis_id(draft_id)
+        directory = self.settings.storage_root / "editor-drafts" / draft_id
+        return EditorDraftPaths(
+            draft_id=draft_id,
+            directory=directory,
+            record_path=directory / "record.json",
+            payload_path=directory / "payload.json",
+            video_path=directory / "draft.mp4",
         )
 
     @staticmethod
@@ -151,6 +191,20 @@ class StorageService:
         self.write_analysis_record(record)
         return record
 
+    def init_editor_draft_record(self, draft_id: str, project_id: str) -> EditorDraftResponse:
+        now = datetime.now(UTC)
+        record = EditorDraftResponse(
+            draftId=draft_id,
+            projectId=project_id,
+            status="queued",
+            createdAt=now,
+            updatedAt=now,
+            error=None,
+            payload=None,
+        )
+        self.write_editor_draft_record(record)
+        return record
+
     def write_analysis_record(self, record: AnalysisResponse) -> None:
         paths = self.analysis_paths(record.analysisId)
         dump_json(paths.record_path, record.model_dump(mode="json"))
@@ -162,6 +216,16 @@ class StorageService:
         data = load_json(paths.record_path)
         return AnalysisResponse.model_validate(data)
 
+    def write_editor_draft_record(self, record: EditorDraftResponse) -> None:
+        paths = self.editor_draft_paths(record.draftId)
+        dump_json(paths.record_path, record.model_dump(mode="json"))
+
+    def read_editor_draft_record(self, draft_id: str) -> EditorDraftResponse:
+        paths = self.editor_draft_paths(draft_id)
+        if not paths.record_path.exists():
+            raise FileNotFoundError(f"Editor draft {draft_id} not found")
+        return EditorDraftResponse.model_validate(load_json(paths.record_path))
+
     def write_analysis_payload(self, analysis_id: str, payload: AnalysisPayload) -> None:
         paths = self.analysis_paths(analysis_id)
         dump_json(paths.payload_path, payload.model_dump(mode="json"))
@@ -172,6 +236,15 @@ class StorageService:
         if not path.exists():
             raise FileNotFoundError(f"Analysis payload {analysis_id} not found")
         return AnalysisPayload.model_validate(load_json(path))
+
+    def write_editor_draft_payload(self, draft_id: str, payload: EditorDraftPayload) -> None:
+        dump_json(self.editor_draft_paths(draft_id).payload_path, payload.model_dump(mode="json"))
+
+    def read_editor_draft_payload(self, draft_id: str) -> EditorDraftPayload:
+        path = self.editor_draft_paths(draft_id).payload_path
+        if not path.exists():
+            raise FileNotFoundError(f"Editor draft payload {draft_id} not found")
+        return EditorDraftPayload.model_validate(load_json(path))
 
     def find_latest_analysis_for_upload(self, upload_id: str) -> AnalysisResponse:
         self._validate_analysis_id(upload_id)
@@ -197,6 +270,31 @@ class StorageService:
 
         if latest is None:
             raise FileNotFoundError(f"No completed analysis found for upload {upload_id!r}")
+        return latest
+
+    def find_latest_editor_draft_for_project(self, project_id: str) -> EditorDraftResponse:
+        latest: EditorDraftResponse | None = None
+        editor_drafts_root = self.settings.storage_root / "editor-drafts"
+        if not editor_drafts_root.exists():
+            raise FileNotFoundError(f"No editor drafts found for project {project_id!r}")
+
+        for record_path in sorted(editor_drafts_root.glob("*/record.json")):
+            record = EditorDraftResponse.model_validate(load_json(record_path))
+            if record.projectId != project_id:
+                continue
+
+            hydrated = record
+            payload_path = record_path.parent / "payload.json"
+            if record.status == "completed" and payload_path.exists():
+                hydrated = record.model_copy(
+                    update={"payload": EditorDraftPayload.model_validate(load_json(payload_path))}
+                )
+
+            if latest is None or hydrated.updatedAt > latest.updatedAt:
+                latest = hydrated
+
+        if latest is None:
+            raise FileNotFoundError(f"No editor drafts found for project {project_id!r}")
         return latest
 
     def write_segments(self, analysis_id: str, payload: list[dict[str, Any]]) -> None:

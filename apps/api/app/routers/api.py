@@ -13,12 +13,15 @@ from app.models.contracts import (
     AnalysisResponse,
     CompareRequest,
     CompareResponse,
+    EditorDraftResponse,
+    EditorGenerateRequest,
     ExportArtifact,
     HealthResponse,
     TrimRequest,
     TrimResponse,
     UploadResponse,
 )
+from app.services.gemini_runner import GeminiIntegrationError
 from app.services.media import MediaInspectionError
 
 
@@ -177,6 +180,41 @@ def analyze_video(
     return record
 
 
+@router.post("/editor/generate", response_model=EditorDraftResponse, status_code=status.HTTP_202_ACCEPTED)
+def generate_editor_draft(
+    request: EditorGenerateRequest,
+    context: APIContext = Depends(get_context),
+) -> EditorDraftResponse:
+    storage = context.storage
+    try:
+        context.editor_ai.require_editor_support()
+    except (GeminiIntegrationError, RuntimeError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    for clip in request.clips:
+        try:
+            storage.read_upload_metadata(clip.localUploadId)
+        except FileNotFoundError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Local upload {clip.localUploadId} was not found.",
+            ) from exc
+
+    draft_paths = storage.create_editor_draft_paths()
+    record = storage.init_editor_draft_record(draft_paths.draft_id, request.convexProjectId)
+    context.convex_sync.update_editor_project_status(
+        convex_project_id=request.convexProjectId,
+        status="queued",
+        latest_local_draft_id=draft_paths.draft_id,
+    )
+    context.editor_jobs.enqueue(
+        request.convexProjectId,
+        draft_paths.draft_id,
+        request.clips,
+    )
+    return record
+
+
 @router.get("/analysis/{analysis_id}", response_model=AnalysisResponse)
 def get_analysis(
     analysis_id: str,
@@ -212,6 +250,17 @@ def get_analysis_by_upload(
             status_code=404,
             detail="No completed analysis found for this upload yet.",
         ) from exc
+
+
+@router.get("/editor/projects/{project_id}/latest-draft", response_model=EditorDraftResponse)
+def get_latest_editor_draft(
+    project_id: str,
+    context: APIContext = Depends(get_context),
+) -> EditorDraftResponse:
+    try:
+        return context.storage.find_latest_editor_draft_for_project(project_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Editor draft not found.") from exc
 
 
 @router.post("/compare", response_model=CompareResponse)

@@ -10,14 +10,18 @@ from app.core.context import APIContext
 from app.main import create_app
 from app.services.analysis_engine import AnalysisEngine
 from app.services.convex_sync import ConvexSyncService
-from app.services.jobs import EditorDraftJobService
 from app.services.media import VideoMetadata
 from app.services.storage import StorageService
-from tests.conftest import ImmediateJobService, StubMediaService, StubRunner
+from tests.conftest import ImmediateEditorJobService, ImmediateJobService, StubMediaService, StubRunner
 
 
 class StubEditorAI:
+    def __init__(self, *, enabled: bool) -> None:
+        self.enabled = enabled
+
     def require_editor_support(self) -> None:
+        if not self.enabled:
+            raise RuntimeError("GEMINI_API_KEY is required for AI Editor generation.")
         return None
 
     def summarize_editor_clip(self, video_path: Path) -> dict[str, object]:
@@ -33,11 +37,13 @@ class StubEditorAI:
         return {
             "storylineSummary": "Ordered into a simple UGC narrative.",
             "orderingConfidence": "high",
-            "orderedClipIds": [str(clip["clipId"]) for clip in clips],
-            "rationales": {
-                str(clip["clipId"]): f"Placed {clip['filename']} in order."
+            "orderedClips": [
+                {
+                    "clipId": str(clip["clipId"]),
+                    "rationale": f"Placed {clip['filename']} in order.",
+                }
                 for clip in clips
-            },
+            ],
             "warnings": [],
         }
 
@@ -71,6 +77,7 @@ def build_editor_test_context(tmp_path: Path, *, gemini_api_key: str | None) -> 
     runner = StubRunner()
     engine = AnalysisEngine(storage, media)
     jobs = ImmediateJobService(storage, runner, engine)
+    editor_ai = StubEditorAI(enabled=gemini_api_key is not None)
     return APIContext(
         settings=settings,
         storage=storage,
@@ -79,14 +86,13 @@ def build_editor_test_context(tmp_path: Path, *, gemini_api_key: str | None) -> 
         engine=engine,
         jobs=jobs,
         convex_sync=ConvexSyncService(settings),
-        editor_ai=StubEditorAI(),
-        editor_jobs=EditorDraftJobService(
-            storage=storage,
-            runner=runner,
-            media=media,
-            engine=engine,
-            editor_ai=StubEditorAI(),
-            convex_sync=ConvexSyncService(settings),
+        editor_ai=editor_ai,
+        editor_jobs=ImmediateEditorJobService(
+            storage,
+            runner,
+            media,
+            engine,
+            editor_ai,
         ),
     )
 

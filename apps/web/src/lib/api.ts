@@ -1,6 +1,7 @@
 import type {
   AnalysisResponse,
   CompareResponse,
+  EditorDraftResponse,
   HealthResponse,
   TrimResponse,
   UploadResponse,
@@ -91,5 +92,32 @@ export async function compareAnalyses(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ analysisIdA, analysisIdB }),
+  });
+}
+
+export async function generateEditorDraft(
+  convexProjectId: string,
+  clips: Array<{
+    clipId: string;
+    uploadId: string;
+    localUploadId: string;
+    filename: string;
+  }>,
+): Promise<EditorDraftResponse> {
+  return request<EditorDraftResponse>("/api/editor/generate", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      convexProjectId,
+      clips,
+    }),
+  });
+}
+
+export async function fetchLatestEditorDraft(projectId: string): Promise<EditorDraftResponse> {
+  return request<EditorDraftResponse>(`/api/editor/projects/${projectId}/latest-draft`, {
+    cache: "no-store",
   });
 }

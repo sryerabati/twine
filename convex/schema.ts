@@ -78,6 +78,41 @@ const schema = defineSchema({
     .index("by_userId_createdAt", ["userId", "createdAt"])
     .index("by_localAnalysisId", ["localAnalysisId"])
     .index("by_userId_status", ["userId", "status"]),
+
+  editorProjects: defineTable({
+    userId: v.id("users"),
+    title: v.string(),
+    status: v.union(
+      v.literal("drafting"),
+      v.literal("queued"),
+      v.literal("running"),
+      v.literal("completed"),
+      v.literal("failed"),
+    ),
+    latestLocalDraftId: v.optional(v.string()),
+    latestExportUrl: v.optional(v.string()),
+    storylineSummary: v.optional(v.string()),
+    orderingConfidence: v.optional(
+      v.union(v.literal("low"), v.literal("medium"), v.literal("high")),
+    ),
+    warningCount: v.optional(v.number()),
+    errorMessage: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId_createdAt", ["userId", "createdAt"])
+    .index("by_userId_status", ["userId", "status"]),
+
+  editorProjectClips: defineTable({
+    projectId: v.id("editorProjects"),
+    uploadId: v.id("uploads"),
+    sourceOrder: v.number(),
+    filenameSnapshot: v.string(),
+    durationSecSnapshot: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_projectId_and_sourceOrder", ["projectId", "sourceOrder"])
+    .index("by_projectId_and_createdAt", ["projectId", "createdAt"]),
 });
 
 export default schema;

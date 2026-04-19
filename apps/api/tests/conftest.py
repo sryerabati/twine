@@ -15,8 +15,8 @@ from app.core.context import APIContext
 from app.main import create_app
 from app.services.analysis_engine import AnalysisEngine
 from app.services.convex_sync import ConvexSyncService
-from app.services.jobs import AnalysisJobService
-from app.services.media import MediaFeatures, VideoMetadata
+from app.services.jobs import AnalysisJobService, EditorDraftJobService
+from app.services.media import MediaFeatures, SequenceClipPlan, SequenceClipTiming, VideoMetadata
 from app.services.storage import StorageService
 from app.services.tribe_runner import SegmentSnapshot, TribeRunResult
 
@@ -44,6 +44,33 @@ class StubMediaService:
         output_path.write_bytes(b"fake-trimmed-mp4")
         removed = sum(max(0.0, end - start) for start, end in cuts)
         return max(0.0, total_duration_sec - removed)
+
+    def assemble_sequence(
+        self,
+        *,
+        output_path: Path,
+        clips: list[SequenceClipPlan],
+    ) -> tuple[float, list[SequenceClipTiming]]:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"fake-editor-draft")
+        timings: list[SequenceClipTiming] = []
+        cursor = 0.0
+        for clip in clips:
+            trimmed_duration = max(
+                0.0,
+                clip.total_duration_sec - sum(max(0.0, end - start) for start, end in clip.cuts),
+            )
+            timings.append(
+                SequenceClipTiming(
+                    clip_id=clip.clip_id,
+                    trimmed_duration_sec=round(trimmed_duration, 2),
+                    removed_seconds=round(clip.total_duration_sec - trimmed_duration, 2),
+                    output_start_sec=round(cursor, 2),
+                    output_end_sec=round(cursor + trimmed_duration, 2),
+                )
+            )
+            cursor += trimmed_duration
+        return round(cursor, 2), timings
 
     def analyze_media(
         self,
@@ -115,6 +142,56 @@ class ImmediateJobService:
         self._delegate.run_now(analysis_id, upload_id, convex_scan_id)
 
 
+class StubEditorAI:
+    def require_editor_support(self) -> None:
+        return None
+
+    def summarize_editor_clip(self, video_path: Path) -> dict[str, object]:
+        stem = video_path.stem.replace("_", " ")
+        return {
+            "summary": f"{stem} summary",
+            "transcriptPreview": f"{stem} transcript",
+            "speechCoverage": 0.75,
+            "warnings": [],
+        }
+
+    def order_editor_clips(self, clips: list[dict[str, object]]) -> dict[str, object]:
+        return {
+            "storylineSummary": "Ordered into a creator-friendly sequence.",
+            "orderingConfidence": "high",
+            "orderedClips": [
+                {
+                    "clipId": str(clip["clipId"]),
+                    "rationale": f"Placed {clip['filename']} in narrative order.",
+                }
+                for clip in clips
+            ],
+            "warnings": [],
+        }
+
+
+class ImmediateEditorJobService:
+    def __init__(
+        self,
+        storage: StorageService,
+        runner: StubRunner,
+        media: StubMediaService,
+        engine: AnalysisEngine,
+        editor_ai: StubEditorAI,
+    ) -> None:
+        self._delegate = EditorDraftJobService(
+            storage=storage,
+            runner=runner,
+            media=media,
+            engine=engine,
+            editor_ai=editor_ai,
+            convex_sync=ConvexSyncService(storage.settings),
+        )
+
+    def enqueue(self, project_id: str, draft_id: str, clips: list[object]) -> None:
+        self._delegate.run_now(project_id, draft_id, clips)  # type: ignore[arg-type]
+
+
 @pytest.fixture
 def test_settings(tmp_path: Path) -> Settings:
     return Settings(
@@ -149,6 +226,8 @@ def test_context(test_settings: Settings) -> APIContext:
     runner = StubRunner()
     engine = AnalysisEngine(storage, media)
     jobs = ImmediateJobService(storage, runner, engine)
+    editor_ai = StubEditorAI()
+    editor_jobs = ImmediateEditorJobService(storage, runner, media, engine, editor_ai)
     return APIContext(
         settings=test_settings,
         storage=storage,
@@ -157,6 +236,8 @@ def test_context(test_settings: Settings) -> APIContext:
         engine=engine,
         jobs=jobs,
         convex_sync=ConvexSyncService(test_settings),
+        editor_ai=editor_ai,
+        editor_jobs=editor_jobs,
     )
 
 

@@ -46,6 +46,7 @@ describe("AppShell", () => {
 
     const dashboardLink = screen.getByRole("link", { name: /Dashboard/i });
     const libraryLink = screen.getByRole("link", { name: /Library/i });
+    const editorLink = screen.getByRole("link", { name: /AI Editor/i });
 
     expect(dashboardLink).toHaveClass(
       "bg-secondary",
@@ -71,6 +72,7 @@ describe("AppShell", () => {
       "active:not-aria-[haspopup]:translate-y-[3px]",
       "active:shadow-[2px_2px_0_0_var(--color-border)]",
     );
+    expect(editorLink).toHaveAttribute("href", "/app/editor");
   });
 
   it("renders a header skeleton while the workspace identity is loading", () => {
