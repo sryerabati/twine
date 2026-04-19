@@ -91,6 +91,30 @@ describe("SavedScanCards", () => {
     expect(article?.className).toContain("h-full");
   });
 
+  it("uses a compact title and video preview when media is available", () => {
+    const scanWithPreview: SavedScanSummary = {
+      ...baseScan,
+      _id: "scan-single-3",
+      filename: "snaptik_7623937651409784095_v3.mp4",
+      secondaryFilename: null,
+      analysisUrl: "/videos/source.mp4",
+      latestExportUrl: "/videos/export.mp4",
+      lastExportedAt: Date.now(),
+      selectedCutIds: ["cut-1", "cut-2"],
+    };
+
+    render(<SavedScanCards scans={[scanWithPreview]} title="Saved scans" />);
+
+    const heading = screen.getByRole("heading", { name: /snaptik_7623937651409784095_v3\.mp4/i });
+    expect(heading.className).toContain("line-clamp-2");
+    expect(heading.className).toContain("text-lg");
+
+    const preview = screen.getByLabelText(/scan preview for snaptik_7623937651409784095_v3\.mp4/i);
+    expect(preview).toHaveAttribute("src", "/videos/export.mp4");
+    expect(screen.queryByText(/ship the strongest cut\./i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /latest export/i })).not.toBeInTheDocument();
+  });
+
   it("renders flowing skeleton cards while scans are loading", () => {
     const { container } = render(
       <SavedScanCards scans={[]} loading title="Saved scans" />,

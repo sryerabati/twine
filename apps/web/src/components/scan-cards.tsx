@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight, Clock3, Download, GitCompareArrows, ScanEye, Sparkles } from "lucide-react";
+import { ArrowUpRight, Clock3, GitCompareArrows, ScanEye, Sparkles } from "lucide-react";
 
 import { SavedScanCardsSkeleton } from "@/components/loading-states";
 import { Badge } from "@/components/ui/badge";
@@ -58,8 +58,10 @@ export function SavedScanCards({
           {visibleScans.map((scan) => (
             <article
               key={scan._id}
-              className="surface flex h-full min-w-0 flex-col overflow-hidden rounded-[1.75rem] p-6"
+              className="surface flex h-full min-w-0 flex-col overflow-hidden rounded-[1.75rem] p-5"
             >
+              <ScanPreview scan={scan} />
+
               <div className="flex flex-wrap items-start gap-3">
                 <div className="flex flex-wrap gap-2">
                   <ScanTypeBadge scanType={scan.scanType} />
@@ -71,38 +73,26 @@ export function SavedScanCards({
                 </span>
               </div>
 
-              <div className="mt-4 min-w-0">
-                <h3 className="text-xl font-semibold leading-tight tracking-tight text-foreground [overflow-wrap:anywhere]">
+              <div className="mt-3 min-w-0">
+                <h3 className="line-clamp-2 text-lg font-semibold leading-snug tracking-tight text-foreground [overflow-wrap:anywhere]">
                   {getScanTitle(scan)}
                 </h3>
                 {getScanSubtitle(scan) ? (
-                  <p className="mt-1 text-sm text-muted-foreground [overflow-wrap:anywhere]">
+                  <p className="mt-1 line-clamp-1 text-xs text-muted-foreground [overflow-wrap:anywhere]">
                     {getScanSubtitle(scan)}
                   </p>
                 ) : null}
               </div>
 
-              <p className="mt-4 min-h-14 text-sm leading-6 text-muted-foreground">
-                {scan.compareResult?.recommendation ??
-                  scan.overviewRecommendation ??
-                  "Analysis is still syncing. Open the scan to follow the timeline and export plan."}
-              </p>
-
-              <div className="mt-5 grid gap-4 border-t border-border/70 pt-5 sm:grid-cols-3">
+              <div className="mt-4 grid gap-4 border-t border-border/70 pt-4 sm:grid-cols-3">
                 <Metric label="Hook" value={scan.hookScore} />
                 <Metric label="Pacing" value={scan.pacingScore} />
                 <Metric label="Viral" value={scan.viralPotential} />
               </div>
 
-              <div className="mt-5 flex flex-wrap gap-2">
+              <div className="mt-4 flex flex-wrap gap-2">
                 {scan.deadspaceSeconds !== null ? (
                   <Badge variant="secondary">Deadspace {formatSeconds(scan.deadspaceSeconds)}</Badge>
-                ) : null}
-                {scan.lastExportedAt ? (
-                  <Badge variant="secondary" className="bg-accent/10 text-foreground">
-                    <Download className="mr-1 size-3.5" />
-                    Exported {formatDateTime(scan.lastExportedAt)}
-                  </Badge>
                 ) : null}
                 {scan.selectedCutIds.length ? (
                   <Badge variant="secondary" className="bg-primary/10 text-primary">
@@ -119,16 +109,6 @@ export function SavedScanCards({
                 >
                   {isCompareScan(scan) ? "Open compare" : "Open scan"}
                 </Link>
-                {scan.latestExportUrl ? (
-                  <a
-                    href={scan.latestExportUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className={cn(buttonVariants({ variant: "outline" }))}
-                  >
-                    Latest export
-                  </a>
-                ) : null}
               </div>
             </article>
           ))}
@@ -140,6 +120,33 @@ export function SavedScanCards({
         </div>
       )}
     </section>
+  );
+}
+
+function ScanPreview({ scan }: { scan: SavedScanSummary }) {
+  const previewUrl = scan.latestExportUrl ?? scan.analysisUrl;
+
+  if (!previewUrl) {
+    return (
+      <div className="mb-4 flex aspect-video items-end overflow-hidden rounded-[1.25rem] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(58,173,104,0.22),transparent_55%),linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01))] p-4">
+        <span className="text-xs uppercase tracking-[0.24em] text-muted-foreground">
+          {isCompareScan(scan) ? "Compare preview pending" : "Preview pending"}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-4 overflow-hidden rounded-[1.25rem] border border-border/70 bg-black/20">
+      <video
+        aria-label={`Scan preview for ${getScanTitle(scan)}`}
+        className="aspect-video w-full object-cover"
+        muted
+        playsInline
+        preload="metadata"
+        src={previewUrl}
+      />
+    </div>
   );
 }
 

@@ -568,8 +568,6 @@ function CompletedAnalysis({
         payload={payload}
         activeCutIds={activeCutIds}
         trimMode={trimMode}
-        onPreviewTimeChange={onPreviewTimeChange}
-        onJumpToTime={seekToTime}
       />
     </div>
   );
