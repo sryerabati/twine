@@ -46,7 +46,7 @@ export function BrandLockup({
         )}
       >
         <Image
-          src="/branding/twine-mark.png"
+          src="/branding/twine-leaf-play-mark.png"
           alt=""
           aria-hidden
           width={72}

@@ -40,7 +40,7 @@ describe("AppShell", () => {
     expect(brandLink).toHaveAttribute("href", "/");
     expect(brandLink.querySelector("img")).toHaveAttribute(
       "src",
-      expect.stringContaining("twine-mark.png"),
+      expect.stringContaining("twine-leaf-play-mark.png"),
     );
     expect(brandLink.querySelector("img")).toHaveClass("translate-x-[4%]");
     expect(brandLink).toHaveClass("gap-4");

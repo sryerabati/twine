@@ -26,9 +26,8 @@ export const metadata: Metadata = {
   description:
     "Twine compares cuts and tells you what to ship next.",
   icons: {
-    icon: "/branding/twine-icon-white.png",
-    shortcut: "/branding/twine-icon-white.png",
-    apple: "/branding/twine-icon-white.png",
+    shortcut: "/branding/twine-leaf-play-icon.png",
+    apple: "/branding/twine-leaf-play-icon.png",
   },
 };
 

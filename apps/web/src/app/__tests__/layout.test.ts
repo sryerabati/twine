@@ -11,9 +11,8 @@ describe("app metadata", () => {
     const { metadata } = await import("@/app/layout");
 
     expect(metadata.icons).toMatchObject({
-      icon: "/branding/twine-icon-white.png",
-      apple: "/branding/twine-icon-white.png",
-      shortcut: "/branding/twine-icon-white.png",
+      apple: "/branding/twine-leaf-play-icon.png",
+      shortcut: "/branding/twine-leaf-play-icon.png",
     });
   });
 });
