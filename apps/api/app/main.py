@@ -12,6 +12,7 @@ from app.services.convex_sync import ConvexSyncService
 from app.services.gemini_runner import GeminiRunner
 from app.services.jobs import AnalysisJobService, EditorDraftJobService
 from app.services.media import MediaService
+from app.services.mirofish_runner import MiroFishRunner
 from app.services.nvidia_editor_ai import NvidiaEditorAI
 from app.services.storage import StorageService
 from app.services.tribe_runner import TribeRunner
@@ -23,7 +24,9 @@ def build_context(settings=None) -> APIContext:
     storage = StorageService(resolved_settings, convex_sync=convex_sync)
     media = MediaService(resolved_settings)
     runner = (
-        GeminiRunner(resolved_settings)
+        MiroFishRunner(resolved_settings)
+        if resolved_settings.analysis_backend == "mirofish"
+        else GeminiRunner(resolved_settings)
         if resolved_settings.analysis_backend == "gemini"
         else TribeRunner(resolved_settings)
     )

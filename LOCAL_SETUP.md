@@ -12,7 +12,7 @@ Both platforms need:
 - `uv v0.9.x`
 - `git`
 - `ffmpeg` with `ffprobe`
-- either Hugging Face access to `facebook/tribev2` and the upstream gated dependencies, or a Gemini API key for the fallback backend
+- either Hugging Face access to `facebook/tribev2`, a Gemini API key for the fallback backend, or a MiroFish + Zep setup for the audience-simulation backend
 
 macOS notes:
 
@@ -104,6 +104,53 @@ GEMINI_MODEL=gemini-2.5-pro
 
 Put `GEMINI_API_KEY` in the repo-root `.env`. The backend does not read it from `.env.example`.
 
+Real MiroFish mode:
+
+```bash
+git clone https://github.com/666ghj/MiroFish.git ../MiroFish
+cd ../MiroFish
+npm run setup:backend
+cd ../claudehackosu26
+```
+
+Then configure the repo-root `.env`:
+
+```bash
+ANALYSIS_BACKEND=mirofish
+MIROFISH_REPO_DIR=../MiroFish
+MIROFISH_AUTO_START=true
+MIROFISH_ZEP_API_KEY=your_zep_key_here
+
+# If the rest of your app already uses Vertex, keep that path here too.
+GEMINI_PLATFORM=vertex
+MIROFISH_VERTEX_PROJECT_ID=your_gcp_project_id
+MIROFISH_VERTEX_LOCATION=global
+
+# Then provide ADC locally with either:
+# GOOGLE_APPLICATION_CREDENTIALS=/abs/path/service-account.json
+# or `gcloud auth application-default login`
+
+# Optional explicit non-Vertex override:
+MIROFISH_LLM_API_KEY=
+MIROFISH_LLM_BASE_URL=
+MIROFISH_LLM_MODEL_NAME=
+```
+
+If you want to run the official MiroFish backend yourself instead of using Twine auto-start:
+
+```bash
+cd ../MiroFish
+npm run backend
+```
+
+Then point Twine at it:
+
+```bash
+ANALYSIS_BACKEND=mirofish
+MIROFISH_BASE_URL=http://127.0.0.1:5001
+MIROFISH_ZEP_API_KEY=your_zep_key_here
+```
+
 ## TRIBE v2 setup and local download
 
 The TRIBE backend depends on the official GitHub repo directly, not PyPI.
@@ -135,7 +182,7 @@ py -3.11 apps\api\scripts\run_tribe_windows.py download
 
 ## Serve the model-backed backend
 
-"Serve" means start the FastAPI backend that loads TRIBE in-process and exposes `/api/*` and `/storage/*`.
+"Serve" means start the FastAPI backend that either loads TRIBE in-process or calls the configured remote backend and exposes `/api/*` and `/storage/*`.
 
 macOS:
 
@@ -162,6 +209,18 @@ ANALYSIS_BACKEND=tribe
 TRIBE_DEVICE=auto
 GEMINI_API_KEY=
 GEMINI_MODEL=gemini-2.5-pro
+MIROFISH_BASE_URL=
+MIROFISH_REPO_DIR=
+MIROFISH_AUTO_START=false
+MIROFISH_TIMEOUT_SECONDS=900
+MIROFISH_POLL_SECONDS=3
+MIROFISH_SIMULATION_MAX_ROUNDS=12
+MIROFISH_LLM_API_KEY=
+MIROFISH_LLM_BASE_URL=
+MIROFISH_LLM_MODEL_NAME=
+MIROFISH_VERTEX_PROJECT_ID=
+MIROFISH_VERTEX_LOCATION=global
+MIROFISH_ZEP_API_KEY=
 TRIBE_MAX_VIDEO_SECONDS=120
 TRIBE_MAX_UPLOAD_BYTES=50000000
 TRIBE_POLL_INTERVAL_MS=2500
@@ -179,6 +238,8 @@ Notes:
 - Keep `TRIBE_DEVICE=auto` on this Mac baseline unless you explicitly want to experiment with `mps`.
 - CUDA is the recommended faster path, but the app should still run locally without it.
 - `ANALYSIS_BACKEND=gemini` skips the TRIBE model download path and uses the remote content-analysis backend instead.
+- `ANALYSIS_BACKEND=mirofish` sends a generated video brief into the official MiroFish service and returns audience-simulation output for `Read the room`.
+- `MIROFISH_BASE_URL` is for an already-running MiroFish backend. `MIROFISH_REPO_DIR` plus `MIROFISH_AUTO_START=true` lets Twine boot the official backend itself.
 - `NEXT_PUBLIC_CONVEX_URL` is populated automatically by `npx convex dev` in `apps/web`.
 - Leave `REQUIRE_CONVEX_IDS=true` for the authenticated web flow; only disable it for intentional local API-only smoke tests.
 
@@ -226,6 +287,7 @@ That shortcut starts both services together, but the cross-platform setup flow i
    - `cut-list.json`
    - `preds.npy` when `ANALYSIS_BACKEND=tribe`
    - `provider-response.json` when `ANALYSIS_BACKEND=gemini`
+   - `provider-response.json` when `ANALYSIS_BACKEND=mirofish`
 6. The analysis page renders timeline, heat-strip, scores, markers, and export links.
 
 ## Troubleshooting
@@ -238,6 +300,10 @@ That shortcut starts both services together, but the cross-platform setup flow i
   - Add the token to `.env` or the active environment and restart the backend
 - `ffmpeg` or `ffprobe` missing
   - Install with `brew install ffmpeg`
+- `MIROFISH_ZEP_API_KEY is not set`
+  - Add a valid Zep Cloud key before using `ANALYSIS_BACKEND=mirofish`
+- `MiroFish is configured but not reachable`
+  - Start the official backend from its own repo with `npm run backend`, or set `MIROFISH_REPO_DIR` and `MIROFISH_AUTO_START=true`
 - Native Windows launcher failures
   - Confirm you are using `py -3.11` and native Windows `ffmpeg`/`ffprobe`, not WSL
 - Backend cannot reach frontend

@@ -8,12 +8,16 @@ import numpy as np
 import pandas as pd
 
 from app.models.contracts import (
+    ActionBoard,
     AnalysisPayload,
     AnalysisSummary,
-    ActionBoard,
     ArtifactLinks,
+    AudienceOutlook,
+    AudienceTimelinePoint,
+    AudienceVoice,
     BrainResponsePayload,
     BrainResponsePoint,
+    BrainSignalSummary,
     CompareResponse,
     CompareSlice,
     ConfidenceBand,
@@ -109,6 +113,7 @@ class AnalysisEngine:
         )
         payload = AnalysisPayload(
             analysisId=analysis_id,
+            analysisMode="brain_scan",
             video=video,
             brainResponse=BrainResponsePayload(
                 timeSeries=points,
@@ -157,6 +162,7 @@ class AnalysisEngine:
         artifacts = ArtifactLinks(**self.storage.artifacts_for(analysis_id))
         return AnalysisPayload(
             analysisId=analysis_id,
+            analysisMode="brain_scan",
             video=video,
             brainResponse=BrainResponsePayload(
                 timeSeries=points,
@@ -293,6 +299,7 @@ class AnalysisEngine:
         )
         payload = AnalysisPayload(
             analysisId=analysis_id,
+            analysisMode="read_the_room",
             video=video,
             brainResponse=BrainResponsePayload(
                 timeSeries=points,
@@ -303,6 +310,8 @@ class AnalysisEngine:
                     totalVertices=int(result.preds.shape[1]) if result.preds is not None else 128,
                 ),
             ),
+            audienceOutlook=self._audience_outlook_from_proxy(proxy, summary, points),
+            brainSummary=self._brain_signal_summary(points),
             markers=markers,
             deadspaceCuts=cuts,
             lowValueCuts=low_value_cuts,
@@ -705,7 +714,7 @@ class AnalysisEngine:
     def _points_from_proxy_timeline(timeline: list[dict[str, Any]]) -> list[BrainResponsePoint]:
         if not timeline:
             return []
-        activations = [float(window["globalActivation"]) for window in timeline]
+        activations = [AnalysisEngine._proxy_activation_estimate_from_window(window) for window in timeline]
         rolling_variance = AnalysisEngine._rolling_variance(activations)
         activation_delta = np.diff(np.asarray(activations), prepend=activations[0])
         spike_score = AnalysisEngine._normalize_series(np.maximum(activation_delta, 0.0))
@@ -715,7 +724,7 @@ class AnalysisEngine:
         for index, window in enumerate(timeline):
             start = float(window["startSec"])
             end = float(window["endSec"])
-            activation = max(0.0, min(float(window["globalActivation"]), 1.0))
+            activation = activations[index]
             points.append(
                 BrainResponsePoint(
                     stimulusTimeSec=round(start, 2),
@@ -740,6 +749,134 @@ class AnalysisEngine:
                 )
             )
         return points
+
+    @staticmethod
+    def _brain_signal_summary(points: list[BrainResponsePoint]) -> BrainSignalSummary | None:
+        if not points:
+            return None
+        return BrainSignalSummary(
+            averageActivation=round(float(np.mean([point.globalActivation for point in points])), 4),
+            averageMotion=round(float(np.mean([point.motionScore for point in points])), 4),
+            averageAudioEnergy=round(float(np.mean([point.audioEnergy for point in points])), 4),
+            averageTranscriptDensity=round(
+                float(np.mean([point.transcriptDensity for point in points])),
+                4,
+            ),
+        )
+
+    @staticmethod
+    def _audience_outlook_from_proxy(
+        proxy: dict[str, Any],
+        summary: AnalysisSummary,
+        points: list[BrainResponsePoint],
+    ) -> AudienceOutlook | None:
+        if not points:
+            return None
+
+        raw_timeline = proxy.get("timeline", [])
+        timeline: list[AudienceTimelinePoint] = []
+        for index, point in enumerate(points):
+            raw_window = raw_timeline[index] if index < len(raw_timeline) else {}
+            raw_activation = float(np.clip(raw_window.get("globalActivation", point.globalActivation), 0.0, 1.0))
+            note = str(raw_window.get("note") or "").strip() or AnalysisEngine._proxy_point_note(proxy, point)
+            timeline.append(
+                AudienceTimelinePoint(
+                    startSec=point.segmentStartSec,
+                    endSec=round(point.segmentStartSec + point.segmentDurationSec, 2),
+                    sentiment=round(raw_activation, 4),
+                    interest=round(max(raw_activation, point.motionScore), 4),
+                    clarity=round(max(0.0, 1.0 - point.dropScore * 0.7), 4),
+                    trust=round(
+                        max(0.0, min(1.0, 0.55 * raw_activation + 0.45 * point.transcriptDensity)),
+                        4,
+                    ),
+                    shareIntent=round(
+                        max(0.0, min(1.0, 0.65 * point.spikeScore + 0.35 * raw_activation)),
+                        4,
+                    ),
+                    dropoffRisk=round(
+                        max(0.0, min(1.0, 0.7 * point.dropScore + 0.3 * (1.0 - point.audioEnergy))),
+                        4,
+                    ),
+                    primaryReaction=AnalysisEngine._primary_reaction_label(point),
+                    note=note,
+                )
+            )
+
+        headline = str(proxy.get("headline") or summary.overallRecommendation)
+        room_voices = [
+            AudienceVoice(
+                speaker=str(item.get("speaker") or "Audience"),
+                handle=str(item.get("handle") or "@audience"),
+                role=str(item.get("role") or "Simulated viewer"),
+                platform=str(item.get("platform") or "room"),
+                stance=str(item.get("stance") or "positive"),
+                quote=str(item.get("quote") or "").strip(),
+            )
+            for item in proxy.get("roomVoices", [])
+            if str(item.get("quote") or "").strip()
+        ]
+        return AudienceOutlook(
+            headline=headline,
+            summary=f"{summary.overallRecommendation} This simulates audience reaction alongside a compact brain scan summary.",
+            likelyPraise=summary.strengths[:3],
+            likelyPushback=summary.weaknesses[:3],
+            timeline=timeline,
+            roomVoices=room_voices[:10],
+        )
+
+    @staticmethod
+    def _primary_reaction_label(point: BrainResponsePoint) -> str:
+        if point.dropScore >= 0.55:
+            return "cooling off"
+        if point.spikeScore >= 0.55:
+            return "leaning in"
+        if point.transcriptDensity >= 0.45:
+            return "tracking the point"
+        return "holding steady"
+
+    @staticmethod
+    def _proxy_point_note(proxy: dict[str, Any], point: BrainResponsePoint) -> str:
+        for window in proxy.get("timeline", []):
+            start = round(float(window.get("startSec", -1)), 2)
+            if np.isclose(start, point.segmentStartSec):
+                note = str(window.get("note", "")).strip()
+                if note:
+                    return note
+        return "Audience reaction remains heuristic in this segment."
+
+    @staticmethod
+    def _proxy_activation_estimate_from_window(window: dict[str, Any]) -> float:
+        return AnalysisEngine._proxy_activation_estimate(
+            raw_activation=float(window.get("globalActivation", 0.0)),
+            motion=float(window.get("motionScore", 0.0)),
+            audio=float(window.get("audioEnergy", 0.0)),
+            transcript=float(window.get("transcriptDensity", 0.0)),
+            scene_change=bool(window.get("sceneChange", False)),
+            silence_overlap=bool(window.get("silenceOverlap", False)),
+        )
+
+    @staticmethod
+    def _proxy_activation_estimate(
+        *,
+        raw_activation: float,
+        motion: float,
+        audio: float,
+        transcript: float,
+        scene_change: bool,
+        silence_overlap: bool,
+    ) -> float:
+        blended = (
+            0.34 * float(np.clip(raw_activation, 0.0, 1.0))
+            + 0.24 * float(np.clip(motion, 0.0, 1.0))
+            + 0.18 * float(np.clip(audio, 0.0, 1.0))
+            + 0.16 * float(np.clip(transcript, 0.0, 1.0))
+            + 0.08 * float(scene_change)
+        )
+        if silence_overlap:
+            blended -= 0.12
+        compressed = 0.1 + 0.72 / (1.0 + np.exp(-6.5 * (blended - 0.58)))
+        return float(np.clip(compressed, 0.08, 0.82))
 
     @staticmethod
     def _finalize_plateau(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import platform
 import shutil
 import sys
@@ -33,6 +34,7 @@ from app.services.analysis_engine import AnalysisEngine
 from app.services.gemini_runner import GeminiIntegrationError
 from app.services.jobs import AnalysisJobService
 from app.services.media import MediaInspectionError, MediaService
+from app.services.mirofish_runner import MiroFishIntegrationError
 from app.services.storage import StorageService
 from app.services.tribe_runner import TribeIntegrationError, TribeRunner
 
@@ -77,7 +79,7 @@ def probe_runtime(context: APIContext, os_name: str) -> ScriptProbe:
     ffmpeg_available = shutil.which(settings.ffmpeg_bin) is not None
     ffprobe_available = shutil.which(settings.ffprobe_bin) is not None
     token_present = bool(settings.huggingface_hub_token)
-    gemini_key_present = bool(settings.gemini_api_key)
+    gemini_key_present = bool(settings.gemini_api_key or settings.mirofish_llm_api_key)
 
     if not python_valid:
         blockers.append(
@@ -97,6 +99,39 @@ def probe_runtime(context: APIContext, os_name: str) -> ScriptProbe:
         blockers.append(
             "GEMINI_API_KEY is not set. Content analysis cannot call the configured remote backend."
         )
+    if settings.analysis_backend == "mirofish":
+        if not (settings.mirofish_base_url or settings.mirofish_repo_dir):
+            blockers.append(
+                "MIROFISH_BASE_URL is not set and MIROFISH_REPO_DIR is not configured."
+            )
+        if settings.mirofish_auto_start and not settings.mirofish_zep_api_key:
+            blockers.append(
+                "MIROFISH_ZEP_API_KEY is not set. Auto-starting the official MiroFish backend requires Zep Cloud."
+            )
+        if settings.mirofish_auto_start:
+            if settings.gemini_platform == "vertex":
+                adc_present = (
+                    "GOOGLE_APPLICATION_CREDENTIALS" in os.environ
+                    or Path.home().joinpath(".config/gcloud/application_default_credentials.json").exists()
+                    or Path.home().joinpath("Library/Application Support/gcloud/application_default_credentials.json").exists()
+                    or Path.home().joinpath("AppData/Roaming/gcloud/application_default_credentials.json").exists()
+                )
+                project_present = bool(
+                    settings.mirofish_vertex_project_id
+                    or os.environ.get("GOOGLE_CLOUD_PROJECT")
+                    or os.environ.get("GCLOUD_PROJECT")
+                )
+                if not adc_present or not project_present:
+                    blockers.append(
+                        "Vertex-backed MiroFish auto-start needs ADC plus a project id. Set "
+                        "GOOGLE_APPLICATION_CREDENTIALS or run `gcloud auth application-default login`, "
+                        "and set MIROFISH_VERTEX_PROJECT_ID or GOOGLE_CLOUD_PROJECT."
+                    )
+            elif not gemini_key_present:
+                blockers.append(
+                    "MIROFISH_LLM_API_KEY is not set. Auto-start needs an OpenAI-compatible LLM key; "
+                    "GEMINI_API_KEY also works through Gemini's OpenAI-compatible endpoint."
+                )
     if runner_probe.modelError:
         blockers.append(f"Model error: {runner_probe.modelError}")
     if settings.analysis_backend == "tribe" and settings.tribe_device == "auto":
@@ -105,6 +140,15 @@ def probe_runtime(context: APIContext, os_name: str) -> ScriptProbe:
         )
     elif settings.analysis_backend == "tribe":
         notes.append(f"TRIBE_DEVICE is pinned to {settings.tribe_device}.")
+    elif settings.analysis_backend == "mirofish":
+        notes.append(
+            "MiroFish runs as an external simulation service that ingests a generated video brief "
+            "and returns simulated audience reaction over time."
+        )
+        if settings.gemini_platform == "vertex":
+            notes.append(
+                "Vertex mode uses ADC-backed Google Cloud access tokens for the OpenAI-compatible endpoint."
+            )
     else:
         notes.append("Content analysis runs against the configured remote backend.")
     if platform.machine().lower() == "arm64":
@@ -136,9 +180,9 @@ def probe_runtime(context: APIContext, os_name: str) -> ScriptProbe:
 
 def command_download(context: APIContext, os_name: str) -> dict[str, Any]:
     probe = probe_runtime(context, os_name)
-    if context.settings.analysis_backend == "gemini":
+    if context.settings.analysis_backend != "tribe":
         raise RunnerScriptError(
-            "download is only available for the local TRIBE backend. For remote content analysis, set GEMINI_API_KEY and use `serve`."
+            "download is only available for the local TRIBE backend."
         )
     if not probe.huggingFaceTokenPresent:
         raise RunnerScriptError(
@@ -160,6 +204,15 @@ def command_download(context: APIContext, os_name: str) -> dict[str, Any]:
         "osName": os_name,
         "probe": asdict(probe_runtime(context, os_name)),
         "model": asdict(warmed),
+    }
+
+
+def command_probe(context: APIContext, os_name: str) -> dict[str, Any]:
+    return {
+        "status": "ok",
+        "command": "probe",
+        "osName": os_name,
+        "probe": asdict(probe_runtime(context, os_name)),
     }
 
 
@@ -264,10 +317,11 @@ def command_analyze(context: APIContext, os_name: str, video_path: Path) -> dict
 def build_parser(os_name: str) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=f"run_tribe_{os_name}.py",
-        description=f"Local {os_name} launcher for the TRIBE Creator Analyzer backend.",
+        description=f"Local {os_name} launcher for the Twine analysis backend.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    subparsers.add_parser("probe", help="Inspect local runtime readiness for the active backend.")
     subparsers.add_parser("download", help="Warm-download the local TRIBE model.")
 
     serve = subparsers.add_parser("serve", help="Start the existing FastAPI backend.")
@@ -295,6 +349,9 @@ def main(os_name: str) -> int:
     context = get_runtime_context()
 
     try:
+        if args.command == "probe":
+            emit_json(command_probe(context, os_name))
+            return 0
         if args.command == "download":
             emit_json(command_download(context, os_name))
             return 0
@@ -307,6 +364,7 @@ def main(os_name: str) -> int:
         raise RunnerScriptError(f"Unsupported command: {args.command}")
     except (
         GeminiIntegrationError,
+        MiroFishIntegrationError,
         RunnerScriptError,
         TribeIntegrationError,
         RuntimeError,

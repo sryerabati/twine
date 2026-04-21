@@ -37,7 +37,7 @@ class Settings(BaseSettings):
         default="http://localhost:3000",
         alias="TRIBE_ALLOWED_ORIGIN",
     )
-    analysis_backend: Literal["tribe", "gemini"] = Field(
+    analysis_backend: Literal["tribe", "gemini", "mirofish"] = Field(
         default="tribe",
         alias="ANALYSIS_BACKEND",
     )
@@ -52,6 +52,18 @@ class Settings(BaseSettings):
         default="gemini-2.5-flash-lite",
         alias="GEMINI_FALLBACK_MODEL",
     )
+    mirofish_base_url: str | None = Field(default=None, alias="MIROFISH_BASE_URL")
+    mirofish_repo_dir: Path | None = Field(default=None, alias="MIROFISH_REPO_DIR")
+    mirofish_auto_start: bool = Field(default=False, alias="MIROFISH_AUTO_START")
+    mirofish_timeout_seconds: int = Field(default=900, alias="MIROFISH_TIMEOUT_SECONDS")
+    mirofish_poll_seconds: float = Field(default=3.0, alias="MIROFISH_POLL_SECONDS")
+    mirofish_simulation_max_rounds: int = Field(default=12, alias="MIROFISH_SIMULATION_MAX_ROUNDS")
+    mirofish_llm_api_key: str | None = Field(default=None, alias="MIROFISH_LLM_API_KEY")
+    mirofish_llm_base_url: str | None = Field(default=None, alias="MIROFISH_LLM_BASE_URL")
+    mirofish_llm_model_name: str | None = Field(default=None, alias="MIROFISH_LLM_MODEL_NAME")
+    mirofish_vertex_project_id: str | None = Field(default=None, alias="MIROFISH_VERTEX_PROJECT_ID")
+    mirofish_vertex_location: str = Field(default="global", alias="MIROFISH_VERTEX_LOCATION")
+    mirofish_zep_api_key: str | None = Field(default=None, alias="MIROFISH_ZEP_API_KEY")
     editor_ai_provider: Literal["gemini", "nvidia"] = Field(
         default="gemini",
         alias="EDITOR_AI_PROVIDER",
@@ -80,15 +92,27 @@ class Settings(BaseSettings):
     convex_service_secret: str | None = Field(default=None, alias="CONVEX_SERVICE_SECRET")
     require_convex_ids: bool = Field(default=True, alias="REQUIRE_CONVEX_IDS")
 
-    @field_validator("uploads_dir", "results_dir", "cache_dir", mode="before")
+    @field_validator("uploads_dir", "results_dir", "cache_dir", "mirofish_repo_dir", mode="before")
     @classmethod
-    def resolve_repo_relative_storage_path(cls, value: str | Path) -> Path:
+    def resolve_repo_relative_storage_path(cls, value: str | Path | None) -> Path | None:
+        if value is None:
+            return None
         path = value if isinstance(value, Path) else Path(value)
         if path.is_absolute():
             return path
         return REPO_ROOT / path
 
-    @field_validator("gemini_fallback_model", "nvidia_api_key", mode="before")
+    @field_validator(
+        "gemini_fallback_model",
+        "mirofish_base_url",
+        "mirofish_llm_api_key",
+        "mirofish_llm_base_url",
+        "mirofish_llm_model_name",
+        "mirofish_vertex_project_id",
+        "mirofish_zep_api_key",
+        "nvidia_api_key",
+        mode="before",
+    )
     @classmethod
     def normalize_optional_model_name(cls, value: str | None) -> str | None:
         if value is None:

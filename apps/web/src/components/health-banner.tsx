@@ -13,11 +13,15 @@ export function HealthBanner({ health }: { health: HealthResponse | null }) {
 
   const degraded = !health.ok || health.modelStatus === "error";
   const backendLabel =
-    health.analysisBackend === "gemini" ? "remote content backend" : "local model backend";
+    health.analysisBackend === "mirofish"
+      ? "mirofish audience simulation"
+      : health.analysisBackend === "gemini"
+        ? "audience simulation + compact brain summary"
+        : "local brain-response backend";
   const credentialReady =
-    health.analysisBackend === "gemini"
-      ? health.geminiApiKeyPresent
-      : health.huggingFaceTokenPresent;
+    health.analysisBackend === "tribe"
+      ? health.huggingFaceTokenPresent
+      : health.geminiApiKeyPresent;
 
   return (
     <Alert
@@ -47,8 +51,8 @@ export function HealthBanner({ health }: { health: HealthResponse | null }) {
           </ul>
         ) : (
           <p className="text-sm text-muted-foreground">
-            The app can accept uploads immediately. Full content analysis still depends on the
-            selected backend and local media tooling staying available.
+            The app can accept uploads immediately. Read the room depends on the selected backend
+            and local media tooling staying available.
           </p>
         )}
       </AlertDescription>

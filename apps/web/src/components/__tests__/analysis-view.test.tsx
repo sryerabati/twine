@@ -19,6 +19,7 @@ const completedResponse: AnalysisResponse = {
   error: null,
   payload: {
     analysisId: "analysis-1",
+    analysisMode: "read_the_room",
     video: {
       uploadId: "upload-1",
       filename: "clip.mp4",
@@ -59,6 +60,55 @@ const completedResponse: AnalysisResponse = {
           },
         },
       ],
+    },
+    audienceOutlook: {
+      headline: "The room is in early, but clarity drops halfway through.",
+      summary: "This mode simulates audience reaction alongside a compact brain scan summary.",
+      likelyPraise: ["Strong opening line"],
+      likelyPushback: ["Middle section gets muddy"],
+      roomVoices: [
+        {
+          speaker: "Maya",
+          handle: "@maya_557",
+          role: "Freelance Graphic Design Student",
+          platform: "Reddit",
+          quote: "Wait, I've been seeing this 'Twine' app everywhere. Is it actually better than CapCut or just another AI hype tool?",
+        },
+        {
+          speaker: "Theo",
+          handle: "@theo_972",
+          role: "Technical Analyst & Digital Forensic Specialist",
+          platform: "Reddit",
+          quote: "3 weeks into UGC and already looking for shortcuts? I get the appeal, but the claim still needs proof.",
+        },
+        {
+          speaker: "Avery",
+          handle: "@avery_327",
+          role: "Marketing Analyst & Brand Strategist",
+          platform: "X",
+          quote: "The value proposition is strong, but they need to prove the AI angle is not just a gimmick to maintain trust.",
+        },
+      ],
+      timeline: [
+        {
+          startSec: 0,
+          endSec: 6,
+          sentiment: 0.78,
+          interest: 0.84,
+          clarity: 0.72,
+          trust: 0.74,
+          shareIntent: 0.67,
+          dropoffRisk: 0.18,
+          primaryReaction: "leaning in",
+          note: "The room gets the setup fast.",
+        },
+      ],
+    },
+    brainSummary: {
+      averageActivation: 0.8,
+      averageMotion: 0.7,
+      averageAudioEnergy: 0.8,
+      averageTranscriptDensity: 0.4,
     },
     markers: [
       {
@@ -183,7 +233,7 @@ describe("AnalysisView", () => {
     render(<AnalysisView analysisId="analysis-1" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("brain-viewport")).toBeInTheDocument();
+      expect(screen.getByTestId("recommendation-timeline")).toBeInTheDocument();
     });
 
     const video = document.querySelector("video");
@@ -210,6 +260,49 @@ describe("AnalysisView", () => {
     playSpy.mockRestore();
   });
 
+  it("prioritizes read the room copy and hides the large brain viewer for audience-mode scans", async () => {
+    const { fetchAnalysis } = await import("@/lib/api");
+    vi.mocked(fetchAnalysis).mockResolvedValue(completedResponse);
+
+    render(<AnalysisView analysisId="analysis-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Read the room/i)).toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/This mode simulates audience reaction alongside a compact brain scan summary/i)).toBeInTheDocument();
+    expect(screen.getByText(/Room voices/i)).toBeInTheDocument();
+    expect(screen.getByText(/Room pulse/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("brain-viewport")).not.toBeInTheDocument();
+    expect(screen.getByText(/Brain scan side signal/i)).toBeInTheDocument();
+  });
+
+  it("recomputes the read-the-room activation estimate instead of trusting inflated legacy summaries", async () => {
+    const { fetchAnalysis } = await import("@/lib/api");
+    vi.mocked(fetchAnalysis).mockResolvedValue({
+      ...completedResponse,
+      payload: completedResponse.payload
+        ? {
+            ...completedResponse.payload,
+            brainSummary: {
+              ...completedResponse.payload.brainSummary!,
+              averageActivation: 0.98,
+            },
+          }
+        : null,
+    });
+
+    render(<AnalysisView analysisId="analysis-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Brain scan side signal/i)).toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/Activation estimate/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^98$/)).not.toBeInTheDocument();
+    expect(screen.getByText(/^61$/)).toBeInTheDocument();
+  });
+
   it("removes decorative accent shapes from the analysis panels", async () => {
     const { fetchAnalysis } = await import("@/lib/api");
     vi.mocked(fetchAnalysis).mockResolvedValue(completedResponse);
@@ -217,7 +310,7 @@ describe("AnalysisView", () => {
     const { container } = render(<AnalysisView analysisId="analysis-1" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("brain-viewport")).toBeInTheDocument();
+      expect(screen.getByTestId("recommendation-timeline")).toBeInTheDocument();
     });
 
     expect(container.querySelectorAll('[class*="rotate-6"]').length).toBe(0);
@@ -285,12 +378,17 @@ describe("AnalysisView", () => {
     expect(screen.getByRole("progressbar", { name: /scan progress/i })).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.getByTestId("brain-viewport")).toBeInTheDocument();
+      expect(screen.getByTestId("recommendation-timeline")).toBeInTheDocument();
     });
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: /primary analysis/i })).toBeInTheDocument();
+      expect(screen.getByText(/Read the room/i)).toBeInTheDocument();
       expect(screen.getByRole("heading", { name: /secondary details/i })).toBeInTheDocument();
     });
+    expect(screen.getByText(/Room voices/i)).toBeInTheDocument();
+    expect(screen.getAllByText("Maya").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/Wait, I've been seeing this 'Twine' app everywhere/i),
+    ).toBeInTheDocument();
     expect(screen.getByText(/Automatic deadspace trim/i)).toBeInTheDocument();
     expect(screen.getByText(/Quiet stretch\./i)).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Provider response JSON/i })).not.toBeInTheDocument();
@@ -306,6 +404,20 @@ describe("AnalysisView", () => {
     expect(screen.queryByText("Scenes")).not.toBeInTheDocument();
     expect(screen.queryByText("Confidence")).not.toBeInTheDocument();
     expect(container.querySelectorAll(".surface-soft")).toHaveLength(0);
+  });
+
+  it("places room voices after the audience sentiment timeline in read-the-room mode", async () => {
+    const { fetchAnalysis } = await import("@/lib/api");
+    vi.mocked(fetchAnalysis).mockResolvedValue(completedResponse);
+
+    render(<AnalysisView analysisId="analysis-1" />);
+
+    const sentimentHeading = await screen.findByText(/Audience sentiment timeline/i);
+    const roomVoicesHeading = await screen.findByText(/Room voices/i);
+
+    expect(
+      sentimentHeading.compareDocumentPosition(roomVoicesHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("shows an estimated scan progress bar with a front-loaded curve", async () => {
@@ -325,23 +437,31 @@ describe("AnalysisView", () => {
       createdAt,
       new Date("2026-04-19T12:00:18.000Z").getTime(),
     );
+    const longRunning = buildEstimatedScanProgress(
+      "running",
+      createdAt,
+      new Date("2026-04-19T12:03:00.000Z").getTime(),
+    );
 
     expect(early.label).toBe("Estimated progress");
     expect(middle.value).toBeGreaterThan(early.value);
     expect(later.value).toBeGreaterThan(middle.value);
     expect(middle.value - early.value).toBeGreaterThan(later.value - middle.value);
+    expect(longRunning.value).toBeGreaterThan(92);
     expect(later.value).toBeLessThan(100);
+    expect(longRunning.value).toBeLessThan(100);
   });
 
-  it("uses neutral loading copy while a scan is running", () => {
+  it("explains that long-running read-the-room scans can take a few minutes", () => {
     const running = buildEstimatedScanProgress(
       "running",
       "2026-04-19T12:00:00.000Z",
-      new Date("2026-04-19T12:00:12.000Z").getTime(),
+      new Date("2026-04-19T12:03:00.000Z").getTime(),
     );
 
     expect(running.hint).not.toMatch(/slows down near the end/i);
-    expect(running.hint).toMatch(/Finalizing the scan output so the workspace can open\./i);
+    expect(running.hint).toMatch(/can take a few minutes/i);
+    expect(running.hint).toMatch(/simulating the audience/i);
   });
 
   it("seeks the video from the custom timeline", async () => {
@@ -351,7 +471,7 @@ describe("AnalysisView", () => {
     render(<AnalysisView analysisId="analysis-1" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("brain-viewport")).toBeInTheDocument();
+      expect(screen.getByTestId("recommendation-timeline")).toBeInTheDocument();
     });
 
     const scrubSurface = screen.getByTestId("timeline-scrub-surface");
@@ -384,7 +504,7 @@ describe("AnalysisView", () => {
     render(<AnalysisView analysisId="analysis-1" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("brain-viewport")).toBeInTheDocument();
+      expect(screen.getByTestId("recommendation-timeline")).toBeInTheDocument();
     });
 
     const marker = screen.getByRole("button", {
@@ -435,7 +555,7 @@ describe("AnalysisView", () => {
     render(<AnalysisView analysisId="analysis-1" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("brain-viewport")).toBeInTheDocument();
+      expect(screen.getByTestId("recommendation-timeline")).toBeInTheDocument();
     });
 
     const marker = screen.getByRole("button", {
@@ -505,7 +625,7 @@ describe("AnalysisView", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("brain-viewport")).toBeInTheDocument();
+      expect(screen.getByTestId("recommendation-timeline")).toBeInTheDocument();
     });
 
     await user.click(screen.getByRole("button", { name: /remove deadspace/i }));
@@ -576,7 +696,7 @@ describe("AnalysisView", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("brain-viewport")).toBeInTheDocument();
+      expect(screen.getByTestId("recommendation-timeline")).toBeInTheDocument();
     });
 
     await user.click(screen.getByRole("button", { name: /more lenient/i }));

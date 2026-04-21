@@ -1,4 +1,5 @@
 export type AnalysisStatus = "queued" | "running" | "completed" | "failed";
+export type AnalysisMode = "brain_scan" | "read_the_room";
 export type MarkerSeverity = "low" | "medium" | "high";
 export type MarkerType =
   | "strong_hook"
@@ -12,7 +13,7 @@ export type CutType = "deadspace" | "low_value";
 
 export type HealthResponse = {
   ok: boolean;
-  analysisBackend: "tribe" | "gemini";
+  analysisBackend: "tribe" | "gemini" | "mirofish";
   pythonVersion: string;
   ffmpegAvailable: boolean;
   ffprobeAvailable: boolean;
@@ -68,6 +69,44 @@ export type BrainResponsePoint = {
   sceneChange: boolean;
   silenceOverlap: boolean;
   hemisphereHeatmap: HemisphereHeatmap;
+};
+
+export type BrainSignalSummary = {
+  averageActivation: number;
+  averageMotion: number;
+  averageAudioEnergy: number;
+  averageTranscriptDensity: number;
+};
+
+export type AudienceTimelinePoint = {
+  startSec: number;
+  endSec: number;
+  sentiment: number;
+  interest: number;
+  clarity: number;
+  trust: number;
+  shareIntent: number;
+  dropoffRisk: number;
+  primaryReaction: string;
+  note: string;
+};
+
+export type AudienceVoice = {
+  speaker: string;
+  handle: string;
+  role: string;
+  platform: string;
+  stance?: "positive" | "negative";
+  quote: string;
+};
+
+export type AudienceOutlook = {
+  headline: string;
+  summary: string;
+  likelyPraise: string[];
+  likelyPushback: string[];
+  timeline: AudienceTimelinePoint[];
+  roomVoices?: AudienceVoice[];
 };
 
 export type Marker = {
@@ -129,6 +168,7 @@ export type ScoreSet = {
 
 export type AnalysisPayload = {
   analysisId: string;
+  analysisMode?: AnalysisMode;
   video: VideoAsset;
   brainResponse: {
     timeSeries: BrainResponsePoint[];
@@ -139,6 +179,8 @@ export type AnalysisPayload = {
       totalVertices: number;
     };
   };
+  audienceOutlook?: AudienceOutlook | null;
+  brainSummary?: BrainSignalSummary | null;
   markers: Marker[];
   deadspaceCuts: DeadspaceCut[];
   lowValueCuts: DeadspaceCut[];

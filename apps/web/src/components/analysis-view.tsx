@@ -18,6 +18,7 @@ import {
 import { BrainScanViewer } from "@/components/brain-scan-viewer";
 import { AnalysisWorkspaceSkeleton } from "@/components/loading-states";
 import { RecommendationTimeline } from "@/components/recommendation-timeline";
+import { RoomVoicesPanel } from "@/components/room-voices-panel";
 import { ScanSecondaryDetails } from "@/components/scan-secondary-details";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -28,6 +29,16 @@ import type {
 } from "@/lib/contracts";
 
 type TrimMode = "speech_safe" | "lenient";
+type AnalysisChartDatum = {
+  t: number;
+  activation?: number;
+  motion?: number;
+  audio?: number;
+  sentiment?: number;
+  interest?: number;
+  trust?: number;
+  dropoffRisk?: number;
+};
 
 type AnalysisViewProps = {
   analysisId: string;
@@ -247,11 +258,20 @@ export function buildEstimatedScanProgress(
   }
 
   const runningElapsedSec = Math.max(0, elapsedSec - 4);
-  const value = 34 + 58 * easeOutProgress(runningElapsedSec, 18);
+  const value =
+    34 +
+    58 * easeOutProgress(runningElapsedSec, 18) +
+    6 * easeOutProgress(Math.max(0, runningElapsedSec - 30), 90);
+  const hint =
+    runningElapsedSec >= 90
+      ? "Still running. Read the room is simulating the audience and writing the final report. This stage can take a few minutes."
+      : runningElapsedSec >= 30
+        ? "Building the room and simulating reactions. Read the room runs can take a few minutes before the workspace opens."
+        : "Reading reactions, pacing, and scene changes. Finalizing the scan output so the workspace can open.";
   return {
-    value: clampProgress(value, 34, 92),
+    value: clampProgress(value, 34, 98),
     label: "Estimated progress",
-    hint: "Reading reactions, pacing, and scene changes. Finalizing the scan output so the workspace can open.",
+    hint,
   };
 }
 
@@ -318,12 +338,22 @@ function CompletedAnalysis({
   const focusTimeSec = previewTimeSec ?? activeTimeSec;
   const latestExport = payload.exports[payload.exports.length - 1] ?? null;
   const playerSourceUrl = latestExport?.trimmedVideoUrl ?? payload.video.sourceUrl;
-  const chartData = payload.brainResponse.timeSeries.map((point) => ({
+  const analysisMode = payload.analysisMode ?? "brain_scan";
+  const isReadTheRoom = analysisMode === "read_the_room";
+  const chartData: AnalysisChartDatum[] = payload.brainResponse.timeSeries.map((point) => ({
     t: Number(point.stimulusTimeSec.toFixed(2)),
     activation: point.globalActivation,
     motion: point.motionScore,
     audio: point.audioEnergy,
   }));
+  const audienceChartData: AnalysisChartDatum[] =
+    payload.audienceOutlook?.timeline.map((point) => ({
+      t: Number(point.startSec.toFixed(2)),
+      sentiment: point.sentiment,
+      interest: point.interest,
+      trust: point.trust,
+      dropoffRisk: point.dropoffRisk,
+    })) ?? [];
 
   useEffect(() => {
     if (!isPlaying) {
@@ -381,13 +411,15 @@ function CompletedAnalysis({
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h2 className="text-xs uppercase tracking-[0.28em] text-muted-foreground">
-              Primary analysis
+              {isReadTheRoom ? "Read the room" : "Primary analysis"}
             </h2>
             <h1 className="mt-3 text-4xl font-semibold tracking-tight text-foreground">
               {payload.video.filename}
             </h1>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
-              {payload.summary.overallRecommendation}
+              {isReadTheRoom
+                ? (payload.audienceOutlook?.summary ?? payload.summary.overallRecommendation)
+                : payload.summary.overallRecommendation}
             </p>
           </div>
 
@@ -492,25 +524,31 @@ function CompletedAnalysis({
             />
           </div>
 
-          <BrainScanViewer
-            points={payload.brainResponse.timeSeries}
-            currentTimeSec={focusTimeSec}
-            title="Brain scan"
-            description="Scrub the edit rail or hover markers to keep the signal view in sync."
-          />
+          {isReadTheRoom ? null : (
+            <BrainScanViewer
+              points={payload.brainResponse.timeSeries}
+              currentTimeSec={focusTimeSec}
+              title="Brain scan"
+              description="Scrub the edit rail or hover markers to keep the signal view in sync."
+            />
+          )}
 
           <div className="border-t border-border/70 pt-6">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-sm font-medium text-foreground">Activation timeline</p>
+                <p className="text-sm font-medium text-foreground">
+                  {isReadTheRoom ? "Audience sentiment timeline" : "Activation timeline"}
+                </p>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  Global activation, motion, and audio context.
+                  {isReadTheRoom
+                    ? "Moment-by-moment audience sentiment, interest, trust, and drop-off risk."
+                    : "Global activation, motion, and audio context."}
                 </p>
               </div>
             </div>
             <div className="mt-4 h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData}>
+                <LineChart data={isReadTheRoom ? audienceChartData : chartData}>
                   <CartesianGrid stroke="rgba(255,247,251,0.08)" vertical={false} />
                   <XAxis
                     dataKey="t"
@@ -536,32 +574,63 @@ function CompletedAnalysis({
                   <Legend wrapperStyle={{ color: "var(--color-muted-foreground)" }} />
                   <Line
                     type="monotone"
-                    dataKey="activation"
+                    dataKey={isReadTheRoom ? "sentiment" : "activation"}
                     stroke="var(--color-chart-1)"
                     strokeWidth={3}
                     dot={false}
-                    name="Global activation"
+                    name={isReadTheRoom ? "Audience sentiment" : "Global activation"}
                   />
                   <Line
                     type="monotone"
-                    dataKey="motion"
+                    dataKey={isReadTheRoom ? "interest" : "motion"}
                     stroke="var(--color-chart-2)"
                     strokeWidth={2}
                     dot={false}
-                    name="Motion"
+                    name={isReadTheRoom ? "Interest" : "Motion"}
                   />
                   <Line
                     type="monotone"
-                    dataKey="audio"
+                    dataKey={isReadTheRoom ? "trust" : "audio"}
                     stroke="var(--color-chart-3)"
                     strokeWidth={2}
                     dot={false}
-                    name="Audio"
+                    name={isReadTheRoom ? "Trust" : "Audio"}
                   />
+                  {isReadTheRoom ? (
+                    <Line
+                      type="monotone"
+                      dataKey="dropoffRisk"
+                      stroke="var(--color-chart-4)"
+                      strokeWidth={2}
+                      dot={false}
+                      name="Drop-off risk"
+                    />
+                  ) : null}
                 </LineChart>
               </ResponsiveContainer>
             </div>
           </div>
+
+          {isReadTheRoom && payload.audienceOutlook ? (
+            <div className="space-y-4 border-t border-border/70 pt-6">
+              <RoomVoicesPanel audienceOutlook={payload.audienceOutlook} />
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <AudienceNotesCard
+                  title="Likely praise"
+                  items={payload.audienceOutlook.likelyPraise}
+                  empty="No strong praise theme surfaced from this pass."
+                />
+                <AudienceNotesCard
+                  title="Likely pushback"
+                  items={payload.audienceOutlook.likelyPushback}
+                  empty="No dominant pushback theme surfaced from this pass."
+                />
+              </div>
+
+              <CompactBrainSummary payload={payload} />
+            </div>
+          ) : null}
         </div>
       </section>
 
@@ -572,6 +641,148 @@ function CompletedAnalysis({
       />
     </div>
   );
+}
+
+function CompactBrainSummary({ payload }: { payload: AnalysisPayload }) {
+  const summary =
+    payload.analysisMode === "read_the_room"
+      ? deriveReadTheRoomBrainSummary(payload)
+      : (payload.brainSummary ?? deriveBrainSummaryFromPoints(payload.brainResponse.timeSeries));
+
+  return (
+    <div className="rounded-[1.5rem] border border-border/70 bg-background/70 p-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-sm font-medium text-foreground">Brain scan side signal</p>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+            A compact average across the whole video. No expanded brain scan detail is shown for
+            audience-mode runs.
+          </p>
+        </div>
+        <Badge variant="secondary">Average for the full video</Badge>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <SummaryStat
+          label={payload.analysisMode === "read_the_room" ? "Activation estimate" : "Activation"}
+          value={summary.averageActivation}
+        />
+        <SummaryStat label="Motion" value={summary.averageMotion} />
+        <SummaryStat label="Audio" value={summary.averageAudioEnergy} />
+        <SummaryStat label="Transcript" value={summary.averageTranscriptDensity} />
+      </div>
+    </div>
+  );
+}
+
+function SummaryStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-[1.25rem] border border-border/70 bg-card/80 p-4">
+      <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-foreground">{Math.round(value * 100)}</p>
+    </div>
+  );
+}
+
+function AudienceNotesCard({
+  title,
+  items,
+  empty,
+}: {
+  title: string;
+  items: string[];
+  empty: string;
+}) {
+  return (
+    <div className="rounded-[1.5rem] border border-border/70 bg-background/70 p-5">
+      <p className="text-sm font-medium text-foreground">{title}</p>
+      <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+        {items.length ? items.map((item) => <p key={item}>{item}</p>) : <p>{empty}</p>}
+      </div>
+    </div>
+  );
+}
+
+function deriveBrainSummaryFromPoints(points: AnalysisPayload["brainResponse"]["timeSeries"]) {
+  const averages = points.reduce(
+    (accumulator, point) => ({
+      activation: accumulator.activation + point.globalActivation,
+      motion: accumulator.motion + point.motionScore,
+      audio: accumulator.audio + point.audioEnergy,
+      transcript: accumulator.transcript + point.transcriptDensity,
+    }),
+    { activation: 0, motion: 0, audio: 0, transcript: 0 },
+  );
+  const count = Math.max(points.length, 1);
+  return {
+    averageActivation: averages.activation / count,
+    averageMotion: averages.motion / count,
+    averageAudioEnergy: averages.audio / count,
+    averageTranscriptDensity: averages.transcript / count,
+  };
+}
+
+function deriveReadTheRoomBrainSummary(payload: AnalysisPayload) {
+  const points = payload.brainResponse.timeSeries;
+  const audienceTimeline = payload.audienceOutlook?.timeline ?? [];
+  const averages = points.reduce(
+    (accumulator, point, index) => {
+      const rawActivation = audienceTimeline[index]?.sentiment ?? point.globalActivation;
+      return {
+        activation:
+          accumulator.activation +
+          estimateProxyActivation({
+            rawActivation,
+            motion: point.motionScore,
+            audio: point.audioEnergy,
+            transcript: point.transcriptDensity,
+            sceneChange: point.sceneChange,
+            silenceOverlap: point.silenceOverlap,
+          }),
+        motion: accumulator.motion + point.motionScore,
+        audio: accumulator.audio + point.audioEnergy,
+        transcript: accumulator.transcript + point.transcriptDensity,
+      };
+    },
+    { activation: 0, motion: 0, audio: 0, transcript: 0 },
+  );
+  const count = Math.max(points.length, 1);
+  return {
+    averageActivation: averages.activation / count,
+    averageMotion: averages.motion / count,
+    averageAudioEnergy: averages.audio / count,
+    averageTranscriptDensity: averages.transcript / count,
+  };
+}
+
+function estimateProxyActivation({
+  rawActivation,
+  motion,
+  audio,
+  transcript,
+  sceneChange,
+  silenceOverlap,
+}: {
+  rawActivation: number;
+  motion: number;
+  audio: number;
+  transcript: number;
+  sceneChange: boolean;
+  silenceOverlap: boolean;
+}) {
+  const blended =
+    0.34 * clamp01(rawActivation) +
+    0.24 * clamp01(motion) +
+    0.18 * clamp01(audio) +
+    0.16 * clamp01(transcript) +
+    0.08 * Number(sceneChange);
+  const adjusted = silenceOverlap ? blended - 0.12 : blended;
+  const compressed = 0.1 + 0.72 / (1 + Math.exp(-6.5 * (adjusted - 0.58)));
+  return Math.min(0.82, Math.max(0.08, compressed));
+}
+
+function clamp01(value: number) {
+  return Math.min(1, Math.max(0, value));
 }
 
 function deriveTrimMode(

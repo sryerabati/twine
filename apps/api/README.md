@@ -1,10 +1,10 @@
-# TRIBE Creator API
+# Twine Analysis API
 
-FastAPI backend for local uploads, TRIBE v2 analysis, artifact serving, and comparison heuristics.
+FastAPI backend for local uploads, TRIBE v2 analysis, MiroFish audience simulation, artifact serving, and comparison heuristics.
 
 ## What "serve the model" means in this repo
 
-This project does not run a separate model-serving microservice. The backend process itself loads TRIBE in-process and exposes:
+This project exposes:
 
 - `/api/*` for upload, analysis, compare, and health
 - `/storage/*` for uploaded files and generated artifacts
@@ -21,8 +21,10 @@ The `apps/api/scripts/run_tribe_mac.py` and `apps/api/scripts/run_tribe_windows.
 - Python 3.11
 - `uv`
 - `ffmpeg` and `ffprobe` on `PATH`
-- a valid `HUGGINGFACE_HUB_TOKEN` in `.env` or the environment
-- Hugging Face access to `facebook/tribev2` and the gated upstream dependencies it pulls in
+- one of:
+  - a valid `HUGGINGFACE_HUB_TOKEN` plus gated Hugging Face access to `facebook/tribev2`
+  - `GEMINI_API_KEY` for the Gemini fallback backend
+  - `MIROFISH_ZEP_API_KEY` plus either a running MiroFish backend or a local `666ghj/MiroFish` checkout
 
 Windows note:
 
@@ -51,10 +53,47 @@ uv sync --python 3.11
 cd ../..
 ```
 
-Set your token in `.env`:
+TRIBE setup in `.env`:
 
 ```dotenv
 HUGGINGFACE_HUB_TOKEN=hf_your_token_here
+```
+
+Gemini setup in `.env`:
+
+```dotenv
+ANALYSIS_BACKEND=gemini
+GEMINI_API_KEY=your_google_ai_studio_key_here
+```
+
+Real MiroFish setup in `.env`:
+
+```bash
+git clone https://github.com/666ghj/MiroFish.git ../MiroFish
+cd ../MiroFish
+npm run setup:backend
+cd ../claudehackosu26
+```
+
+```dotenv
+ANALYSIS_BACKEND=mirofish
+MIROFISH_REPO_DIR=../MiroFish
+MIROFISH_AUTO_START=true
+MIROFISH_ZEP_API_KEY=your_zep_key_here
+
+# Vertex-backed setup for the official OpenAI-compatible endpoint.
+GEMINI_PLATFORM=vertex
+MIROFISH_VERTEX_PROJECT_ID=your_gcp_project_id
+MIROFISH_VERTEX_LOCATION=global
+
+# Provide ADC locally with either:
+# GOOGLE_APPLICATION_CREDENTIALS=/abs/path/service-account.json
+# or `gcloud auth application-default login`
+
+# Optional explicit non-Vertex override.
+MIROFISH_LLM_API_KEY=
+MIROFISH_LLM_BASE_URL=
+MIROFISH_LLM_MODEL_NAME=
 ```
 
 ## Download the model locally
@@ -77,6 +116,8 @@ py -3.11 apps\api\scripts\run_tribe_windows.py download
 
 If the token is missing, Python is not 3.11, `tribev2` is not installed, or `ffmpeg`/`ffprobe` are unavailable, the probe output will surface that before you try to serve the backend.
 
+`download` only applies to `ANALYSIS_BACKEND=tribe`.
+
 ## Serve the backend locally
 
 macOS:
@@ -95,6 +136,8 @@ Defaults:
 
 - host: `0.0.0.0`
 - port: `API_PORT` from `.env`, or `8000`
+
+If `ANALYSIS_BACKEND=mirofish` with `MIROFISH_AUTO_START=true`, the first real analysis request will boot the official MiroFish backend sidecar from `MIROFISH_REPO_DIR` and proxy the generated video brief into it.
 
 You can override the port explicitly:
 
@@ -170,6 +213,7 @@ The frontend uses `NEXT_PUBLIC_CONVEX_URL` for client auth and scan queries. The
 
 ## Key environment variables
 
+- `ANALYSIS_BACKEND` - `tribe`, `gemini`, or `mirofish`
 - `API_PORT` - backend port
 - `WEB_PORT` - frontend port
 - `TRIBE_UPLOADS_DIR` - upload storage directory
@@ -178,6 +222,16 @@ The frontend uses `NEXT_PUBLIC_CONVEX_URL` for client auth and scan queries. The
 - `TRIBE_ALLOWED_ORIGIN` - frontend origin allowed by CORS
 - `TRIBE_DEVICE` - `auto`, `cpu`, `cuda`, or manual `mps`
 - `HUGGINGFACE_HUB_TOKEN` - required for real model download and analysis
+- `GEMINI_API_KEY` - required for Gemini analysis; also usable as the fallback OpenAI-compatible key when auto-starting MiroFish
+- `MIROFISH_BASE_URL` - URL for an already-running official MiroFish backend
+- `MIROFISH_REPO_DIR` - local checkout of `666ghj/MiroFish`
+- `MIROFISH_AUTO_START` - boot the official MiroFish backend on demand
+- `MIROFISH_ZEP_API_KEY` - required by the official MiroFish backend
+- `MIROFISH_LLM_API_KEY` - optional explicit OpenAI-compatible LLM key for MiroFish
+- `MIROFISH_LLM_BASE_URL` - optional explicit OpenAI-compatible base URL for MiroFish
+- `MIROFISH_LLM_MODEL_NAME` - optional explicit OpenAI-compatible model name for MiroFish
+- `MIROFISH_VERTEX_PROJECT_ID` - Google Cloud project id for Vertex-backed MiroFish auth
+- `MIROFISH_VERTEX_LOCATION` - Vertex location for the OpenAI-compatible endpoint, usually `global`
 - `FFMPEG_BIN` - ffmpeg binary name or path
 - `FFPROBE_BIN` - ffprobe binary name or path
 - `NEXT_PUBLIC_CONVEX_URL` - Convex client URL for auth and app queries

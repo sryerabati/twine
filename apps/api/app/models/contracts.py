@@ -82,6 +82,45 @@ class BrainResponsePayload(BaseModel):
     meshInfo: MeshInfo
 
 
+class BrainSignalSummary(BaseModel):
+    averageActivation: float
+    averageMotion: float
+    averageAudioEnergy: float
+    averageTranscriptDensity: float
+
+
+class AudienceTimelinePoint(BaseModel):
+    startSec: float
+    endSec: float
+    sentiment: float
+    interest: float
+    clarity: float
+    trust: float
+    shareIntent: float
+    dropoffRisk: float
+    primaryReaction: str
+    note: str
+
+
+class AudienceVoice(BaseModel):
+    speaker: str
+    handle: str
+    role: str
+    platform: str
+    stance: Literal["positive", "negative"] = "positive"
+    quote: str
+
+
+class AudienceOutlook(BaseModel):
+    headline: str
+    summary: str
+    likelyPraise: list[str]
+    likelyPushback: list[str]
+    timeline: list[AudienceTimelinePoint]
+    roomVoices: list[AudienceVoice] = Field(default_factory=list)
+
+
+
 class Marker(BaseModel):
     t: float
     type: MarkerType
@@ -169,8 +208,11 @@ class Diagnostics(BaseModel):
 
 class AnalysisPayload(BaseModel):
     analysisId: str
+    analysisMode: Literal["brain_scan", "read_the_room"] = "brain_scan"
     video: VideoAsset
     brainResponse: BrainResponsePayload
+    audienceOutlook: AudienceOutlook | None = None
+    brainSummary: BrainSignalSummary | None = None
     markers: list[Marker]
     deadspaceCuts: list[DeadspaceCut] = Field(default_factory=list)
     lowValueCuts: list[DeadspaceCut] = Field(default_factory=list)
@@ -195,7 +237,7 @@ class AnalysisResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     ok: bool
-    analysisBackend: Literal["tribe", "gemini"]
+    analysisBackend: Literal["tribe", "gemini", "mirofish"]
     pythonVersion: str
     ffmpegAvailable: bool
     ffprobeAvailable: bool

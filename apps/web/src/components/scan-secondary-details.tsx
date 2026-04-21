@@ -26,7 +26,7 @@ export function ScanSecondaryDetails({
             Secondary details
           </h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Only the trim decisions that change the output.
+            Trim decisions that change what the simulated audience will feel in the final cut.
           </p>
         </div>
         <Badge variant="secondary">
@@ -40,7 +40,7 @@ export function ScanSecondaryDetails({
             <p className="text-sm font-medium text-foreground">Cuts</p>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
               Speech-safe deadspace trims run automatically. Lenient mode adds only the extra AI
-              cuts that make the export tighter.
+              cuts that make the audience-facing export tighter.
             </p>
           </div>
           <Badge variant="secondary" className="bg-primary/15 text-primary">

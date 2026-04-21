@@ -367,6 +367,15 @@ class StorageService:
     def write_provider_raw(self, analysis_id: str, payload: dict[str, Any]) -> None:
         dump_json(self.analysis_paths(analysis_id).provider_raw_path, payload)
 
+    def read_provider_raw(self, analysis_id: str) -> dict[str, Any]:
+        path = self.analysis_paths(analysis_id).provider_raw_path
+        if not path.exists():
+            raise FileNotFoundError(f"Provider raw payload {analysis_id} not found")
+        data = load_json(path)
+        if not isinstance(data, dict):
+            raise FileNotFoundError(f"Provider raw payload {analysis_id} is invalid")
+        return data
+
     def artifacts_for(
         self,
         analysis_id: str,

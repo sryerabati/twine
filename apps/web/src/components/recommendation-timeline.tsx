@@ -330,7 +330,7 @@ export function RecommendationTimeline({
             {openSegment && openSegmentTone ? (
               <section
                 data-testid="timeline-note-flyout"
-                className="surface-soft origin-left relative rounded-[1.65rem] p-5 animate-in fade-in zoom-in-95 slide-in-from-left-5 duration-300 xl:max-h-[24rem] xl:overflow-y-auto"
+                className="surface-soft signal-scrollbar origin-left relative rounded-[1.65rem] p-5 animate-in fade-in zoom-in-95 slide-in-from-left-5 duration-300 xl:max-h-[24rem] xl:overflow-y-auto"
                 onPointerEnter={clearCloseTimer}
                 onPointerLeave={scheduleRecommendationClose}
               >

@@ -18,6 +18,37 @@ GEMINI_API_KEY=your_google_ai_studio_key_here
 GEMINI_MODEL=gemini-2.5-pro
 ```
 
+To use the real MiroFish audience-simulation backend locally:
+
+```dotenv
+ANALYSIS_BACKEND=mirofish
+MIROFISH_REPO_DIR=../MiroFish
+MIROFISH_AUTO_START=true
+MIROFISH_ZEP_API_KEY=your_zep_key_here
+
+# Vertex-backed setup.
+GEMINI_PLATFORM=vertex
+MIROFISH_VERTEX_PROJECT_ID=your_gcp_project_id
+MIROFISH_VERTEX_LOCATION=global
+
+# Provide ADC locally with either:
+# GOOGLE_APPLICATION_CREDENTIALS=/abs/path/service-account.json
+# or `gcloud auth application-default login`
+
+# Optional explicit non-Vertex override.
+MIROFISH_LLM_API_KEY=
+MIROFISH_LLM_BASE_URL=
+MIROFISH_LLM_MODEL_NAME=
+```
+
+Or, if you already have the official MiroFish backend running:
+
+```dotenv
+ANALYSIS_BACKEND=mirofish
+MIROFISH_BASE_URL=http://127.0.0.1:5001
+MIROFISH_ZEP_API_KEY=your_zep_key_here
+```
+
 If you want to start the backend directly with the launcher surface:
 
 macOS:
@@ -96,6 +127,7 @@ Watch the terminal for:
 - health/readiness messages
 - upload validation failures
 - TRIBE import/model-load failures
+- MiroFish sidecar startup or simulation failures
 - analysis job exceptions
 
 ## Confirm predictions and shapes
@@ -115,7 +147,7 @@ Expected pattern:
 - first dimension = number of kept analysis windows
 - second dimension = number of cortical vertices
 
-When `ANALYSIS_BACKEND=gemini`, inspect the provider response instead:
+When `ANALYSIS_BACKEND=gemini` or `ANALYSIS_BACKEND=mirofish`, inspect the provider response instead:
 
 ```bash
 cat storage/analyses/<analysisId>/provider-response.json
@@ -127,12 +159,14 @@ cat storage/analyses/<analysisId>/provider-response.json
 2. Confirm the active backend has its credential set:
    - `HUGGINGFACE_HUB_TOKEN` for `ANALYSIS_BACKEND=tribe`
    - `GEMINI_API_KEY` for `ANALYSIS_BACKEND=gemini`
+   - `MIROFISH_ZEP_API_KEY` plus either `MIROFISH_BASE_URL` or `MIROFISH_REPO_DIR` for `ANALYSIS_BACKEND=mirofish`
 3. Confirm `ffmpeg` and `ffprobe` are available.
 4. Inspect `storage/uploads/<uploadId>/`.
 5. Inspect `storage/analyses/<analysisId>/record.json`.
 6. If the payload is missing but the record says completed, rerun after clearing that analysis directory.
 7. If `/api/upload` or `/api/analyze` now 400 on missing Convex IDs, confirm the frontend is creating pending Convex upload/scan rows and that `REQUIRE_CONVEX_IDS` matches your intended mode.
 8. If the backend logs Convex sync warnings, compare `CONVEX_SERVICE_SECRET` in `.env` with the value configured in Convex and restart the backend after changes.
+9. If auto-started MiroFish never becomes healthy, inspect `storage/cache/mirofish-backend.log`.
 
 For a quick launcher-side sanity check:
 

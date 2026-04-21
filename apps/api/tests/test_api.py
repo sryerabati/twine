@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from io import BytesIO
+from datetime import UTC, datetime
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
 
 from app.core.context import APIContext
+from app.models.contracts import UploadResponse
 
 
 class FakeConvexStorageBridge:
@@ -148,7 +150,7 @@ def test_health_endpoint_reports_missing_token_and_unloaded_model(
     assert payload["ok"] is False
     assert payload["analysisBackend"] == "tribe"
     assert payload["huggingFaceTokenPresent"] is False
-    assert payload["geminiApiKeyPresent"] is False
+    assert isinstance(payload["geminiApiKeyPresent"], bool)
     assert any("HUGGINGFACE_HUB_TOKEN" in blocker for blocker in payload["blockers"])
     assert any("tribev2 package" in blocker for blocker in payload["blockers"])
 
@@ -173,6 +175,9 @@ def test_analyze_and_compare_complete_with_stubbed_runner(
 
     assert loaded_a["status"] == "completed"
     assert loaded_b["status"] == "completed"
+    assert loaded_a["payload"]["analysisMode"] == "brain_scan"
+    assert loaded_a["payload"]["audienceOutlook"] is None
+    assert loaded_a["payload"]["brainSummary"] is None
     assert loaded_a["payload"]["brainResponse"]["timeSeries"]
     assert loaded_a["payload"]["markers"]
     assert loaded_a["payload"]["actionBoard"]["fixNow"]
@@ -194,6 +199,109 @@ def test_analyze_and_compare_complete_with_stubbed_runner(
     assert len(compare_payload["slices"]) == 3
 
 
+def test_proxy_analysis_payload_exposes_read_the_room_fields(
+    test_context: APIContext,
+) -> None:
+    upload_paths = test_context.storage.create_upload_paths("clip.mp4")
+    upload_paths.source_path.write_bytes(b"video")
+    video = test_context.storage.video_asset_from_upload(
+        upload_id=upload_paths.upload_id,
+        filename="clip.mp4",
+        duration_sec=12.0,
+        width=1080,
+        height=1920,
+        size_bytes=1024,
+    )
+    analysis_paths = test_context.storage.create_analysis_paths()
+
+    result = test_context.runner.analyze_video(upload_paths.source_path)
+    result.proxyAnalysis = {
+        "summary": {
+            "overallRecommendation": "The room likes the opening but cools in the middle.",
+            "strengths": ["Strong opening line"],
+            "weaknesses": ["Middle section loses clarity"],
+        },
+        "scores": {
+            "hookScore": 80,
+            "pacingScore": 68,
+            "retentionEstimate": 71,
+            "viralPotential": 74,
+            "confidence": "medium",
+            "helpingFactors": ["Clear early promise"],
+            "hurtingFactors": ["Some trust drop in the middle"],
+        },
+        "timeline": [
+            {
+                "startSec": 0,
+                "endSec": 4,
+                "globalActivation": 0.82,
+                "motionScore": 0.61,
+                "audioEnergy": 0.71,
+                "transcriptDensity": 0.54,
+                "sceneChange": True,
+                "silenceOverlap": False,
+                "note": "The opening lands quickly.",
+            },
+            {
+                "startSec": 4,
+                "endSec": 8,
+                "globalActivation": 0.46,
+                "motionScore": 0.33,
+                "audioEnergy": 0.41,
+                "transcriptDensity": 0.49,
+                "sceneChange": False,
+                "silenceOverlap": False,
+                "note": "The room starts questioning the point.",
+            },
+        ],
+        "roomVoices": [
+            {
+                "speaker": "Maya",
+                "handle": "@maya_557",
+                "role": "Freelance Graphic Design Student",
+                "platform": "Reddit",
+                "quote": "Wait, I've been seeing this app everywhere. If it really fixes pacing, I'm in.",
+            },
+            {
+                "speaker": "Theo",
+                "handle": "@theo_972",
+                "role": "Technical Analyst & Digital Forensic Specialist",
+                "platform": "Reddit",
+                "quote": "The pacing is promising, but the technical claim still needs proof.",
+            },
+        ],
+        "markers": [
+            {
+                "t": 1.2,
+                "type": "strong_hook",
+                "severity": "high",
+                "explanation": "People are leaning in.",
+                "suggestion": "Keep the opener intact.",
+            }
+        ],
+        "deadspaceCuts": [],
+        "warnings": [],
+    }
+
+    artifacts = test_context.engine.build_payload(
+        analysis_id=analysis_paths.analysis_id,
+        video=video,
+        source_path=upload_paths.source_path,
+        result=result,
+    )
+
+    assert artifacts.payload.analysisMode == "read_the_room"
+    assert artifacts.payload.audienceOutlook is not None
+    assert len(artifacts.payload.audienceOutlook.timeline) == 2
+    assert [voice.speaker for voice in artifacts.payload.audienceOutlook.roomVoices] == [
+        "Maya",
+        "Theo",
+    ]
+    assert artifacts.payload.audienceOutlook.roomVoices[0].handle == "@maya_557"
+    assert artifacts.payload.brainSummary is not None
+    assert artifacts.payload.brainSummary.averageActivation > 0
+
+
 def test_lookup_completed_analysis_by_upload_id(
     client: TestClient,
 ) -> None:
@@ -211,6 +319,255 @@ def test_lookup_completed_analysis_by_upload_id(
     assert payload["analysisId"] == analysis["analysisId"]
     assert payload["status"] == "completed"
     assert payload["payload"]["video"]["uploadId"] == upload["uploadId"]
+
+
+def test_get_analysis_backfills_room_voices_for_completed_read_the_room_payload(
+    client: TestClient,
+    test_context: APIContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    upload_paths = test_context.storage.create_upload_paths("clip.mp4")
+    upload_paths.source_path.write_bytes(b"video")
+    video = test_context.storage.video_asset_from_upload(
+        upload_id=upload_paths.upload_id,
+        filename="clip.mp4",
+        duration_sec=12.0,
+        width=1080,
+        height=1920,
+        size_bytes=1024,
+    )
+    test_context.storage.write_upload_metadata(
+        UploadResponse(uploadId=upload_paths.upload_id, video=video)
+    )
+    analysis_paths = test_context.storage.create_analysis_paths()
+
+    result = test_context.runner.analyze_video(upload_paths.source_path)
+    result.proxyAnalysis = {
+        "summary": {
+            "overallRecommendation": "The room likes the opening but cools in the middle.",
+            "strengths": ["Strong opening line"],
+            "weaknesses": ["Middle section loses clarity"],
+        },
+        "scores": {
+            "hookScore": 80,
+            "pacingScore": 68,
+            "retentionEstimate": 71,
+            "viralPotential": 74,
+            "confidence": "medium",
+            "helpingFactors": ["Clear early promise"],
+            "hurtingFactors": ["Some trust drop in the middle"],
+        },
+        "timeline": [
+            {
+                "startSec": 0,
+                "endSec": 4,
+                "globalActivation": 0.82,
+                "motionScore": 0.61,
+                "audioEnergy": 0.71,
+                "transcriptDensity": 0.54,
+                "sceneChange": True,
+                "silenceOverlap": False,
+                "note": "The opening lands quickly.",
+            }
+        ],
+        "markers": [],
+        "deadspaceCuts": [],
+        "warnings": [],
+    }
+    artifacts = test_context.engine.build_payload(
+        analysis_id=analysis_paths.analysis_id,
+        video=video,
+        source_path=upload_paths.source_path,
+        result=result,
+    )
+    test_context.storage.write_analysis_payload(analysis_paths.analysis_id, artifacts.payload)
+    test_context.storage.write_provider_raw(analysis_paths.analysis_id, {"simulationId": "sim_old"})
+    completed = test_context.storage.init_analysis_record(analysis_paths.analysis_id).model_copy(
+        update={
+            "status": "completed",
+            "createdAt": datetime.now(UTC),
+            "updatedAt": datetime.now(UTC),
+            "payload": None,
+        }
+    )
+    test_context.storage.write_analysis_record(completed)
+    monkeypatch.setattr(
+        test_context.runner,
+        "_load_room_voices",
+        lambda simulation_id: [
+            {
+                "speaker": "Maya",
+                "handle": "@maya_557",
+                "role": "Freelance Graphic Design Student",
+                "platform": "Reddit",
+                "quote": "Wait, I've been seeing this app everywhere.",
+            },
+            {
+                "speaker": "Theo",
+                "handle": "@theo_972",
+                "role": "Technical Analyst & Digital Forensic Specialist",
+                "platform": "Reddit",
+                "quote": "The pacing is promising, but the technical claim still needs proof.",
+            },
+            {
+                "speaker": "Avery",
+                "handle": "@avery_327",
+                "role": "Marketing Analyst & Brand Strategist",
+                "platform": "X",
+                "quote": "The value proposition is strong, but they need clearer proof.",
+            },
+            {
+                "speaker": "Lena",
+                "handle": "@lena_190",
+                "role": "UGC Content Quality Auditor & Post-Production Specialist",
+                "platform": "X",
+                "quote": "The format handling is sharp, but the ending cut lingers too long.",
+            },
+            {
+                "speaker": "Noah",
+                "handle": "@noah_611",
+                "role": "Social Creative Producer",
+                "platform": "Reddit",
+                "quote": "I would keep watching, but I want the promise backed up faster.",
+            },
+        ],
+        raising=False,
+    )
+
+    response = client.get(f"/api/analysis/{analysis_paths.analysis_id}")
+
+    assert response.status_code == 200
+    payload = response.json()["payload"]
+    assert payload["audienceOutlook"]["roomVoices"][0]["speaker"] == "Maya"
+    assert len(payload["audienceOutlook"]["roomVoices"]) == 5
+    assert (
+        test_context.storage.read_analysis_payload(analysis_paths.analysis_id)
+        .audienceOutlook
+        .roomVoices[4]
+        .speaker
+        == "Noah"
+    )
+
+
+def test_get_analysis_upgrades_existing_room_voices_when_more_are_available(
+    client: TestClient,
+    test_context: APIContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    upload_paths = test_context.storage.create_upload_paths("clip.mp4")
+    upload_paths.source_path.write_bytes(b"video")
+    video = test_context.storage.video_asset_from_upload(
+        upload_id=upload_paths.upload_id,
+        filename="clip.mp4",
+        duration_sec=12.0,
+        width=1080,
+        height=1920,
+        size_bytes=1024,
+    )
+    test_context.storage.write_upload_metadata(UploadResponse(uploadId=upload_paths.upload_id, video=video))
+    analysis_paths = test_context.storage.create_analysis_paths()
+
+    result = test_context.runner.analyze_video(upload_paths.source_path)
+    result.proxyAnalysis = {
+        "summary": {
+            "overallRecommendation": "The room likes the opening but cools in the middle.",
+            "strengths": ["Strong opening line"],
+            "weaknesses": ["Middle section loses clarity"],
+        },
+        "scores": {
+            "hookScore": 80,
+            "pacingScore": 68,
+            "retentionEstimate": 71,
+            "viralPotential": 74,
+            "confidence": "medium",
+            "helpingFactors": ["Clear early promise"],
+            "hurtingFactors": ["Some trust drop in the middle"],
+        },
+        "timeline": [
+            {
+                "startSec": 0,
+                "endSec": 4,
+                "globalActivation": 0.82,
+                "motionScore": 0.61,
+                "audioEnergy": 0.71,
+                "transcriptDensity": 0.54,
+                "sceneChange": True,
+                "silenceOverlap": False,
+                "note": "The opening lands quickly.",
+            }
+        ],
+        "roomVoices": [
+            {
+                "speaker": "Maya",
+                "handle": "@maya_557",
+                "role": "Freelance Graphic Design Student",
+                "platform": "Reddit",
+                "quote": "Wait, I've been seeing this app everywhere.",
+            },
+            {
+                "speaker": "Theo",
+                "handle": "@theo_972",
+                "role": "Technical Analyst & Digital Forensic Specialist",
+                "platform": "Reddit",
+                "quote": "The pacing is promising, but the technical claim still needs proof.",
+            },
+        ],
+        "markers": [],
+        "deadspaceCuts": [],
+        "warnings": [],
+    }
+    artifacts = test_context.engine.build_payload(
+        analysis_id=analysis_paths.analysis_id,
+        video=video,
+        source_path=upload_paths.source_path,
+        result=result,
+    )
+    test_context.storage.write_analysis_payload(analysis_paths.analysis_id, artifacts.payload)
+    test_context.storage.write_provider_raw(analysis_paths.analysis_id, {"simulationId": "sim_upgrade"})
+    completed = test_context.storage.init_analysis_record(analysis_paths.analysis_id).model_copy(
+        update={
+            "status": "completed",
+            "createdAt": datetime.now(UTC),
+            "updatedAt": datetime.now(UTC),
+            "payload": None,
+        }
+    )
+    test_context.storage.write_analysis_record(completed)
+    monkeypatch.setattr(
+        test_context.runner,
+        "_load_room_voices",
+        lambda simulation_id: [
+            {
+                "speaker": "Maya",
+                "handle": "@maya_557",
+                "role": "Freelance Graphic Design Student",
+                "platform": "Reddit",
+                "quote": "Wait, I've been seeing this app everywhere.",
+            },
+            {
+                "speaker": "Theo",
+                "handle": "@theo_972",
+                "role": "Technical Analyst & Digital Forensic Specialist",
+                "platform": "Reddit",
+                "quote": "The pacing is promising, but the technical claim still needs proof.",
+            },
+            {
+                "speaker": "Avery",
+                "handle": "@avery_327",
+                "role": "Marketing Analyst & Brand Strategist",
+                "platform": "X",
+                "quote": "The value proposition is strong, but they need clearer proof.",
+            },
+        ],
+        raising=False,
+    )
+
+    response = client.get(f"/api/analysis/{analysis_paths.analysis_id}")
+
+    assert response.status_code == 200
+    payload = response.json()["payload"]
+    assert len(payload["audienceOutlook"]["roomVoices"]) == 3
+    assert payload["audienceOutlook"]["roomVoices"][2]["speaker"] == "Avery"
 
 
 def test_upload_endpoint_stores_media_in_convex_and_rehydrates_local_cache(

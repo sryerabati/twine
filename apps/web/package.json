@@ -12,6 +12,8 @@
   "dependencies": {
     "@base-ui/react": "^1.4.0",
     "@convex-dev/auth": "^0.0.91",
+    "@dicebear/collection": "^9.4.2",
+    "@dicebear/core": "^9.4.2",
     "@react-three/fiber": "^9.6.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

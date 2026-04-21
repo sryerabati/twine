@@ -185,6 +185,26 @@ EDITOR_ORDERING_SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
 }
 
+ROOM_VOICE_STANCE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "classifications": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "handle": {"type": "string"},
+                    "stance": {"type": "string", "enum": ["positive", "negative"]},
+                },
+                "required": ["handle", "stance"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["classifications"],
+    "additionalProperties": False,
+}
+
 
 @dataclass
 class GeminiFile:
@@ -401,6 +421,46 @@ class GeminiRunner:
                 for item in ordering.get("orderedClips", [])
             ],
             "warnings": [str(item) for item in ordering.get("warnings", [])],
+        }
+
+    def classify_reaction_stances(self, reactions: list[dict[str, str]]) -> dict[str, str]:
+        self._require_api_key()
+        if not reactions:
+            return {}
+
+        prompt = (
+            "Classify each simulated audience reaction as either positive or negative. "
+            "Use positive when the overall takeaway is supportive, impressed, interested, or net-favorable, "
+            "even if the reaction includes minor caveats. "
+            "Use negative when the overall takeaway is skeptical, doubtful, unconvinced, critical, "
+            "or mainly pushing back on the claim, even if some praise is present. "
+            "Return strict JSON only. Preserve each handle exactly as given. "
+            "Reactions:\n"
+            f"{json.dumps(reactions, ensure_ascii=True)}"
+        )
+
+        try:
+            with httpx.Client(timeout=httpx.Timeout(30.0, read=60.0)) as client:
+                payload = self._generate_structured_response(
+                    client,
+                    parts=[{"text": prompt}],
+                    schema=ROOM_VOICE_STANCE_SCHEMA,
+                )
+        except httpx.HTTPStatusError as exc:
+            self._model_error = self._describe_http_status_error(exc)
+            raise GeminiIntegrationError(self._model_error) from exc
+        except httpx.HTTPError as exc:
+            self._model_error = str(exc)
+            raise GeminiIntegrationError(
+                f"Reaction stance classification request failed: {exc}"
+            ) from exc
+
+        response = self._extract_analysis(payload)
+        self._model_error = None
+        return {
+            str(item["handle"]).lstrip("@"): str(item["stance"])
+            for item in response.get("classifications", [])
+            if str(item.get("handle") or "").strip()
         }
 
     def _require_api_key(self) -> str:

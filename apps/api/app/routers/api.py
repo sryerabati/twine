@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import os
 import platform
 import shutil
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
@@ -11,6 +13,7 @@ from app.core.context import APIContext
 from app.models.contracts import (
     AnalyzeRequest,
     AnalysisResponse,
+    AudienceVoice,
     CompareRequest,
     CompareResponse,
     EditorDraftResponse,
@@ -54,11 +57,41 @@ def health(context: APIContext = Depends(get_context)) -> HealthResponse:
             blockers.append(
                 "The tribev2 package is not installed in the API environment."
             )
-    else:
+    elif analysis_backend == "gemini":
         if not settings.gemini_api_key:
             blockers.append(
                 "GEMINI_API_KEY is not set. Content analysis cannot call the configured remote backend."
             )
+    else:
+        if not (settings.mirofish_base_url or settings.mirofish_repo_dir):
+            blockers.append(
+                "MIROFISH_BASE_URL is not set and MIROFISH_REPO_DIR is not configured. "
+                "Set one of them to use the official MiroFish backend."
+            )
+        if settings.mirofish_auto_start and not settings.mirofish_zep_api_key:
+            blockers.append(
+                "MIROFISH_ZEP_API_KEY is not set. The official MiroFish backend requires Zep Cloud."
+            )
+        if settings.mirofish_auto_start:
+            if settings.gemini_platform == "vertex":
+                if not (
+                    settings.mirofish_vertex_project_id
+                    or settings.mirofish_llm_base_url
+                    or Path.home().joinpath(".config/gcloud/application_default_credentials.json").exists()
+                    or Path.home().joinpath("Library/Application Support/gcloud/application_default_credentials.json").exists()
+                    or Path.home().joinpath("AppData/Roaming/gcloud/application_default_credentials.json").exists()
+                    or "GOOGLE_APPLICATION_CREDENTIALS" in os.environ
+                    or "GOOGLE_CLOUD_PROJECT" in os.environ
+                ):
+                    blockers.append(
+                        "Vertex-backed MiroFish needs ADC plus a project id. Set GOOGLE_APPLICATION_CREDENTIALS "
+                        "or run `gcloud auth application-default login`, and set MIROFISH_VERTEX_PROJECT_ID or GOOGLE_CLOUD_PROJECT."
+                    )
+            elif not (settings.mirofish_llm_api_key or settings.gemini_api_key):
+                blockers.append(
+                    "MIROFISH_LLM_API_KEY is not set. Auto-starting the official MiroFish backend "
+                    "needs an OpenAI-compatible LLM key; GEMINI_API_KEY also works via Gemini's OpenAI endpoint."
+                )
     if runner.model_error():
         blockers.append(f"Model error: {runner.model_error()}")
     if analysis_backend == "tribe" and settings.tribe_device == "auto":
@@ -67,6 +100,20 @@ def health(context: APIContext = Depends(get_context)) -> HealthResponse:
         )
     elif analysis_backend == "tribe":
         notes.append(f"TRIBE_DEVICE is pinned to {settings.tribe_device}.")
+    elif analysis_backend == "mirofish":
+        notes.append(
+            "MiroFish runs as an external simulation service. It accepts a generated video brief, "
+            "builds a graph, runs the simulation, and then returns a structured audience-outlook report."
+        )
+        if settings.gemini_platform == "vertex":
+            notes.append(
+                "Vertex mode uses the Vertex OpenAI-compatible endpoint with a short-lived Google Cloud access token, "
+                "not a long-lived API key."
+            )
+        elif settings.gemini_api_key and not settings.mirofish_llm_api_key:
+            notes.append(
+                "Auto-start can reuse GEMINI_API_KEY through Gemini's OpenAI-compatible endpoint for the MiroFish LLM."
+            )
     else:
         notes.append("Content analysis runs against the configured remote backend.")
     if platform.machine().lower() == "arm64":
@@ -78,7 +125,11 @@ def health(context: APIContext = Depends(get_context)) -> HealthResponse:
         ffmpegAvailable=ffmpeg_available,
         ffprobeAvailable=ffprobe_available,
         huggingFaceTokenPresent=bool(settings.huggingface_hub_token),
-        geminiApiKeyPresent=bool(settings.gemini_api_key),
+        geminiApiKeyPresent=bool(
+            settings.gemini_api_key
+            or settings.mirofish_llm_api_key
+            or settings.gemini_platform == "vertex"
+        ),
         selectedDevice=runner.selected_device(),
         modelStatus=runner.model_status(),
         modelRepo=runner.MODEL_REPO if hasattr(runner, "MODEL_REPO") else "facebook/tribev2",
@@ -258,6 +309,7 @@ def get_analysis(
                 detail="Analysis is marked completed but its payload is missing.",
             ) from None
         record = record.model_copy(update={"payload": payload})
+    record = _maybe_backfill_room_voices(record, context)
     return storage.hydrate_analysis_response(record)
 
 
@@ -268,12 +320,13 @@ def get_analysis_by_upload(
 ) -> AnalysisResponse:
     storage = context.storage
     try:
-        return storage.find_latest_analysis_for_upload(upload_id)
+        record = storage.find_latest_analysis_for_upload(upload_id)
     except FileNotFoundError as exc:
         raise HTTPException(
             status_code=404,
             detail="No completed analysis found for this upload yet.",
         ) from exc
+    return _maybe_backfill_room_voices(record, context)
 
 
 @router.get("/editor/projects/{project_id}/latest-draft", response_model=EditorDraftResponse)
@@ -285,6 +338,47 @@ def get_latest_editor_draft(
         return context.storage.find_latest_editor_draft_for_project(project_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Editor draft not found.") from exc
+
+
+def _maybe_backfill_room_voices(record: AnalysisResponse, context: APIContext) -> AnalysisResponse:
+    payload = record.payload
+    if (
+        record.status != "completed"
+        or payload is None
+        or payload.analysisMode != "read_the_room"
+        or payload.audienceOutlook is None
+        or len(payload.audienceOutlook.roomVoices) >= 10
+    ):
+        return record
+
+    load_room_voices = getattr(context.runner, "_load_room_voices", None)
+    if not callable(load_room_voices):
+        return record
+
+    try:
+        provider_raw = context.storage.read_provider_raw(record.analysisId)
+    except FileNotFoundError:
+        return record
+
+    simulation_id = str(provider_raw.get("simulationId") or "").strip()
+    if not simulation_id:
+        return record
+
+    try:
+        room_voices = load_room_voices(simulation_id, classify_with_gemini=True)
+    except TypeError:
+        room_voices = load_room_voices(simulation_id)
+    if len(room_voices) <= len(payload.audienceOutlook.roomVoices):
+        return record
+
+    audience_outlook = payload.audienceOutlook.model_copy(
+        update={
+            "roomVoices": [AudienceVoice.model_validate(item) for item in room_voices[:10]],
+        }
+    )
+    next_payload = payload.model_copy(update={"audienceOutlook": audience_outlook})
+    context.storage.write_analysis_payload(record.analysisId, next_payload)
+    return record.model_copy(update={"payload": next_payload})
 
 
 @router.post("/compare", response_model=CompareResponse)
