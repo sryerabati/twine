@@ -1,6 +1,9 @@
 "use client";
 
+import { useState } from "react";
+
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import type { AnalysisPayload, DeadspaceCut } from "@/lib/contracts";
 import { formatSeconds } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -13,128 +16,131 @@ type ScanSecondaryDetailsProps = {
   trimMode: TrimMode;
 };
 
+const DEFAULT_VISIBLE_OPPORTUNITIES = 2;
+
 export function ScanSecondaryDetails({
   payload,
   activeCutIds,
   trimMode,
 }: ScanSecondaryDetailsProps) {
+  const [showAll, setShowAll] = useState(false);
+  const opportunities = buildEditOpportunities(payload);
+  const visibleOpportunities = showAll
+    ? opportunities
+    : opportunities.slice(0, DEFAULT_VISIBLE_OPPORTUNITIES);
+
   return (
-    <section className="surface rounded-[2.4rem] p-6 text-foreground">
-      <div className="flex items-center justify-between gap-3">
+    <section className="rounded-[1.5rem] border border-border/70 bg-background/70 p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-xs uppercase tracking-[0.28em] text-muted-foreground">
-            Secondary details
-          </h2>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Trim decisions that change what the simulated audience will feel in the final cut.
+          <p className="text-sm font-medium text-foreground">Edit opportunities</p>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
+            The highest-impact trims to tighten pacing before you export. The first two stay
+            visible by default so the editing decision stays fast.
           </p>
         </div>
-        <Badge variant="secondary">
-          {activeCutIds.length} in current trim
-        </Badge>
-      </div>
-
-      <div className="mt-6 space-y-5 border-t border-border/70 pt-6">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium text-foreground">Cuts</p>
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              Speech-safe deadspace trims run automatically. Lenient mode adds only the extra AI
-              cuts that make the audience-facing export tighter.
-            </p>
-          </div>
-          <Badge variant="secondary" className="bg-primary/15 text-primary">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="secondary">{activeCutIds.length} active</Badge>
+          <Badge variant="secondary" className="border border-primary/15 bg-primary/10 text-primary">
             {trimMode === "lenient" ? "Lenient mode" : "Speech-safe mode"}
           </Badge>
         </div>
-
-        <div className="space-y-4">
-          {payload.deadspaceCuts.length ? (
-            payload.deadspaceCuts.map((cut) => (
-              <CutPlanRow
-                key={cut.id}
-                cut={cut}
-                active={activeCutIds.includes(cut.id)}
-                title="Automatic deadspace trim"
-                activeLabel="Included automatically"
-                inactiveLabel="Not active"
-              />
-            ))
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              No deterministic deadspace cut crossed the threshold on this scan.
-            </p>
-          )}
-        </div>
-
-        <div className="border-t border-border/70 pt-5">
-          <p className="text-sm font-medium text-foreground">Lenient add-on trims</p>
-          <div className="mt-4 space-y-4">
-            {payload.lowValueCuts.length ? (
-              payload.lowValueCuts.map((cut) => (
-                <CutPlanRow
-                  key={cut.id}
-                  cut={cut}
-                  active={activeCutIds.includes(cut.id)}
-                  title="AI suggestion"
-                  activeLabel="Included in lenient mode"
-                  inactiveLabel="Lenient mode only"
-                />
-              ))
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                No extra low-value sections were suggested by the AI on this run.
-              </p>
-            )}
-          </div>
-        </div>
       </div>
+
+      <div className="mt-4 divide-y divide-border/70 rounded-[1.15rem] border border-border/70 bg-card/50 px-4">
+        {visibleOpportunities.length ? (
+          visibleOpportunities.map((opportunity) => (
+            <EditOpportunityRow
+              key={opportunity.id}
+              cut={opportunity}
+              active={activeCutIds.includes(opportunity.id)}
+            />
+          ))
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No trim opportunity crossed the threshold on this scan.
+          </p>
+        )}
+      </div>
+
+      {opportunities.length > DEFAULT_VISIBLE_OPPORTUNITIES ? (
+        <div className="mt-4">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setShowAll((current) => !current)}
+          >
+            {showAll ? "Show fewer cuts" : "Show all cuts"}
+          </Button>
+        </div>
+      ) : null}
     </section>
   );
 }
 
-function CutPlanRow({
+function EditOpportunityRow({
   cut,
   active,
-  title,
-  activeLabel,
-  inactiveLabel,
 }: {
   cut: DeadspaceCut;
   active: boolean;
-  title: string;
-  activeLabel: string;
-  inactiveLabel: string;
 }) {
   return (
-    <div
-      className={cn(
-        "relative w-full border-t border-border/70 pt-4 pl-4 text-left first:border-t-0 first:pt-0",
-        active
-          ? "before:absolute before:bottom-0 before:left-0 before:top-4 before:w-0.5 before:rounded-full before:bg-primary first:before:top-0"
-          : "",
-      )}
+    <article
+      data-testid="edit-opportunity-row"
+      className="py-4"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">{title}</p>
-          <p className="mt-2 font-semibold text-foreground">
-            {formatSeconds(cut.start)} to {formatSeconds(cut.end)}
-          </p>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-xs uppercase tracking-[0.2em] text-primary/80">
+              {formatSeconds(cut.start)} to {formatSeconds(cut.end)}
+            </p>
+            <p className="text-sm font-medium text-foreground">{labelForCutType(cut)}</p>
+          </div>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">{cut.reason}</p>
         </div>
-        <span
+        <Badge
+          variant="secondary"
           className={cn(
-            "rounded-full border px-3 py-1 text-xs font-medium",
-            active
-              ? "border-primary bg-white text-primary"
-              : "border-border bg-secondary text-secondary-foreground",
+            active ? "border border-primary/15 bg-primary/10 text-primary" : "text-muted-foreground",
           )}
         >
-          {active ? activeLabel : inactiveLabel}
-        </span>
+          {active ? "Included now" : "Optional"}
+        </Badge>
       </div>
-      <p className="mt-3 text-sm text-muted-foreground">{cut.reason}</p>
-      <p className="mt-2 text-sm text-foreground">{cut.recommendedAction}</p>
-    </div>
+
+      <p className="mt-2 text-sm text-foreground/85">{cut.recommendedAction}</p>
+    </article>
   );
+}
+
+function buildEditOpportunities(payload: AnalysisPayload) {
+  const seen = new Set<string>();
+  const cuts = [
+    ...(payload.cutPlan.length ? payload.cutPlan : []),
+    ...payload.deadspaceCuts,
+    ...payload.lowValueCuts,
+  ].filter((cut) => {
+    if (seen.has(cut.id)) {
+      return false;
+    }
+    seen.add(cut.id);
+    return true;
+  });
+
+  return cuts.sort((left, right) => {
+    if (left.defaultSelected !== right.defaultSelected) {
+      return left.defaultSelected ? -1 : 1;
+    }
+    if (left.type !== right.type) {
+      return left.type === "deadspace" ? -1 : 1;
+    }
+    return left.start - right.start;
+  });
+}
+
+function labelForCutType(cut: DeadspaceCut) {
+  return cut.type === "deadspace" ? "Automatic trim" : "Tighten this section";
 }

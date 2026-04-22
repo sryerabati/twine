@@ -10,7 +10,7 @@ from app.routers.api import router
 from app.services.analysis_engine import AnalysisEngine
 from app.services.convex_sync import ConvexSyncService
 from app.services.gemini_runner import GeminiRunner
-from app.services.jobs import AnalysisJobService, EditorDraftJobService
+from app.services.jobs import AnalysisJobService, EditorDraftJobService, RepurposeJobService
 from app.services.media import MediaService
 from app.services.mirofish_runner import MiroFishRunner
 from app.services.nvidia_editor_ai import NvidiaEditorAI
@@ -45,6 +45,14 @@ def build_context(settings=None) -> APIContext:
         editor_ai=editor_ai,
         convex_sync=convex_sync,
     )
+    repurpose_jobs = RepurposeJobService(
+        storage=storage,
+        runner=runner,
+        media=media,
+        engine=engine,
+        editor_ai=editor_ai,
+        convex_sync=convex_sync,
+    )
     return APIContext(
         settings=resolved_settings,
         storage=storage,
@@ -55,6 +63,7 @@ def build_context(settings=None) -> APIContext:
         convex_sync=convex_sync,
         editor_ai=editor_ai,
         editor_jobs=editor_jobs,
+        repurpose_jobs=repurpose_jobs,
     )
 
 

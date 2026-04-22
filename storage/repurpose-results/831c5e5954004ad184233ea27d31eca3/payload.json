@@ -1,0 +1,164 @@
+{
+  "source": {
+    "sourceUploadId": "k17cjjfc69dt8595emw0zvhnr985b5en",
+    "filename": "copy_0D95B4EB-F377-408C-AB4F-BDF070190AB1.MOV",
+    "durationSec": 30.0,
+    "summary": "A young man shares his positive experience using Twine, an AI-powered video editing platform for UGC creators. He highlights features such as AI video analysis, brain scan visualization for audience engagement, automatic removal of dead space, and an AI editor that formats raw clips into finished videos.",
+    "speechCoverage": 0.93
+  },
+  "summary": "This set of video edits provides three distinct approaches to showcasing Twine, ranging from a full testimonial to a punchy feature highlight and a results-oriented short.",
+  "variants": [
+    {
+      "variantId": "variant-1",
+      "title": "Comprehensive UGC Tool Walkthrough",
+      "angleSummary": "A full narrative arc that begins with the creator's discovery of the app, followed by a detailed list of features and concluding with the time-saving benefits.",
+      "rationale": "This variant captures the complete message of the source video, removing only redundant clip repeats while maintaining a natural flow for a standard social media review.",
+      "durationTarget": "source",
+      "durationSec": 25.0,
+      "videoUrl": "https://reliable-gnat-240.convex.cloud/api/storage/802a49f5-53d2-42ff-a986-daa61f9b9b6c",
+      "videoStorageId": "kg2dma6xyg01k6ftyzy03d752s85asvp",
+      "segmentCount": 7,
+      "segments": [
+        {
+          "segmentId": "segment-1",
+          "startSec": 0.0,
+          "endSec": 4.0,
+          "transcriptPreview": "I started UGC three weeks ago and I wish I found out about this app earlier.",
+          "summary": "I started UGC three weeks ago and I wish I found out about this app earlier."
+        },
+        {
+          "segmentId": "segment-2",
+          "startSec": 4.0,
+          "endSec": 6.0,
+          "transcriptPreview": "This is Twine.",
+          "summary": "This is Twine."
+        },
+        {
+          "segmentId": "segment-3",
+          "startSec": 6.0,
+          "endSec": 11.0,
+          "transcriptPreview": "Twine is the best all-in-one editor for every UGC professional out there.",
+          "summary": "Twine is the best all-in-one editor for every UGC professional out there."
+        },
+        {
+          "segmentId": "segment-5",
+          "startSec": 12.0,
+          "endSec": 16.0,
+          "transcriptPreview": "With Twine you can upload video clips, have a full-length AI analysis with a brain scan.",
+          "summary": "With Twine you can upload video clips, have a full-length AI analysis with a brain scan."
+        },
+        {
+          "segmentId": "segment-7",
+          "startSec": 17.0,
+          "endSec": 18.0,
+          "transcriptPreview": "You can even completely cut out all your dead space.",
+          "summary": "You can even completely cut out all your dead space."
+        },
+        {
+          "segmentId": "segment-9",
+          "startSec": 19.0,
+          "endSec": 24.0,
+          "transcriptPreview": "There's even an AI editor tool that lets you drop in raw clips and output a fully formatted",
+          "summary": "There's even an AI editor tool that lets you drop in raw clips and output a fully formatted"
+        },
+        {
+          "segmentId": "segment-11",
+          "startSec": 25.0,
+          "endSec": 29.0,
+          "transcriptPreview": "Twine has been saving me so much time I might just sign up for another campaign honestly.",
+          "summary": "Twine has been saving me so much time I might just sign up for another campaign honestly."
+        }
+      ]
+    },
+    {
+      "variantId": "variant-2",
+      "title": "The AI Editor Feature Highlight",
+      "angleSummary": "A fast-paced, feature-first edit that skips the personal intro to focus directly on the app's technical capabilities.",
+      "rationale": "By starting with the product identification and jumping straight into the AI features, this version appeals to viewers looking for specific utility and tools.",
+      "durationTarget": "short",
+      "durationSec": 20.0,
+      "videoUrl": "https://reliable-gnat-240.convex.cloud/api/storage/4d983a75-a9ad-4ff8-816a-6092ba7ddef1",
+      "videoStorageId": "kg2cnme2x1zj90131500h37d9585brxj",
+      "segmentCount": 5,
+      "segments": [
+        {
+          "segmentId": "segment-2",
+          "startSec": 4.0,
+          "endSec": 6.0,
+          "transcriptPreview": "This is Twine.",
+          "summary": "This is Twine."
+        },
+        {
+          "segmentId": "segment-3",
+          "startSec": 6.0,
+          "endSec": 11.0,
+          "transcriptPreview": "Twine is the best all-in-one editor for every UGC professional out there.",
+          "summary": "Twine is the best all-in-one editor for every UGC professional out there."
+        },
+        {
+          "segmentId": "segment-5",
+          "startSec": 12.0,
+          "endSec": 16.0,
+          "transcriptPreview": "With Twine you can upload video clips, have a full-length AI analysis with a brain scan.",
+          "summary": "With Twine you can upload video clips, have a full-length AI analysis with a brain scan."
+        },
+        {
+          "segmentId": "segment-9",
+          "startSec": 19.0,
+          "endSec": 24.0,
+          "transcriptPreview": "There's even an AI editor tool that lets you drop in raw clips and output a fully formatted",
+          "summary": "There's even an AI editor tool that lets you drop in raw clips and output a fully formatted"
+        },
+        {
+          "segmentId": "segment-11",
+          "startSec": 25.0,
+          "endSec": 29.0,
+          "transcriptPreview": "Twine has been saving me so much time I might just sign up for another campaign honestly.",
+          "summary": "Twine has been saving me so much time I might just sign up for another campaign honestly."
+        }
+      ]
+    },
+    {
+      "variantId": "variant-3",
+      "title": "The UGC Success Hack",
+      "angleSummary": "A punchy testimonial focusing on the emotional hook of discovery and the ultimate reward of efficiency.",
+      "rationale": "This version targets the creator community by emphasizing the feeling of finding a 'hidden gem' and the resulting increase in productivity.",
+      "durationTarget": "short",
+      "durationSec": 15.0,
+      "videoUrl": "https://reliable-gnat-240.convex.cloud/api/storage/5157ab09-ae23-4351-b3df-a962084bed7b",
+      "videoStorageId": "kg2e04xfrb2dzf3kh2263b5w5585ayeb",
+      "segmentCount": 4,
+      "segments": [
+        {
+          "segmentId": "segment-1",
+          "startSec": 0.0,
+          "endSec": 4.0,
+          "transcriptPreview": "I started UGC three weeks ago and I wish I found out about this app earlier.",
+          "summary": "I started UGC three weeks ago and I wish I found out about this app earlier."
+        },
+        {
+          "segmentId": "segment-2",
+          "startSec": 4.0,
+          "endSec": 6.0,
+          "transcriptPreview": "This is Twine.",
+          "summary": "This is Twine."
+        },
+        {
+          "segmentId": "segment-3",
+          "startSec": 6.0,
+          "endSec": 11.0,
+          "transcriptPreview": "Twine is the best all-in-one editor for every UGC professional out there.",
+          "summary": "Twine is the best all-in-one editor for every UGC professional out there."
+        },
+        {
+          "segmentId": "segment-11",
+          "startSec": 25.0,
+          "endSec": 29.0,
+          "transcriptPreview": "Twine has been saving me so much time I might just sign up for another campaign honestly.",
+          "summary": "Twine has been saving me so much time I might just sign up for another campaign honestly."
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}

@@ -37,10 +37,15 @@ def test_invert_cuts_merges_overlaps() -> None:
     assert keep == [(0.0, 1.0), (5.0, 10.0)]
 
 
-def test_invert_cuts_drops_tiny_ranges() -> None:
-    # A 10ms cut is below the 50ms threshold and should be dropped.
-    keep = MediaService._invert_cuts([(1.0, 1.01)], total_duration_sec=5.0)
+def test_invert_cuts_drops_ranges_under_hundred_ms() -> None:
+    # A 90ms cut is below the 100ms threshold and should be dropped.
+    keep = MediaService._invert_cuts([(1.0, 1.09)], total_duration_sec=5.0)
     assert keep == [(0.0, 5.0)]
+
+
+def test_invert_cuts_keeps_exact_hundred_ms_range() -> None:
+    keep = MediaService._invert_cuts([(1.0, 1.1)], total_duration_sec=5.0)
+    assert keep == [(0.0, 1.0), (1.1, 5.0)]
 
 
 def test_invert_cuts_clamps_out_of_bounds() -> None:

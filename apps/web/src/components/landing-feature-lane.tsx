@@ -22,39 +22,54 @@ export function LandingFeatureLane({
   const isEditor = tone === "editor";
 
   return (
-    <section className="mx-auto max-w-[84rem] px-6 py-14 sm:px-10 lg:px-16 lg:py-18 xl:px-20">
-      <div
-        className={cn(
-          "grid items-center gap-8 lg:gap-12",
-          isEditor ? "lg:grid-cols-[0.92fr_1.08fr]" : "lg:grid-cols-[1.08fr_0.92fr]",
-        )}
-      >
-        <div className={cn(isEditor ? "lg:order-2" : "lg:order-1")}>
-          <div className="max-w-xl">
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-primary/75">
-              {eyebrow}
-            </p>
-            <h2 className="mt-4 max-w-[13ch] font-heading text-4xl leading-[0.95] tracking-[-0.06em] text-foreground md:text-5xl">
-              {title}
-            </h2>
-            <p className="mt-5 max-w-[42rem] text-base leading-8 text-muted-foreground md:text-lg">
-              {body}
-            </p>
+    <section
+      className={cn(
+        "mx-auto-none",
+        isEditor ? "border-y-[3px] border-border bg-muted" : "bg-background",
+      )}
+    >
+      <div className="mx-auto max-w-[86rem] px-6 py-[4.5rem] sm:px-10 lg:px-16">
+        <div
+          className={cn(
+            "grid items-center gap-8 lg:gap-14",
+            isEditor ? "lg:grid-cols-[1.1fr_0.9fr]" : "lg:grid-cols-[0.9fr_1.1fr]",
+          )}
+        >
+          {/* Copy */}
+          <div className={cn(isEditor ? "lg:order-2" : "lg:order-1")}>
+            <div className="max-w-xl">
+              <span className="sticker w-fit">{eyebrow}</span>
+              <h2
+                className="mt-5 font-cartoon font-black text-foreground"
+                style={{ fontSize: "clamp(2rem, 3.5vw, 3rem)", letterSpacing: "-0.04em", lineHeight: 1.02, maxWidth: "13ch" }}
+              >
+                {title}
+              </h2>
+              <p className="mt-5 text-[1.05rem] font-medium leading-[1.85] text-muted-foreground" style={{ maxWidth: "42rem" }}>
+                {body}
+              </p>
+            </div>
+
+            <dl className="mt-8 grid gap-3 sm:grid-cols-3">
+              {bullets.map((item) => (
+                <div
+                  key={item.label}
+                  className="spring rounded-[1.4rem] border-[3px] border-border bg-muted p-4 shadow-[5px_5px_0_0_var(--shadow-stamp)] hover:-translate-x-[2px] hover:-translate-y-[2px] hover:[transform:translate(-2px,-2px)_rotate(-0.3deg)] hover:shadow-[8px_8px_0_0_var(--shadow-stamp)]"
+                >
+                  <dt className="text-[0.6rem] font-extrabold uppercase tracking-[0.2em] text-primary" style={{ opacity: 0.8 }}>
+                    {item.label}
+                  </dt>
+                  <dd className="mt-2 text-[0.78rem] font-medium leading-[1.7] text-muted-foreground">
+                    {item.description}
+                  </dd>
+                </div>
+              ))}
+            </dl>
           </div>
 
-          <dl className="mt-8 grid gap-4 md:grid-cols-3">
-            {bullets.map((item) => (
-              <div key={item.label} className="surface-soft rounded-[1.5rem] p-4">
-                <dt className="text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-primary/75">
-                  {item.label}
-                </dt>
-                <dd className="mt-3 text-sm leading-7 text-muted-foreground">{item.description}</dd>
-              </div>
-            ))}
-          </dl>
+          {/* Visual */}
+          <div className={cn("relative", isEditor ? "lg:order-1" : "lg:order-2")}>{visual}</div>
         </div>
-
-        <div className={cn("relative", isEditor ? "lg:order-1" : "lg:order-2")}>{visual}</div>
       </div>
     </section>
   );

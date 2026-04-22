@@ -7,6 +7,7 @@ Twine is an authenticated short-form video review tool for creators and content 
 - keep a saved scan library in Convex
 - export selected trims from completed scans
 - build an AI-assisted rough cut from multiple uploaded clips
+- repurpose one uploaded video into multiple alternate cuts
 
 The app couples a Next.js frontend with Convex for auth and saved state, plus a FastAPI worker that handles uploads, analysis jobs, exports, and AI editor draft generation.
 
@@ -28,6 +29,8 @@ Detailed setup lives in [LOCAL_SETUP.md](/Users/shreyas/Desktop/projects/claudeh
 - Compare scan pages
 - AI editor home at `/app/editor`
 - Per-project editor workspace at `/app/editor/[projectId]`
+- Repurpose home at `/app/repurpose`
+- Per-project repurpose workspace at `/app/repurpose/[projectId]`
 
 ## Analysis backends
 

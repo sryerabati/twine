@@ -100,6 +100,61 @@ class NvidiaEditorAI:
             "warnings": self._normalize_string_list(ordering.get("warnings")),
         }
 
+    def plan_repurpose_variants(
+        self,
+        segments: list[dict[str, object]],
+        *,
+        source_duration_sec: float,
+    ) -> dict[str, object]:
+        if not segments:
+            raise NvidiaIntegrationError("At least one source segment is required for repurposing.")
+
+        prompt = (
+            "Return strict JSON only. Do not wrap the JSON in markdown. "
+            "Repurpose one source video into up to three alternate variants using only the provided source segments. "
+            "Do not invent any synthetic edits, overlays, captions, or new footage. "
+            "Preserve source order. Do not reorder the timeline. "
+            "Variant 1 must use durationTarget=source and should stay close to the source duration while allowing deadspace removal. "
+            "Any short variant must use durationTarget=short and should feel like a usable short-form cut. "
+            "Return up to three usable variants and omit weak ones. "
+            "Variant 1 may use at most 3 temporal blocks. Any short variant may use at most 2 temporal blocks. "
+            "A jump larger than 1 second is only allowed when the skipped span is mostly deadspace or silence. "
+            "Do not repeat adjacent slices of the same spoken line. "
+            "Do not return any short variant below 8 seconds. "
+            "Do not rely on trims that clip into dialogue boundaries. "
+            "Prefer coherent adjacent beats over topic-only jumps. "
+            "When the source is longer than 30 to 45 seconds, the short variants should aim for about 20 seconds. "
+            "Respond with exactly these keys: summary, variants. "
+            "Each variant must include title, angleSummary, rationale, durationTarget, and orderedSegments. "
+            "orderedSegments must be an array of objects with segmentId and rationale. "
+            f"Source duration seconds: {round(source_duration_sec, 2)}. "
+            f"Segments: {json.dumps(segments, ensure_ascii=True)}"
+        )
+        payload = self._chat_json(prompt=prompt, max_tokens=1800)
+        plan = self._extract_json_object(payload)
+        self._model_error = None
+        return {
+            "summary": str(plan.get("summary") or ""),
+            "variants": [
+                {
+                    "title": str(item.get("title") or ""),
+                    "angleSummary": str(item.get("angleSummary") or ""),
+                    "rationale": str(item.get("rationale") or ""),
+                    "durationTarget": str(item.get("durationTarget") or "short"),
+                    "orderedSegments": [
+                        {
+                            "segmentId": str(segment.get("segmentId") or ""),
+                            "rationale": str(segment.get("rationale") or ""),
+                        }
+                        for segment in item.get("orderedSegments", [])
+                        if str(segment.get("segmentId") or "").strip()
+                    ],
+                }
+                for item in plan.get("variants", [])
+                if isinstance(item, dict)
+            ],
+        }
+
     def _chat_json(self, *, prompt: str, max_tokens: int) -> dict[str, Any]:
         key = self._require_api_key()
         last_error: httpx.HTTPStatusError | None = None

@@ -138,6 +138,52 @@ class ConvexSyncService:
             },
         )
 
+    def update_repurpose_project_status(
+        self,
+        *,
+        convex_project_id: str | None,
+        status: str,
+        latest_local_result_id: str | None = None,
+        error_message: str | None = None,
+    ) -> None:
+        if not self.enabled or not convex_project_id:
+            return
+        self._post(
+            "/service/repurpose-project/status",
+            {
+                "projectId": convex_project_id,
+                "status": status,
+                "latestLocalResultId": latest_local_result_id,
+                "errorMessage": str(error_message)[:500] if error_message is not None else None,
+            },
+        )
+
+    def attach_repurpose_summary(
+        self,
+        *,
+        convex_project_id: str | None,
+        latest_local_result_id: str | None,
+        source_upload_id: str | None,
+        source_filename: str | None,
+        source_duration_sec: float | None,
+        summary: str | None,
+        variants: list[dict[str, Any]],
+    ) -> None:
+        if not self.enabled or not convex_project_id:
+            return
+        self._post(
+            "/service/repurpose-project/summary",
+            {
+                "projectId": convex_project_id,
+                "latestLocalResultId": latest_local_result_id,
+                "sourceUploadId": source_upload_id,
+                "sourceFilename": source_filename,
+                "sourceDurationSec": source_duration_sec,
+                "summary": summary,
+                "variants": variants,
+            },
+        )
+
     def create_storage_upload_url(self) -> str:
         response = self._post_json_response("/service/storage/upload-url", {})
         upload_url = response.get("uploadUrl")

@@ -27,10 +27,23 @@ class EditorAI(Protocol):
     def order_editor_clips(self, clips: list[dict[str, object]]) -> dict[str, object]:
         """Return ordered clip ids plus storyline metadata."""
 
+    def plan_repurpose_variants(
+        self,
+        segments: list[dict[str, object]],
+        *,
+        source_duration_sec: float,
+    ) -> dict[str, object]:
+        """Return three repurpose variants built from source segments."""
+
 
 class EditorJobQueue(Protocol):
     def enqueue(self, project_id: str, draft_id: str, clips: list[object]) -> None:
         """Queue editor draft generation work."""
+
+
+class RepurposeJobQueue(Protocol):
+    def enqueue(self, project_id: str, result_id: str, source: object) -> None:
+        """Queue repurpose result generation work."""
 
 
 class AnalysisRunner(Protocol):
@@ -67,3 +80,4 @@ class APIContext:
     convex_sync: ConvexSyncService
     editor_ai: EditorAI
     editor_jobs: EditorJobQueue
+    repurpose_jobs: RepurposeJobQueue

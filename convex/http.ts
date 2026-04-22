@@ -256,4 +256,89 @@ http.route({
   }),
 });
 
+http.route({
+  path: "/service/repurpose-project/status",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      assertServiceSecret(request);
+      const body = await parseJson<{
+        projectId: string;
+        status: "drafting" | "queued" | "running" | "completed" | "failed";
+        latestLocalResultId?: string;
+        errorMessage?: string;
+      }>(request);
+      if (!body.projectId || !body.status) {
+        return new Response("projectId and status are required.", { status: 400 });
+      }
+      const repurposeInternal = internal as any;
+      await ctx.runMutation(repurposeInternal.repurposeService.updateProjectStatus, {
+        projectId: body.projectId as never,
+        status: body.status,
+        latestLocalResultId: body.latestLocalResultId,
+        errorMessage: body.errorMessage,
+      });
+      return new Response(null, { status: 204 });
+    } catch (err) {
+      if (err instanceof Response) return err;
+      return new Response("Internal error.", { status: 500 });
+    }
+  }),
+});
+
+http.route({
+  path: "/service/repurpose-project/summary",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      assertServiceSecret(request);
+      const body = await parseJson<{
+        projectId: string;
+        latestLocalResultId?: string;
+        sourceUploadId?: string;
+        sourceFilename?: string;
+        sourceDurationSec?: number;
+        summary?: string;
+        variants?: Array<{
+          variantKey: string;
+          title: string;
+          angleSummary: string;
+          durationTarget: "source" | "short";
+          durationSec: number;
+          exportUrl?: string;
+          exportStorageId?: string;
+          position: number;
+        }>;
+      }>(request);
+      if (!body.projectId) {
+        return new Response("projectId is required.", { status: 400 });
+      }
+      const repurposeInternal = internal as any;
+      await ctx.runMutation(repurposeInternal.repurposeService.attachSummary, {
+        projectId: body.projectId as never,
+        latestLocalResultId: body.latestLocalResultId,
+        sourceUploadId: body.sourceUploadId as never,
+        sourceFilename: body.sourceFilename,
+        sourceDurationSec: body.sourceDurationSec,
+        summary: body.summary,
+        variants:
+          body.variants?.map((variant) => ({
+            variantKey: variant.variantKey,
+            title: variant.title,
+            angleSummary: variant.angleSummary,
+            durationTarget: variant.durationTarget,
+            durationSec: variant.durationSec,
+            exportUrl: variant.exportUrl,
+            exportStorageId: variant.exportStorageId as never,
+            position: variant.position,
+          })) ?? [],
+      });
+      return new Response(null, { status: 204 });
+    } catch (err) {
+      if (err instanceof Response) return err;
+      return new Response("Internal error.", { status: 500 });
+    }
+  }),
+});
+
 export default http;

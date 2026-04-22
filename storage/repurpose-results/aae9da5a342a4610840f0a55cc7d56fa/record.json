@@ -1,0 +1,154 @@
+{
+  "resultId": "aae9da5a342a4610840f0a55cc7d56fa",
+  "projectId": "kh768xp9azq06entheh56fqc5585agey",
+  "status": "completed",
+  "stage": "completed",
+  "progressPercent": 100,
+  "statusMessage": "Repurpose variants ready to review.",
+  "createdAt": "2026-04-22T05:51:12.399893Z",
+  "updatedAt": "2026-04-22T05:52:18.512869Z",
+  "error": null,
+  "payload": {
+    "source": {
+      "sourceUploadId": "k17cjjfc69dt8595emw0zvhnr985b5en",
+      "filename": "copy_0D95B4EB-F377-408C-AB4F-BDF070190AB1.MOV",
+      "durationSec": 30.0,
+      "summary": "A UGC professional reviews Twine, an AI-powered video editing tool. He highlights features such as automatic dead-space removal, brain-scan AI analysis, and the ability to convert raw footage into formatted videos, noting that it saves him significant time.",
+      "speechCoverage": 1.0
+    },
+    "summary": "A creator shares their discovery of Twine, an AI-powered editing tool for UGC, detailing its ability to analyze footage, remove dead space, and automate the editing process.",
+    "variants": [
+      {
+        "variantId": "variant-1",
+        "title": "The Complete Twine Experience",
+        "angleSummary": "A full-length overview of Twine's features from a UGC creator's perspective.",
+        "rationale": "Uses all source segments to provide the complete narrative, including every feature mention and the full testimonial, maintaining the original flow since there is no dead space to remove.",
+        "durationTarget": "source",
+        "durationSec": 25.67,
+        "videoUrl": "https://reliable-gnat-240.convex.cloud/api/storage/7bb40ed3-5942-43d8-aa56-8e1df44120bb",
+        "videoStorageId": "kg2fk3wqeja8e94z9gpnjayp5d85bd35",
+        "segmentCount": 6,
+        "segments": [
+          {
+            "segmentId": "segment-1",
+            "startSec": 0.0,
+            "endSec": 4.4,
+            "transcriptPreview": "I started UGC three weeks ago, and I wish I found out about this app earlier.",
+            "summary": "I started UGC three weeks ago, and I wish I found out about this app earlier."
+          },
+          {
+            "segmentId": "segment-2",
+            "startSec": 4.4,
+            "endSec": 6.3,
+            "transcriptPreview": "This is Twine.",
+            "summary": "This is Twine."
+          },
+          {
+            "segmentId": "segment-3",
+            "startSec": 6.3,
+            "endSec": 11.5,
+            "transcriptPreview": "Twine is the best all-in-one editor for every UGC professional out there.",
+            "summary": "Twine is the best all-in-one editor for every UGC professional out there."
+          },
+          {
+            "segmentId": "segment-4",
+            "startSec": 11.5,
+            "endSec": 17.0,
+            "transcriptPreview": "With Twine, you can upload video clips, have a full length AI analysis with a brain scan.",
+            "summary": "With Twine, you can upload video clips, have a full length AI analysis with a brain scan."
+          },
+          {
+            "segmentId": "segment-5",
+            "startSec": 17.0,
+            "endSec": 19.5,
+            "transcriptPreview": "Even completely cut out all your dead space.",
+            "summary": "Even completely cut out all your dead space."
+          },
+          {
+            "segmentId": "segment-6",
+            "startSec": 19.5,
+            "endSec": 25.5,
+            "transcriptPreview": "Even an AI editor tool that lets you drop in raw clips and output a fully formatted video.",
+            "summary": "Even an AI editor tool that lets you drop in raw clips and output a fully formatted video."
+          }
+        ]
+      },
+      {
+        "variantId": "variant-2",
+        "title": "AI Feature Highlights",
+        "angleSummary": "A fast-paced cut focusing on specific AI capabilities like analysis and dead space removal.",
+        "rationale": "This short variant removes the longer automated editor description to focus on the immediate utility of brain scans and dead space removal, creating a punchy 24-second ad.",
+        "durationTarget": "short",
+        "durationSec": 17.17,
+        "videoUrl": "https://reliable-gnat-240.convex.cloud/api/storage/eb7bee2f-124b-4d40-9f21-85c8cd74ff74",
+        "videoStorageId": "kg23vz21bv5deeh2gxc46bg3pd85a841",
+        "segmentCount": 4,
+        "segments": [
+          {
+            "segmentId": "segment-1",
+            "startSec": 0.0,
+            "endSec": 4.4,
+            "transcriptPreview": "I started UGC three weeks ago, and I wish I found out about this app earlier.",
+            "summary": "I started UGC three weeks ago, and I wish I found out about this app earlier."
+          },
+          {
+            "segmentId": "segment-2",
+            "startSec": 4.4,
+            "endSec": 6.3,
+            "transcriptPreview": "This is Twine.",
+            "summary": "This is Twine."
+          },
+          {
+            "segmentId": "segment-3",
+            "startSec": 6.3,
+            "endSec": 11.5,
+            "transcriptPreview": "Twine is the best all-in-one editor for every UGC professional out there.",
+            "summary": "Twine is the best all-in-one editor for every UGC professional out there."
+          },
+          {
+            "segmentId": "segment-4",
+            "startSec": 11.5,
+            "endSec": 17.0,
+            "transcriptPreview": "With Twine, you can upload video clips, have a full length AI analysis with a brain scan.",
+            "summary": "With Twine, you can upload video clips, have a full length AI analysis with a brain scan."
+          }
+        ]
+      },
+      {
+        "variantId": "variant-3",
+        "title": "The 15-Second Hook",
+        "angleSummary": "A concise introduction and testimonial intended for quick social media consumption.",
+        "rationale": "By jumping straight from the product introduction to the results, this variant creates a high-energy 16-second testimonial that emphasizes speed and efficiency.",
+        "durationTarget": "short",
+        "durationSec": 13.13,
+        "videoUrl": "https://reliable-gnat-240.convex.cloud/api/storage/1e483493-12dc-4d1e-9e5d-cd42cb3cbbf6",
+        "videoStorageId": "kg2chm031gvvtvtkbsvw8f80g185by0n",
+        "segmentCount": 3,
+        "segments": [
+          {
+            "segmentId": "segment-5",
+            "startSec": 17.0,
+            "endSec": 19.5,
+            "transcriptPreview": "Even completely cut out all your dead space.",
+            "summary": "Even completely cut out all your dead space."
+          },
+          {
+            "segmentId": "segment-6",
+            "startSec": 19.5,
+            "endSec": 25.5,
+            "transcriptPreview": "Even an AI editor tool that lets you drop in raw clips and output a fully formatted video.",
+            "summary": "Even an AI editor tool that lets you drop in raw clips and output a fully formatted video."
+          },
+          {
+            "segmentId": "segment-7",
+            "startSec": 25.5,
+            "endSec": 30.0,
+            "transcriptPreview": "Twine's been saving me so much time, I might just sign up for another campaign honestly.",
+            "summary": "Twine's been saving me so much time, I might just sign up for another campaign honestly."
+          }
+        ]
+      }
+    ],
+    "warnings": []
+  }
+}

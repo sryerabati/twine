@@ -53,6 +53,21 @@ class EditorClipPlan:
     transcript_word_count: int
 
 
+@dataclass
+class EditorialWindow:
+    start_sec: float
+    end_sec: float
+    transcript_density: float
+    audio_energy: float
+    motion_score: float
+    scene_change: bool
+    silence_overlap: bool
+
+    @property
+    def duration_sec(self) -> float:
+        return max(self.end_sec - self.start_sec, 0.0)
+
+
 class AnalysisEngine:
     def __init__(self, storage: StorageService, media: MediaService) -> None:
         self.storage = storage
@@ -234,17 +249,12 @@ class AnalysisEngine:
         duration_sec: float,
         speech_segments: list[tuple[float, float, str]],
     ) -> EditorClipPlan:
-        windows = self._editor_windows(duration_sec)
-        transcript_density = self._transcript_density_from_speech_segments(
-            speech_segments,
-            windows,
-        )
-        media_features = self.media.analyze_media(
+        window_features = self.build_editor_window_features_from_speech(
             source_path=source_path,
-            windows=windows,
-            transcript_density=transcript_density,
+            duration_sec=duration_sec,
+            speech_segments=speech_segments,
         )
-        points = self._editor_points_from_media_features(windows, media_features)
+        points = self._editor_points_from_window_features(window_features)
         markers, cuts = self._markers_and_cuts(points)
         low_value_cuts = self._low_value_cuts(points, markers, cuts)
         cut_plan = sorted([*cuts, *low_value_cuts], key=lambda cut: (cut.start, cut.end))
@@ -256,6 +266,36 @@ class AnalysisEngine:
             default_cuts=default_cuts,
             transcript_word_count=self._speech_segment_word_count(speech_segments),
         )
+
+    def build_editor_window_features_from_speech(
+        self,
+        *,
+        source_path: Path,
+        duration_sec: float,
+        speech_segments: list[tuple[float, float, str]],
+    ) -> list[EditorialWindow]:
+        windows = self._editor_windows(duration_sec)
+        transcript_density = self._transcript_density_from_speech_segments(
+            speech_segments,
+            windows,
+        )
+        media_features = self.media.analyze_media(
+            source_path=source_path,
+            windows=windows,
+            transcript_density=transcript_density,
+        )
+        return [
+            EditorialWindow(
+                start_sec=round(start, 2),
+                end_sec=round(end, 2),
+                transcript_density=round(float(transcript_density[index]), 4),
+                audio_energy=round(media_features.audio_energy[index], 4),
+                motion_score=round(media_features.motion_scores[index], 4),
+                scene_change=bool(media_features.scene_changes[index]),
+                silence_overlap=bool(media_features.silence_overlap[index]),
+            )
+            for index, (start, end) in enumerate(windows)
+        ]
 
     def _build_proxy_payload(
         self,
@@ -534,6 +574,68 @@ class AnalysisEngine:
                     transcriptDensity=round(media_features.transcript_density[index], 4),
                     sceneChange=bool(media_features.scene_changes[index]),
                     silenceOverlap=bool(media_features.silence_overlap[index]),
+                    hemisphereHeatmap=HemisphereHeatmap(
+                        left=[round(left_activation[index], 4) for _ in range(64)],
+                        right=[round(right_activation[index], 4) for _ in range(64)],
+                    ),
+                )
+            )
+        return points
+
+    @staticmethod
+    def _editor_points_from_window_features(
+        window_features: list[EditorialWindow],
+    ) -> list[BrainResponsePoint]:
+        if not window_features:
+            return []
+
+        global_activation = [
+            float(
+                np.clip(
+                    0.5 * window.transcript_density
+                    + 0.25 * window.audio_energy
+                    + 0.2 * window.motion_score
+                    + 0.05 * float(window.scene_change)
+                    - (0.18 if window.silence_overlap else 0.0),
+                    0.0,
+                    1.0,
+                )
+            )
+            for window in window_features
+        ]
+        left_activation = [
+            float(np.clip(0.7 * global_activation[index] + 0.3 * window.motion_score, 0.0, 1.0))
+            for index, window in enumerate(window_features)
+        ]
+        right_activation = [
+            float(np.clip(0.7 * global_activation[index] + 0.3 * window.audio_energy, 0.0, 1.0))
+            for index, window in enumerate(window_features)
+        ]
+        rolling_variance = AnalysisEngine._rolling_variance(global_activation)
+        activation_delta = np.diff(np.asarray(global_activation), prepend=global_activation[0])
+        spike_score = AnalysisEngine._normalize_series(np.maximum(activation_delta, 0.0))
+        drop_score = AnalysisEngine._normalize_series(np.maximum(-activation_delta, 0.0))
+
+        points: list[BrainResponsePoint] = []
+        for index, window in enumerate(window_features):
+            activation = round(global_activation[index], 4)
+            points.append(
+                BrainResponsePoint(
+                    stimulusTimeSec=round(window.start_sec, 2),
+                    segmentStartSec=round(window.start_sec, 2),
+                    segmentDurationSec=round(max(window.duration_sec, 0.1), 2),
+                    globalActivation=activation,
+                    leftHemisphereActivation=round(left_activation[index], 4),
+                    rightHemisphereActivation=round(right_activation[index], 4),
+                    rollingVariance=round(float(rolling_variance[index]), 4),
+                    activationDelta=round(float(activation_delta[index]), 4),
+                    spikeScore=round(float(spike_score[index]), 4),
+                    dropScore=round(float(drop_score[index]), 4),
+                    audioEnergy=round(window.audio_energy, 4),
+                    motionScore=round(window.motion_score, 4),
+                    transcriptDensity=round(window.transcript_density, 4),
+                    sceneChange=bool(window.scene_change),
+                    silenceOverlap=bool(window.silence_overlap),
                     hemisphereHeatmap=HemisphereHeatmap(
                         left=[round(left_activation[index], 4) for _ in range(64)],
                         right=[round(right_activation[index], 4) for _ in range(64)],
@@ -1226,12 +1328,16 @@ class AnalysisEngine:
             return []
         normalized: list[DeadspaceCut] = []
         for index, cut in enumerate(raw_cuts, start=1):
+            start = round(float(cut["start"]), 2)
+            end = round(float(cut["end"]), 2)
+            if round(end - start, 2) < MediaService.MIN_CUT_DURATION_SEC:
+                continue
             normalized.append(
                 DeadspaceCut(
                     id=str(cut.get("id") or f"{cut_type.replace('_', '-')}-{index}"),
                     type=cut_type,
-                    start=round(float(cut["start"]), 2),
-                    end=round(float(cut["end"]), 2),
+                    start=start,
+                    end=end,
                     reason=str(cut["reason"]),
                     defaultSelected=bool(cut.get("defaultSelected", cut_type == "deadspace")),
                     recommendedAction=str(

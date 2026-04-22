@@ -12,6 +12,8 @@ import type * as auth from "../auth.js";
 import type * as editorProjects from "../editorProjects.js";
 import type * as editorService from "../editorService.js";
 import type * as http from "../http.js";
+import type * as repurposeProjects from "../repurposeProjects.js";
+import type * as repurposeService from "../repurposeService.js";
 import type * as scans from "../scans.js";
 import type * as service from "../service.js";
 import type * as uploads from "../uploads.js";
@@ -28,6 +30,8 @@ declare const fullApi: ApiFromModules<{
   editorProjects: typeof editorProjects;
   editorService: typeof editorService;
   http: typeof http;
+  repurposeProjects: typeof repurposeProjects;
+  repurposeService: typeof repurposeService;
   scans: typeof scans;
   service: typeof service;
   uploads: typeof uploads;

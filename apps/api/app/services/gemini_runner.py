@@ -185,6 +185,49 @@ EDITOR_ORDERING_SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
 }
 
+REPURPOSE_PLAN_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "summary": {"type": "string"},
+        "variants": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 3,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "angleSummary": {"type": "string"},
+                    "rationale": {"type": "string"},
+                    "durationTarget": {"type": "string", "enum": ["source", "short"]},
+                    "orderedSegments": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "segmentId": {"type": "string"},
+                                "rationale": {"type": "string"},
+                            },
+                            "required": ["segmentId", "rationale"],
+                            "additionalProperties": False,
+                        },
+                    },
+                },
+                "required": [
+                    "title",
+                    "angleSummary",
+                    "rationale",
+                    "durationTarget",
+                    "orderedSegments",
+                ],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["summary", "variants"],
+    "additionalProperties": False,
+}
+
 ROOM_VOICE_STANCE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -421,6 +464,73 @@ class GeminiRunner:
                 for item in ordering.get("orderedClips", [])
             ],
             "warnings": [str(item) for item in ordering.get("warnings", [])],
+        }
+
+    def plan_repurpose_variants(
+        self,
+        segments: list[dict[str, object]],
+        *,
+        source_duration_sec: float,
+    ) -> dict[str, object]:
+        self._require_api_key()
+        if not segments:
+            raise GeminiIntegrationError("At least one source segment is required for repurposing.")
+
+        prompt = (
+            "You are repurposing one source video into up to three alternate cuts using only the provided source segments. "
+            "Return strict JSON only. Do not invent footage, overlays, captions, or synthetic edits. "
+            "Return up to three usable materially different variants and omit weak ones. "
+            "Preserve source order. Do not reorder the timeline. "
+            "Variant 1 must use durationTarget=source and should stay close to the source duration while still allowing the removal of weak deadspace segments. "
+            "Any short variants must use durationTarget=short and should each feel like a usable short-form cut. "
+            "Variant 1 may use at most 3 temporal blocks. Any short variant may use at most 2 temporal blocks. "
+            "A jump larger than 1 second is only allowed when the skipped span is mostly deadspace or silence. "
+            "Do not repeat adjacent slices of the same spoken line. "
+            "Do not return any short variant below 8 seconds. "
+            "Do not rely on trims that clip into dialogue boundaries. "
+            "Prefer coherent adjacent beats over topic-only jumps. "
+            "When the source is longer than 30 to 45 seconds, the short variants should aim for about 20 seconds. "
+            "Preserve segment ids exactly as provided. "
+            f"Source duration seconds: {round(source_duration_sec, 2)}. "
+            f"Available source segments: {json.dumps(segments, ensure_ascii=True)}"
+        )
+
+        try:
+            with httpx.Client(timeout=httpx.Timeout(60.0, read=120.0)) as client:
+                payload = self._generate_structured_response(
+                    client,
+                    parts=[{"text": prompt}],
+                    schema=REPURPOSE_PLAN_SCHEMA,
+                )
+        except httpx.HTTPStatusError as exc:
+            self._model_error = self._describe_http_status_error(exc)
+            raise GeminiIntegrationError(self._model_error) from exc
+        except httpx.HTTPError as exc:
+            self._model_error = str(exc)
+            raise GeminiIntegrationError(
+                f"Repurpose planning request failed: {exc}"
+            ) from exc
+
+        plan = self._extract_analysis(payload)
+        self._model_error = None
+        return {
+            "summary": str(plan["summary"]),
+            "variants": [
+                {
+                    "title": str(item["title"]),
+                    "angleSummary": str(item["angleSummary"]),
+                    "rationale": str(item["rationale"]),
+                    "durationTarget": str(item["durationTarget"]),
+                    "orderedSegments": [
+                        {
+                            "segmentId": str(segment["segmentId"]),
+                            "rationale": str(segment["rationale"]),
+                        }
+                        for segment in item.get("orderedSegments", [])
+                    ],
+                }
+                for item in plan.get("variants", [])
+            ],
         }
 
     def classify_reaction_stances(self, reactions: list[dict[str, str]]) -> dict[str, str]:

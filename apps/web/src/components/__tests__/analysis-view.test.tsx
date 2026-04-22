@@ -468,13 +468,15 @@ describe("AnalysisView", () => {
       expect(screen.getByText(/Read the room/i)).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/This mode simulates audience reaction alongside a compact brain scan summary/i)).toBeInTheDocument();
-    expect(screen.getByText(/Comment graph/i)).toBeInTheDocument();
-    expect(screen.getByText(/Cohorts/i)).toBeInTheDocument();
-    expect(screen.getByText(/Agent interviews/i)).toBeInTheDocument();
-    expect(screen.getByText(/Why the room turned/i)).toBeInTheDocument();
+    expect(screen.getByTestId("scan-verdict-bar")).toBeInTheDocument();
+    expect(screen.getByTestId("scan-action-strip")).toBeInTheDocument();
+    expect(screen.getByText(/Edit opportunities/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /open evidence drawer/i })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Threads" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Comment graph/i)).not.toBeInTheDocument();
     expect(screen.queryByTestId("brain-viewport")).not.toBeInTheDocument();
-    expect(screen.getByText(/Brain scan side signal/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /show brain signal/i })).toBeInTheDocument();
+    expect(screen.queryByText(/Top actions/i)).not.toBeInTheDocument();
   });
 
   it("recomputes the read-the-room activation estimate instead of trusting inflated legacy summaries", async () => {
@@ -495,9 +497,10 @@ describe("AnalysisView", () => {
     render(<AnalysisView analysisId="analysis-1" />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Brain scan side signal/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /show brain signal/i })).toBeInTheDocument();
     });
 
+    await userEvent.click(screen.getByRole("button", { name: /show brain signal/i }));
     expect(screen.getByText(/Activation estimate/i)).toBeInTheDocument();
     expect(screen.queryByText(/^98$/)).not.toBeInTheDocument();
     expect(screen.getByText(/^61$/)).toBeInTheDocument();
@@ -559,7 +562,7 @@ describe("AnalysisView", () => {
     expect(container.querySelectorAll(".surface-soft")).toHaveLength(0);
   });
 
-  it("polls until completed and renders the payload without nested soft panels", async () => {
+  it("polls until completed and renders the editor-first layout without nested soft panels", async () => {
     const { fetchAnalysis, fetchAnalysisWorld } = await import("@/lib/api");
     vi.mocked(fetchAnalysis)
       .mockResolvedValueOnce({
@@ -586,16 +589,15 @@ describe("AnalysisView", () => {
     });
     await waitFor(() => {
       expect(screen.getByText(/Read the room/i)).toBeInTheDocument();
-      expect(screen.getByRole("heading", { name: /secondary details/i })).toBeInTheDocument();
+      expect(screen.getByText(/Edit opportunities/i)).toBeInTheDocument();
     });
-    expect(screen.getByText(/Comment graph/i)).toBeInTheDocument();
-    expect(screen.getAllByText("Jules").length).toBeGreaterThan(0);
-    expect(
-      screen.getAllByText(/UGC creators will save time on rough cuts with this workflow/i).length,
-    ).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Growth and brand operators/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/The hook solves a real workflow pain before the room asks for proof/i)).toBeInTheDocument();
-    expect(screen.getByText(/Automatic deadspace trim/i)).toBeInTheDocument();
+    expect(screen.getByTestId("scan-verdict-bar")).toBeInTheDocument();
+    expect(screen.getByTestId("scan-action-strip")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /open evidence drawer/i })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Threads" })).not.toBeInTheDocument();
+    expect(screen.queryAllByTestId("audience-world-cohort")).toHaveLength(0);
+    expect(screen.queryAllByTestId("audience-world-moment-row")).toHaveLength(0);
+    expect(screen.getByText(/Automatic trim/i)).toBeInTheDocument();
     expect(screen.getByText(/Quiet stretch\./i)).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Provider response JSON/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/Action board/i)).not.toBeInTheDocument();
@@ -612,7 +614,7 @@ describe("AnalysisView", () => {
     expect(container.querySelectorAll(".surface-soft")).toHaveLength(0);
   });
 
-  it("places room voices after the audience sentiment timeline in read-the-room mode", async () => {
+  it("keeps the evidence workspace behind tabs instead of stacking every section at once", async () => {
     const { fetchAnalysis, fetchAnalysisWorld } = await import("@/lib/api");
     vi.mocked(fetchAnalysis).mockResolvedValue(completedResponse);
     vi.mocked(fetchAnalysisWorld).mockResolvedValue({
@@ -622,12 +624,69 @@ describe("AnalysisView", () => {
 
     render(<AnalysisView analysisId="analysis-1" />);
 
-    const sentimentHeading = await screen.findByText(/Audience sentiment timeline/i);
-    const commentGraphHeading = await screen.findByText(/Comment graph/i);
+    expect(await screen.findByRole("button", { name: /open evidence drawer/i })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Threads" })).not.toBeInTheDocument();
 
-    expect(
-      sentimentHeading.compareDocumentPosition(commentGraphHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: /open evidence drawer/i }));
+
+    expect(screen.getByRole("tab", { name: "Threads" })).toBeInTheDocument();
+    expect(screen.queryByText(/Agent interviews/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Why the room turned/i)).not.toBeInTheDocument();
+  });
+
+  it("shows the top three edit opportunities first and reveals the rest on demand", async () => {
+    const { fetchAnalysis, fetchAnalysisWorld } = await import("@/lib/api");
+    vi.mocked(fetchAnalysis).mockResolvedValue({
+      ...completedResponse,
+      payload: completedResponse.payload
+        ? {
+            ...completedResponse.payload,
+            deadspaceCuts: [
+              ...completedResponse.payload.deadspaceCuts,
+              {
+                id: "deadspace-2",
+                type: "deadspace",
+                start: 7,
+                end: 8,
+                reason: "Drag in the feature explanation.",
+                defaultSelected: true,
+                recommendedAction: "Trim the drag.",
+              },
+            ],
+            lowValueCuts: [
+              ...completedResponse.payload.lowValueCuts,
+              {
+                id: "low-value-2",
+                type: "low_value",
+                start: 9,
+                end: 10,
+                reason: "Redundant proof beat.",
+                defaultSelected: false,
+                recommendedAction: "Collapse this proof beat.",
+              },
+            ],
+          }
+        : null,
+    });
+    vi.mocked(fetchAnalysisWorld).mockResolvedValue({
+      analysisId: "analysis-1",
+      world: completedResponse.payload!.audienceWorld!,
+    });
+    const user = userEvent.setup();
+
+    render(<AnalysisView analysisId="analysis-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Edit opportunities/i)).toBeInTheDocument();
+    });
+
+    expect(screen.getAllByTestId("edit-opportunity-row")).toHaveLength(2);
+    expect(screen.queryByText(/Redundant proof beat\./i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /show all cuts/i }));
+
+    expect(screen.getAllByTestId("edit-opportunity-row")).toHaveLength(4);
+    expect(screen.getByText(/Redundant proof beat\./i)).toBeInTheDocument();
   });
 
   it("loads live agent interviews for the selected room prompt", async () => {
@@ -656,16 +715,18 @@ describe("AnalysisView", () => {
     render(<AnalysisView analysisId="analysis-1" />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Agent interviews/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /open evidence drawer/i })).toBeInTheDocument();
     });
 
+    await user.click(screen.getByRole("button", { name: /open evidence drawer/i }));
+    await user.click(screen.getByRole("tab", { name: "Interviews" }));
     await user.click(screen.getByRole("button", { name: /what made you skeptical\?/i }));
 
     await waitFor(() => {
       expect(interviewAudienceWorld).toHaveBeenCalledWith(
         "analysis-1",
         expect.objectContaining({
-          agentIds: [1, 2, 3],
+          agentIds: expect.arrayContaining([1, 2, 3]),
           prompt: "What made you skeptical?",
         }),
       );

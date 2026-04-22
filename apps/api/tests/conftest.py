@@ -15,8 +15,8 @@ from app.core.context import APIContext
 from app.main import create_app
 from app.services.analysis_engine import AnalysisEngine
 from app.services.convex_sync import ConvexSyncService
-from app.services.jobs import AnalysisJobService, EditorDraftJobService
-from app.services.media import MediaFeatures, SequenceClipPlan, SequenceClipTiming, VideoMetadata
+from app.services.jobs import AnalysisJobService, EditorDraftJobService, RepurposeJobService
+from app.services.media import MediaFeatures, MediaService, SequenceClipPlan, SequenceClipTiming, VideoMetadata
 from app.services.storage import StorageService
 from app.services.tribe_runner import SegmentSnapshot, TribeRunResult
 
@@ -42,8 +42,8 @@ class StubMediaService:
         # a plausible duration so the contract is exercised.
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_bytes(b"fake-trimmed-mp4")
-        removed = sum(max(0.0, end - start) for start, end in cuts)
-        return max(0.0, total_duration_sec - removed)
+        keep_ranges = MediaService._invert_cuts(cuts, total_duration_sec)
+        return round(sum(end - start for start, end in keep_ranges), 2)
 
     def assemble_sequence(
         self,
@@ -56,10 +56,8 @@ class StubMediaService:
         timings: list[SequenceClipTiming] = []
         cursor = 0.0
         for clip in clips:
-            trimmed_duration = max(
-                0.0,
-                clip.total_duration_sec - sum(max(0.0, end - start) for start, end in clip.cuts),
-            )
+            keep_ranges = MediaService._invert_cuts(clip.cuts, clip.total_duration_sec)
+            trimmed_duration = round(sum(end - start for start, end in keep_ranges), 2)
             timings.append(
                 SequenceClipTiming(
                     clip_id=clip.clip_id,
@@ -173,6 +171,46 @@ class StubEditorAI:
             "warnings": [],
         }
 
+    def plan_repurpose_variants(
+        self,
+        segments: list[dict[str, object]],
+        *,
+        source_duration_sec: float,
+    ) -> dict[str, object]:
+        ordered_segments = [
+            {
+                "segmentId": str(segment["segmentId"]),
+                "rationale": f"Kept {segment['segmentId']} in the cut.",
+            }
+            for segment in segments
+        ]
+        return {
+            "summary": "Generated three alternate repurpose cuts from the source video.",
+            "variants": [
+                {
+                    "title": "Full story",
+                    "angleSummary": "Keeps the broader original arc while tightening weak stretches.",
+                    "rationale": "Best for retaining the full setup and payoff.",
+                    "durationTarget": "source",
+                    "orderedSegments": ordered_segments,
+                },
+                {
+                    "title": "Quick hook",
+                    "angleSummary": "Leads with the strongest early hook and trims supporting beats.",
+                    "rationale": "Best for a faster opening.",
+                    "durationTarget": "short",
+                    "orderedSegments": ordered_segments[:2] or ordered_segments,
+                },
+                {
+                    "title": "Proof cut",
+                    "angleSummary": "Centers the strongest proof or payoff moments first.",
+                    "rationale": "Best for a shorter value-first version.",
+                    "durationTarget": "short",
+                    "orderedSegments": ordered_segments[-2:] or ordered_segments,
+                },
+            ],
+        }
+
 
 class ImmediateEditorJobService:
     def __init__(
@@ -194,6 +232,28 @@ class ImmediateEditorJobService:
 
     def enqueue(self, project_id: str, draft_id: str, clips: list[object]) -> None:
         self._delegate.run_now(project_id, draft_id, clips)  # type: ignore[arg-type]
+
+
+class ImmediateRepurposeJobService:
+    def __init__(
+        self,
+        storage: StorageService,
+        runner: StubRunner,
+        media: StubMediaService,
+        engine: AnalysisEngine,
+        editor_ai: StubEditorAI,
+    ) -> None:
+        self._delegate = RepurposeJobService(
+            storage=storage,
+            runner=runner,
+            media=media,
+            engine=engine,
+            editor_ai=editor_ai,
+            convex_sync=ConvexSyncService(storage.settings),
+        )
+
+    def enqueue(self, project_id: str, result_id: str, source: object) -> None:
+        self._delegate.run_now(project_id, result_id, source)  # type: ignore[arg-type]
 
 
 @pytest.fixture
@@ -235,6 +295,7 @@ def test_context(test_settings: Settings) -> APIContext:
     jobs = ImmediateJobService(storage, runner, engine)
     editor_ai = StubEditorAI()
     editor_jobs = ImmediateEditorJobService(storage, runner, media, engine, editor_ai)
+    repurpose_jobs = ImmediateRepurposeJobService(storage, runner, media, engine, editor_ai)
     return APIContext(
         settings=test_settings,
         storage=storage,
@@ -245,6 +306,7 @@ def test_context(test_settings: Settings) -> APIContext:
         convex_sync=convex_sync,
         editor_ai=editor_ai,
         editor_jobs=editor_jobs,
+        repurpose_jobs=repurpose_jobs,
     )
 
 

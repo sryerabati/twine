@@ -23,10 +23,12 @@ import { ScanSecondaryDetails } from "@/components/scan-secondary-details";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { fetchAnalysis, trimAnalysis } from "@/lib/api";
+import { formatSeconds } from "@/lib/format";
 import type {
   AnalysisPayload,
   AnalysisResponse,
 } from "@/lib/contracts";
+import { cn } from "@/lib/utils";
 
 type TrimMode = "speech_safe" | "lenient";
 type AnalysisChartDatum = {
@@ -340,6 +342,8 @@ function CompletedAnalysis({
   const playerSourceUrl = latestExport?.trimmedVideoUrl ?? payload.video.sourceUrl;
   const analysisMode = payload.analysisMode ?? "brain_scan";
   const isReadTheRoom = analysisMode === "read_the_room";
+  const topActions = deriveTopActions(payload);
+  const isPortraitClip = payload.video.height >= payload.video.width;
   const chartData: AnalysisChartDatum[] = payload.brainResponse.timeSeries.map((point) => ({
     t: Number(point.stimulusTimeSec.toFixed(2)),
     activation: point.globalActivation,
@@ -406,19 +410,24 @@ function CompletedAnalysis({
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <section className="surface rounded-[2.5rem] p-6 text-foreground">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h2 className="text-xs uppercase tracking-[0.28em] text-muted-foreground">
-              {isReadTheRoom ? "Read the room" : "Primary analysis"}
-            </h2>
-            <h1 className="mt-3 text-4xl font-semibold tracking-tight text-foreground">
-              {payload.video.filename}
-            </h1>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
+        <section
+          data-testid="scan-verdict-bar"
+          className="flex flex-col gap-3 rounded-[1.45rem] border border-border/70 bg-background/70 px-4 py-4 lg:flex-row lg:items-center lg:justify-between"
+        >
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">
+                {isReadTheRoom ? "Read the room" : "Primary analysis"}
+              </p>
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                {payload.video.filename}
+              </p>
+            </div>
+            <p className="mt-2 max-w-4xl text-sm leading-6 text-foreground/90">
               {isReadTheRoom
-                ? (payload.audienceOutlook?.summary ?? payload.summary.overallRecommendation)
+                ? (payload.audienceOutlook?.headline ?? payload.summary.overallRecommendation)
                 : payload.summary.overallRecommendation}
             </p>
           </div>
@@ -429,253 +438,512 @@ function CompletedAnalysis({
           >
             {describeTrimBadge(trimMode, activeCutIds.length)}
           </Badge>
-        </div>
+        </section>
 
-        <div className="mt-6 space-y-8 border-t border-border/70 pt-6">
-          <div>
-            <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div>
-                <p className="text-sm font-medium text-foreground">Player</p>
-                <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-                  Remove deadspace in one click. Default mode only cuts speech-safe pauses so the
-                  wording stays intact. Turn on the more lenient pass to keep only the important
-                  parts.
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-2 lg:items-end">
-                <Button
-                  type="button"
-                  variant={trimMode === "lenient" ? "default" : "outline"}
-                  size="sm"
-                  aria-pressed={trimMode === "lenient"}
-                  onClick={() =>
-                    void onTrimModeChange(trimMode === "lenient" ? "speech_safe" : "lenient")
-                  }
-                >
-                  <WandSparkles data-icon="inline-start" />
-                  More lenient
-                </Button>
-
-                <div className="flex flex-wrap gap-2 lg:justify-end">
-                  <Button
-                    type="button"
-                    size="lg"
-                    onClick={() => void onExport()}
-                    disabled={trimPending || !activeCutIds.length}
-                  >
-                    {trimPending ? (
-                      <>
-                        <LoaderCircle data-icon="inline-start" className="animate-spin" />
-                        Removing deadspace
-                      </>
-                    ) : (
-                      <>
-                        <Scissors data-icon="inline-start" />
-                        Remove deadspace
-                      </>
-                    )}
-                  </Button>
-
-                  {latestExport ? (
-                    <a
-                      href={latestExport.trimmedVideoUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className={buttonVariants({ variant: "outline", size: "lg" })}
-                    >
-                      Latest export
-                    </a>
-                  ) : null}
+        <div
+          className={
+            isReadTheRoom
+              ? "mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_22rem]"
+              : "mt-5 space-y-6"
+          }
+        >
+          <div className="min-w-0 space-y-4">
+            <section className="rounded-[1.5rem] border border-border/70 bg-background/70 p-4">
+              <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Inspect the video</p>
+                  <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+                    Check the exact beat, scrub the clip, and decide whether the next cut should stay or go.
+                  </p>
                 </div>
-              </div>
-            </div>
 
-            {trimError ? (
-              <div className="mb-4 rounded-[1.25rem] border-2 border-destructive bg-destructive/10 p-4 text-sm text-destructive">
-                {trimError}
+                {isReadTheRoom ? null : (
+                  <PlayerControlStack
+                    activeCutIds={activeCutIds}
+                    latestExport={latestExport}
+                    onExport={onExport}
+                    onTrimModeChange={onTrimModeChange}
+                    trimMode={trimMode}
+                    trimPending={trimPending}
+                  />
+                )}
               </div>
+
+              {trimError && !isReadTheRoom ? (
+                <div className="mb-4 rounded-[1.25rem] border-2 border-destructive bg-destructive/10 p-4 text-sm text-destructive">
+                  {trimError}
+                </div>
+              ) : null}
+
+              <div
+                data-testid="player-stage"
+                className={cn(
+                  "mx-auto",
+                  isPortraitClip ? "w-full max-w-[24rem]" : "w-full max-w-5xl",
+                )}
+              >
+                <video
+                  ref={videoRef}
+                  className={cn(
+                    "w-full rounded-[1.5rem] border-2 border-border bg-black object-contain",
+                    isPortraitClip ? "aspect-[9/16]" : "aspect-video",
+                  )}
+                  preload="metadata"
+                  playsInline
+                  src={playerSourceUrl}
+                  onClick={() => void togglePlayback()}
+                  onLoadedMetadata={(event) => onActiveTimeChange(event.currentTarget.currentTime)}
+                  onPlay={() => setIsPlaying(true)}
+                  onPause={() => setIsPlaying(false)}
+                  onEnded={() => setIsPlaying(false)}
+                  onSeeked={(event) => onActiveTimeChange(event.currentTarget.currentTime)}
+                  onTimeUpdate={(event) => onActiveTimeChange(event.currentTarget.currentTime)}
+                />
+
+                <RecommendationTimeline
+                  currentTimeSec={activeTimeSec}
+                  durationSec={payload.video.durationSec}
+                  isPlaying={isPlaying}
+                  segments={payload.timelineSegments}
+                  selectedCutIds={activeCutIds}
+                  onSeek={seekToTime}
+                  onTogglePlayback={togglePlayback}
+                  onPreviewTimeChange={onPreviewTimeChange}
+                />
+              </div>
+            </section>
+
+            {isReadTheRoom ? (
+              <ActionStrip
+                actions={topActions}
+                onSelect={(action) => {
+                  if (typeof action.focusTimeSec === "number") {
+                    seekToTime(action.focusTimeSec);
+                  }
+                }}
+              />
             ) : null}
 
-            <video
-              ref={videoRef}
-              className="aspect-video w-full rounded-[1.5rem] border-2 border-border bg-black"
-              preload="metadata"
-              playsInline
-              src={playerSourceUrl}
-              onClick={() => void togglePlayback()}
-              onLoadedMetadata={(event) => onActiveTimeChange(event.currentTarget.currentTime)}
-              onPlay={() => setIsPlaying(true)}
-              onPause={() => setIsPlaying(false)}
-              onEnded={() => setIsPlaying(false)}
-              onSeeked={(event) => onActiveTimeChange(event.currentTarget.currentTime)}
-              onTimeUpdate={(event) => onActiveTimeChange(event.currentTarget.currentTime)}
+            <ScanSecondaryDetails
+              payload={payload}
+              activeCutIds={activeCutIds}
+              trimMode={trimMode}
             />
 
-            <RecommendationTimeline
-              currentTimeSec={activeTimeSec}
-              durationSec={payload.video.durationSec}
-              isPlaying={isPlaying}
-              segments={payload.timelineSegments}
-              selectedCutIds={activeCutIds}
-              onSeek={seekToTime}
-              onTogglePlayback={togglePlayback}
-              onPreviewTimeChange={onPreviewTimeChange}
-            />
-          </div>
-
-          {isReadTheRoom ? null : (
-            <BrainScanViewer
-              points={payload.brainResponse.timeSeries}
-              currentTimeSec={focusTimeSec}
-              title="Brain scan"
-              description="Scrub the edit rail or hover markers to keep the signal view in sync."
-            />
-          )}
-
-          <div className="border-t border-border/70 pt-6">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-medium text-foreground">
-                  {isReadTheRoom ? "Audience sentiment timeline" : "Activation timeline"}
-                </p>
-                <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  {isReadTheRoom
-                    ? "Moment-by-moment audience sentiment, interest, trust, and drop-off risk."
-                    : "Global activation, motion, and audio context."}
-                </p>
+            <section className="rounded-[1.5rem] border border-border/70 bg-background/70 p-5">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    {isReadTheRoom ? "Audience sentiment timeline" : "Activation timeline"}
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    {isReadTheRoom
+                      ? "Use this when you need to confirm where the room warms up or starts slipping."
+                      : "Global activation, motion, and audio context."}
+                  </p>
+                </div>
               </div>
-            </div>
-            <div className="mt-4 h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={isReadTheRoom ? audienceChartData : chartData}>
-                  <CartesianGrid stroke="rgba(255,247,251,0.08)" vertical={false} />
-                  <XAxis
-                    dataKey="t"
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(value) => `${value}s`}
-                    tick={{ fill: "var(--color-muted-foreground)", fontSize: 12 }}
-                  />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    domain={[0, 1]}
-                    tick={{ fill: "var(--color-muted-foreground)", fontSize: 12 }}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      borderRadius: 18,
-                      borderColor: "var(--color-border)",
-                      backgroundColor: "var(--color-card)",
-                      color: "var(--color-foreground)",
-                    }}
-                  />
-                  <Legend wrapperStyle={{ color: "var(--color-muted-foreground)" }} />
-                  <Line
-                    type="monotone"
-                    dataKey={isReadTheRoom ? "sentiment" : "activation"}
-                    stroke="var(--color-chart-1)"
-                    strokeWidth={3}
-                    dot={false}
-                    name={isReadTheRoom ? "Audience sentiment" : "Global activation"}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey={isReadTheRoom ? "interest" : "motion"}
-                    stroke="var(--color-chart-2)"
-                    strokeWidth={2}
-                    dot={false}
-                    name={isReadTheRoom ? "Interest" : "Motion"}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey={isReadTheRoom ? "trust" : "audio"}
-                    stroke="var(--color-chart-3)"
-                    strokeWidth={2}
-                    dot={false}
-                    name={isReadTheRoom ? "Trust" : "Audio"}
-                  />
-                  {isReadTheRoom ? (
+              <div className="mt-4 h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={isReadTheRoom ? audienceChartData : chartData}>
+                    <CartesianGrid stroke="rgba(255,247,251,0.08)" vertical={false} />
+                    <XAxis
+                      dataKey="t"
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(value) => `${value}s`}
+                      tick={{ fill: "var(--color-muted-foreground)", fontSize: 12 }}
+                    />
+                    <YAxis
+                      tickLine={false}
+                      axisLine={false}
+                      domain={[0, 1]}
+                      tick={{ fill: "var(--color-muted-foreground)", fontSize: 12 }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: 18,
+                        borderColor: "var(--color-border)",
+                        backgroundColor: "var(--color-card)",
+                        color: "var(--color-foreground)",
+                      }}
+                    />
+                    <Legend wrapperStyle={{ color: "var(--color-muted-foreground)" }} />
                     <Line
                       type="monotone"
-                      dataKey="dropoffRisk"
-                      stroke="var(--color-chart-4)"
+                      dataKey={isReadTheRoom ? "sentiment" : "activation"}
+                      stroke="var(--color-chart-1)"
+                      strokeWidth={3}
+                      dot={false}
+                      name={isReadTheRoom ? "Audience sentiment" : "Global activation"}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey={isReadTheRoom ? "interest" : "motion"}
+                      stroke="var(--color-chart-2)"
                       strokeWidth={2}
                       dot={false}
-                      name="Drop-off risk"
+                      name={isReadTheRoom ? "Interest" : "Motion"}
                     />
-                  ) : null}
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+                    <Line
+                      type="monotone"
+                      dataKey={isReadTheRoom ? "trust" : "audio"}
+                      stroke="var(--color-chart-3)"
+                      strokeWidth={2}
+                      dot={false}
+                      name={isReadTheRoom ? "Trust" : "Audio"}
+                    />
+                    {isReadTheRoom ? (
+                      <Line
+                        type="monotone"
+                        dataKey="dropoffRisk"
+                        stroke="var(--color-chart-4)"
+                        strokeWidth={2}
+                        dot={false}
+                        name="Drop-off risk"
+                      />
+                    ) : null}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </section>
+
+            {isReadTheRoom ? (
+              <BrainSignalUtility payload={payload} />
+            ) : (
+              <BrainScanViewer
+                points={payload.brainResponse.timeSeries}
+                currentTimeSec={focusTimeSec}
+                title="Brain scan"
+                description="Scrub the edit rail or hover markers to keep the signal view in sync."
+              />
+            )}
           </div>
 
-          {isReadTheRoom && payload.audienceOutlook ? (
-            <div className="space-y-4 border-t border-border/70 pt-6">
-              <AudienceWorldPanel
-                analysisId={payload.analysisId}
-                audienceOutlook={payload.audienceOutlook}
-                initialWorld={payload.audienceWorld ?? null}
-              />
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <AudienceNotesCard
-                  title="Likely praise"
-                  items={payload.audienceOutlook.likelyPraise}
-                  empty="No strong praise theme surfaced from this pass."
-                />
-                <AudienceNotesCard
-                  title="Likely pushback"
-                  items={payload.audienceOutlook.likelyPushback}
-                  empty="No dominant pushback theme surfaced from this pass."
-                />
-              </div>
-
-              <CompactBrainSummary payload={payload} />
-            </div>
+          {isReadTheRoom ? (
+            <DecisionRailCompact
+              actions={topActions}
+              activeCutIds={activeCutIds}
+              latestExport={latestExport}
+              onExport={onExport}
+              onTrimModeChange={onTrimModeChange}
+              payload={payload}
+              trimError={trimError}
+              trimMode={trimMode}
+              trimPending={trimPending}
+            />
           ) : null}
         </div>
       </section>
 
-      <ScanSecondaryDetails
-        payload={payload}
-        activeCutIds={activeCutIds}
-        trimMode={trimMode}
-      />
+      {isReadTheRoom && payload.audienceOutlook ? (
+        <AudienceWorldPanel
+          analysisId={payload.analysisId}
+          audienceOutlook={payload.audienceOutlook}
+          initialWorld={payload.audienceWorld ?? null}
+        />
+      ) : null}
     </div>
   );
 }
 
-function CompactBrainSummary({ payload }: { payload: AnalysisPayload }) {
+type TopAction = {
+  id: string;
+  title: string;
+  rationale: string;
+  tone: "fix" | "protect" | "test";
+  timeLabel?: string | null;
+  focusTimeSec?: number | null;
+};
+
+function ActionStrip({
+  actions,
+  onSelect,
+}: {
+  actions: TopAction[];
+  onSelect: (action: TopAction) => void;
+}) {
+  if (!actions.length) {
+    return null;
+  }
+
+  return (
+    <section
+      data-testid="scan-action-strip"
+      className="rounded-[1.35rem] border border-border/70 bg-background/70 p-3"
+    >
+      <div className="flex flex-wrap gap-2">
+        {actions.map((action) => (
+          <button
+            key={action.id}
+            type="button"
+            onClick={() => onSelect(action)}
+            className={cn(
+              "flex min-w-0 flex-1 flex-col items-start rounded-[1rem] border px-3 py-3 text-left transition-colors hover:border-primary/30 hover:bg-primary/[0.06]",
+              action.tone === "fix"
+                ? "border-amber-300/20 bg-amber-400/[0.06]"
+                : "border-border/70 bg-card/50",
+            )}
+          >
+            <span className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+              {action.tone === "fix" ? "Fix now" : action.tone === "protect" ? "Protect" : "Test"}
+            </span>
+            <span className="mt-2 text-sm font-medium text-foreground">{action.title}</span>
+            {action.timeLabel ? (
+              <span className="mt-1 text-xs uppercase tracking-[0.18em] text-primary/80">
+                {action.timeLabel}
+              </span>
+            ) : null}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function PlayerControlStack({
+  trimMode,
+  trimPending,
+  activeCutIds,
+  latestExport,
+  onTrimModeChange,
+  onExport,
+}: {
+  trimMode: TrimMode;
+  trimPending: boolean;
+  activeCutIds: string[];
+  latestExport: AnalysisPayload["exports"][number] | null;
+  onTrimModeChange: (mode: TrimMode) => Promise<void>;
+  onExport: () => Promise<void>;
+}) {
+  return (
+    <div className="flex flex-col gap-2 lg:items-end">
+      <Button
+        type="button"
+        variant={trimMode === "lenient" ? "default" : "outline"}
+        size="sm"
+        aria-pressed={trimMode === "lenient"}
+        onClick={() => void onTrimModeChange(trimMode === "lenient" ? "speech_safe" : "lenient")}
+      >
+        <WandSparkles data-icon="inline-start" />
+        More lenient
+      </Button>
+
+      <div className="flex flex-wrap gap-2 lg:justify-end">
+        <Button
+          type="button"
+          size="lg"
+          onClick={() => void onExport()}
+          disabled={trimPending || !activeCutIds.length}
+        >
+          {trimPending ? (
+            <>
+              <LoaderCircle data-icon="inline-start" className="animate-spin" />
+              Removing deadspace
+            </>
+          ) : (
+            <>
+              <Scissors data-icon="inline-start" />
+              Remove deadspace
+            </>
+          )}
+        </Button>
+
+        {latestExport ? (
+          <a
+            href={latestExport.trimmedVideoUrl}
+            target="_blank"
+            rel="noreferrer"
+            className={buttonVariants({ variant: "outline", size: "lg" })}
+          >
+            Latest export
+          </a>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function DecisionRailCompact({
+  actions,
+  payload,
+  trimMode,
+  trimPending,
+  trimError,
+  activeCutIds,
+  latestExport,
+  onTrimModeChange,
+  onExport,
+}: {
+  actions: TopAction[];
+  payload: AnalysisPayload;
+  trimMode: TrimMode;
+  trimPending: boolean;
+  trimError: string | null;
+  activeCutIds: string[];
+  latestExport: AnalysisPayload["exports"][number] | null;
+  onTrimModeChange: (mode: TrimMode) => Promise<void>;
+  onExport: () => Promise<void>;
+}) {
+  const primaryAction = actions[0] ?? null;
+  const secondaryAction = actions[1] ?? null;
+  const praiseItems = (payload.audienceOutlook?.likelyPraise.length
+    ? payload.audienceOutlook?.likelyPraise
+    : ["No strong win surfaced from this pass."]).slice(0, 2);
+  const pushbackItems = (payload.audienceOutlook?.likelyPushback.length
+    ? payload.audienceOutlook?.likelyPushback
+    : ["No dominant risk surfaced from this pass."]).slice(0, 2);
+
+  return (
+    <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
+      <div className="rounded-[1.35rem] border border-border/70 bg-background/70 p-4">
+        <p className="text-sm font-medium text-foreground">What to do</p>
+        {primaryAction ? (
+          <>
+            <p className="mt-3 text-base font-medium text-foreground">{primaryAction.title}</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{primaryAction.rationale}</p>
+            {primaryAction.timeLabel ? (
+              <p className="mt-3 text-xs uppercase tracking-[0.18em] text-primary/80">
+                {primaryAction.timeLabel}
+              </p>
+            ) : null}
+          </>
+        ) : (
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            {payload.summary.overallRecommendation}
+          </p>
+        )}
+
+        {secondaryAction ? (
+          <div className="mt-4 border-t border-border/70 pt-4">
+            <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Watch-out</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{secondaryAction.rationale}</p>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="rounded-[1.35rem] border border-border/70 bg-background/70 p-4">
+        <div className="grid gap-4">
+          <div>
+            <p className="text-sm font-medium text-foreground">What landed</p>
+            <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+              {praiseItems.map((item) => (
+                <p key={item}>{item}</p>
+              ))}
+            </div>
+          </div>
+          <div className="border-t border-border/70 pt-4">
+            <p className="text-sm font-medium text-foreground">What lost trust</p>
+            <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+              {pushbackItems.map((item) => (
+                <p key={item}>{item}</p>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-[1.35rem] border border-border/70 bg-background/70 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-foreground">Export plan</p>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">Make the cut and export from here.</p>
+          </div>
+          <Badge variant="secondary">{activeCutIds.length} active</Badge>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          <Button
+            type="button"
+            variant={trimMode === "lenient" ? "default" : "outline"}
+            size="sm"
+            aria-pressed={trimMode === "lenient"}
+            onClick={() => void onTrimModeChange(trimMode === "lenient" ? "speech_safe" : "lenient")}
+          >
+            <WandSparkles data-icon="inline-start" />
+            More lenient
+          </Button>
+
+          <Button
+            type="button"
+            size="lg"
+            onClick={() => void onExport()}
+            disabled={trimPending || !activeCutIds.length}
+            className="w-full"
+          >
+            {trimPending ? (
+              <>
+                <LoaderCircle data-icon="inline-start" className="animate-spin" />
+                Removing deadspace
+              </>
+            ) : (
+              <>
+                <Scissors data-icon="inline-start" />
+                Remove deadspace
+              </>
+            )}
+          </Button>
+
+          {latestExport ? (
+            <a
+              href={latestExport.trimmedVideoUrl}
+              target="_blank"
+              rel="noreferrer"
+              className={buttonVariants({ variant: "outline", size: "lg" }) + " w-full"}
+            >
+              Latest export
+            </a>
+          ) : null}
+
+          {trimError ? (
+            <div className="rounded-[1rem] border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              {trimError}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function BrainSignalUtility({ payload }: { payload: AnalysisPayload }) {
+  const [open, setOpen] = useState(false);
   const summary =
     payload.analysisMode === "read_the_room"
       ? deriveReadTheRoomBrainSummary(payload)
       : (payload.brainSummary ?? deriveBrainSummaryFromPoints(payload.brainResponse.timeSeries));
 
   return (
-    <div className="rounded-[1.5rem] border border-border/70 bg-background/70 p-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+    <section className="rounded-[1.35rem] border border-border/70 bg-background/70 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-foreground">Brain scan side signal</p>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-            A compact average across the whole video. No expanded brain scan detail is shown for
-            audience-mode runs.
+          <p className="text-sm font-medium text-foreground">Brain signal</p>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            Whole-video averages only. Open it when you need the side signal.
           </p>
         </div>
-        <Badge variant="secondary">Average for the full video</Badge>
+        <Button
+          type="button"
+          variant={open ? "default" : "outline"}
+          size="sm"
+          onClick={() => setOpen((current) => !current)}
+        >
+          {open ? "Hide brain signal" : "Show brain signal"}
+        </Button>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryStat
-          label={payload.analysisMode === "read_the_room" ? "Activation estimate" : "Activation"}
-          value={summary.averageActivation}
-        />
-        <SummaryStat label="Motion" value={summary.averageMotion} />
-        <SummaryStat label="Audio" value={summary.averageAudioEnergy} />
-        <SummaryStat label="Transcript" value={summary.averageTranscriptDensity} />
-      </div>
-    </div>
+      {open ? (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <SummaryStat
+            label={payload.analysisMode === "read_the_room" ? "Activation estimate" : "Activation"}
+            value={summary.averageActivation}
+          />
+          <SummaryStat label="Motion" value={summary.averageMotion} />
+          <SummaryStat label="Audio" value={summary.averageAudioEnergy} />
+          <SummaryStat label="Transcript" value={summary.averageTranscriptDensity} />
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -688,23 +956,150 @@ function SummaryStat({ label, value }: { label: string; value: number }) {
   );
 }
 
-function AudienceNotesCard({
-  title,
-  items,
-  empty,
-}: {
-  title: string;
-  items: string[];
-  empty: string;
-}) {
-  return (
-    <div className="rounded-[1.5rem] border border-border/70 bg-background/70 p-5">
-      <p className="text-sm font-medium text-foreground">{title}</p>
-      <div className="mt-3 space-y-2 text-sm text-muted-foreground">
-        {items.length ? items.map((item) => <p key={item}>{item}</p>) : <p>{empty}</p>}
-      </div>
-    </div>
-  );
+function deriveTopActions(payload: AnalysisPayload): TopAction[] {
+  const actions: TopAction[] = [];
+  const seen = new Set<string>();
+
+  const primaryCut = derivePrimaryCut(payload);
+  if (primaryCut) {
+    actions.push({
+      id: `cut-${primaryCut.id}`,
+      title: primaryCut.type === "deadspace" ? "Trim the quiet stretch" : "Tighten the softest section",
+      rationale: primaryCut.recommendedAction || primaryCut.reason,
+      tone: "fix",
+      timeLabel: `${formatSeconds(primaryCut.start)} to ${formatSeconds(primaryCut.end)}`,
+      focusTimeSec: primaryCut.start,
+    });
+  }
+
+  const pushback = payload.audienceOutlook?.likelyPushback[0] ?? payload.summary.weaknesses[0] ?? null;
+  if (pushback) {
+    actions.push({
+      id: "pushback",
+      title: "Clarify the weakest beat",
+      rationale: pushback,
+      tone: "fix",
+      timeLabel: findWeakestMomentLabel(payload),
+      focusTimeSec: findWeakestMomentStart(payload),
+    });
+  }
+
+  const praise = payload.audienceOutlook?.likelyPraise[0] ?? payload.summary.strengths[0] ?? null;
+  if (praise) {
+    actions.push({
+      id: "praise",
+      title: "Protect what already lands",
+      rationale: praise,
+      tone: "protect",
+      timeLabel: findStrongestMomentLabel(payload),
+      focusTimeSec: findStrongestMomentStart(payload),
+    });
+  }
+
+  const testNext = payload.actionBoard.testNext[0] ?? null;
+  if (testNext) {
+    actions.push({
+      id: "test-next",
+      title: "Run one follow-up test",
+      rationale: testNext,
+      tone: "test",
+      timeLabel: findWeakestMomentLabel(payload),
+      focusTimeSec: findWeakestMomentStart(payload),
+    });
+  }
+
+  return actions.filter((action) => {
+    const key = `${action.title}-${action.rationale}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  }).slice(0, 3);
+}
+
+function derivePrimaryCut(payload: AnalysisPayload) {
+  const seen = new Set<string>();
+  const cuts = [
+    ...(payload.cutPlan.length ? payload.cutPlan : []),
+    ...payload.deadspaceCuts,
+    ...payload.lowValueCuts,
+  ].filter((cut) => {
+    if (seen.has(cut.id)) {
+      return false;
+    }
+    seen.add(cut.id);
+    return true;
+  });
+
+  return cuts.sort((left, right) => {
+    if (left.defaultSelected !== right.defaultSelected) {
+      return left.defaultSelected ? -1 : 1;
+    }
+    if (left.type !== right.type) {
+      return left.type === "deadspace" ? -1 : 1;
+    }
+    return left.start - right.start;
+  })[0] ?? null;
+}
+
+function findWeakestMomentLabel(payload: AnalysisPayload) {
+  const worldMoment = payload.audienceWorld?.evidenceMoments[1] ?? payload.audienceWorld?.evidenceMoments[0] ?? null;
+  if (worldMoment) {
+    return `${formatSeconds(worldMoment.startSec)} to ${formatSeconds(worldMoment.endSec)}`;
+  }
+  const audienceMoment = [...(payload.audienceOutlook?.timeline ?? [])].sort(
+    (left, right) => right.dropoffRisk - left.dropoffRisk || left.trust - right.trust,
+  )[0];
+  if (audienceMoment) {
+    return `${formatSeconds(audienceMoment.startSec)} to ${formatSeconds(audienceMoment.endSec)}`;
+  }
+  const cut = derivePrimaryCut(payload);
+  return cut ? `${formatSeconds(cut.start)} to ${formatSeconds(cut.end)}` : null;
+}
+
+function findWeakestMomentStart(payload: AnalysisPayload) {
+  const worldMoment = payload.audienceWorld?.evidenceMoments[1] ?? payload.audienceWorld?.evidenceMoments[0] ?? null;
+  if (worldMoment) {
+    return worldMoment.startSec;
+  }
+  const audienceMoment = [...(payload.audienceOutlook?.timeline ?? [])].sort(
+    (left, right) => right.dropoffRisk - left.dropoffRisk || left.trust - right.trust,
+  )[0];
+  if (audienceMoment) {
+    return audienceMoment.startSec;
+  }
+  const cut = derivePrimaryCut(payload);
+  return cut?.start ?? null;
+}
+
+function findStrongestMomentLabel(payload: AnalysisPayload) {
+  const worldMoment = payload.audienceWorld?.evidenceMoments[0] ?? null;
+  if (worldMoment) {
+    return `${formatSeconds(worldMoment.startSec)} to ${formatSeconds(worldMoment.endSec)}`;
+  }
+  const audienceMoment = [...(payload.audienceOutlook?.timeline ?? [])].sort(
+    (left, right) => right.interest - left.interest || right.trust - left.trust,
+  )[0];
+  if (audienceMoment) {
+    return `${formatSeconds(audienceMoment.startSec)} to ${formatSeconds(audienceMoment.endSec)}`;
+  }
+  const marker = payload.markers[0];
+  return marker ? formatSeconds(marker.t) : null;
+}
+
+function findStrongestMomentStart(payload: AnalysisPayload) {
+  const worldMoment = payload.audienceWorld?.evidenceMoments[0] ?? null;
+  if (worldMoment) {
+    return worldMoment.startSec;
+  }
+  const audienceMoment = [...(payload.audienceOutlook?.timeline ?? [])].sort(
+    (left, right) => right.interest - left.interest || right.trust - left.trust,
+  )[0];
+  if (audienceMoment) {
+    return audienceMoment.startSec;
+  }
+  return payload.markers[0]?.t ?? null;
 }
 
 function deriveBrainSummaryFromPoints(points: AnalysisPayload["brainResponse"]["timeSeries"]) {

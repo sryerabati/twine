@@ -15,14 +15,15 @@ import { cn } from "@/lib/utils";
 const navigation = [
   { href: "/app", label: "Dashboard" },
   { href: "/app/library", label: "Library" },
+  { href: "/app/repurpose", label: "Repurpose" },
   { href: "/app/editor", label: "AI Editor" },
 ];
 
 const navButtonClassName =
-  "rounded-full border-[#19241d] bg-card text-foreground shadow-[5px_5px_0_0_var(--color-border)] hover:border-primary hover:bg-primary hover:text-primary-foreground hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[3px_3px_0_0_var(--color-border)] active:border-primary active:bg-secondary active:text-secondary-foreground active:shadow-[2px_2px_0_0_var(--color-border)] active:not-aria-[haspopup]:translate-x-[3px] active:not-aria-[haspopup]:translate-y-[3px]";
+  "spring rounded-full border-[3px] border-border bg-card font-cartoon font-extrabold text-foreground shadow-[5px_5px_0_0_var(--shadow-stamp)] hover:border-primary hover:bg-primary hover:text-shadow-stamp hover:-translate-x-[2px] hover:-translate-y-[2px] hover:shadow-[7px_7px_0_0_var(--shadow-stamp)]";
 
 const activeNavButtonClassName =
-  "border-primary bg-secondary text-secondary-foreground translate-x-[3px] translate-y-[3px] shadow-[2px_2px_0_0_var(--color-border)] hover:border-primary hover:bg-secondary hover:text-secondary-foreground hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-[2px_2px_0_0_var(--color-border)] active:border-primary active:bg-secondary active:text-secondary-foreground active:shadow-[2px_2px_0_0_var(--color-border)] active:not-aria-[haspopup]:translate-x-[3px] active:not-aria-[haspopup]:translate-y-[3px]";
+  "border-primary bg-primary text-shadow-stamp -translate-x-[2px] -translate-y-[2px] shadow-[7px_7px_0_0_var(--shadow-stamp)]";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -32,7 +33,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
-      <header className="sticky top-0 z-30 border-b border-primary/15 bg-background/90 backdrop-blur-xl">
+      <header className="sticky top-0 z-30 border-b-2 border-primary/20 bg-background/90 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-4 lg:px-10">
           <div className="flex min-w-0 items-center gap-4 lg:gap-6">
             <BrandLockup href="/" showMeta={false} />

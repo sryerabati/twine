@@ -14,7 +14,6 @@ export function LandingBrainModel() {
     const timer = window.setInterval(() => {
       setIndex((value) => (value + 1) % points.length);
     }, 1900);
-
     return () => window.clearInterval(timer);
   }, [points.length]);
 
@@ -40,10 +39,10 @@ function SignalChip({
   return (
     <div
       className={cn(
-        "absolute z-10 rounded-full border px-4 py-2 text-[0.72rem] font-semibold uppercase tracking-[0.24em] shadow-[4px_4px_0_0_var(--shadow-stamp)] backdrop-blur-sm animate-[poster-wiggle_7s_ease-in-out_infinite]",
+        "absolute z-10 cursor-default rounded-full border-[3px] px-4 py-2 text-[0.6rem] font-extrabold uppercase tracking-[0.18em] shadow-[3px_3px_0_0_var(--shadow-stamp)] animate-[poster-wiggle_7s_ease-in-out_infinite] transition-transform duration-[180ms] hover:scale-[1.06] hover:-rotate-[1deg]",
         tone === "default"
-          ? "border-primary/55 bg-card/92 text-foreground"
-          : "border-border bg-card/78 text-muted-foreground",
+          ? "border-border bg-secondary text-accent"
+          : "border-shadow-stamp bg-primary text-shadow-stamp",
         className,
       )}
     >

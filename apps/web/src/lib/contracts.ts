@@ -495,3 +495,96 @@ export type EditorDraftResponse = {
   error: string | null;
   payload: EditorDraftPayload | null;
 };
+
+export type RepurposeProjectStatus =
+  | "drafting"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed";
+
+export type RepurposeProjectVariant = {
+  _id: string;
+  variantKey: string;
+  title: string;
+  angleSummary: string;
+  durationTarget: "source" | "short";
+  durationSec: number;
+  exportUrl: string | null;
+  position: number;
+};
+
+export type RepurposeProjectSummary = {
+  _id: string;
+  title: string;
+  status: RepurposeProjectStatus;
+  sourceUploadId: string | null;
+  sourceFilename: string | null;
+  sourceDurationSec: number | null;
+  latestLocalResultId: string | null;
+  variantCount: number;
+  summary: string | null;
+  errorMessage: string | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type RepurposeProjectDetail = RepurposeProjectSummary & {
+  variants: RepurposeProjectVariant[];
+};
+
+export type RepurposeStage =
+  | "queued"
+  | "preparing_source"
+  | "planning_variants"
+  | "rendering_variants"
+  | "finalizing"
+  | "completed"
+  | "failed";
+
+export type RepurposeResultSegment = {
+  segmentId: string;
+  startSec: number;
+  endSec: number;
+  transcriptPreview: string;
+  summary: string;
+};
+
+export type RepurposeResultVariant = {
+  variantId: string;
+  title: string;
+  angleSummary: string;
+  rationale: string;
+  durationTarget: "source" | "short";
+  durationSec: number;
+  videoUrl: string;
+  videoStorageId?: string | null;
+  segmentCount: number;
+  segments: RepurposeResultSegment[];
+};
+
+export type RepurposeResultPayload = {
+  source: {
+    sourceUploadId: string;
+    filename: string;
+    durationSec: number;
+    summary: string;
+    speechCoverage: number;
+  };
+  summary: string;
+  variants: RepurposeResultVariant[];
+  warnings: string[];
+};
+
+export type RepurposeResultResponse = {
+  resultId: string;
+  projectId: string;
+  status: "queued" | "running" | "completed" | "failed";
+  stage: RepurposeStage | null;
+  progressPercent: number | null;
+  statusMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+  error: string | null;
+  payload: RepurposeResultPayload | null;
+};

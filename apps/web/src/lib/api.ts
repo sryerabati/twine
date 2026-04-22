@@ -5,6 +5,7 @@ import type {
   CompareResponse,
   EditorDraftResponse,
   HealthResponse,
+  RepurposeResultResponse,
   TrimResponse,
   UploadResponse,
 } from "@/lib/contracts";
@@ -146,6 +147,36 @@ export async function generateEditorDraft(
 
 export async function fetchLatestEditorDraft(projectId: string): Promise<EditorDraftResponse> {
   return request<EditorDraftResponse>(`/api/editor/projects/${projectId}/latest-draft`, {
+    cache: "no-store",
+  });
+}
+
+export async function generateRepurposeResult(
+  convexProjectId: string,
+  source: {
+    sourceUploadId: string;
+    localUploadId: string;
+    filename: string;
+  },
+): Promise<RepurposeResultResponse> {
+  return request<RepurposeResultResponse>("/api/repurpose/generate", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      convexProjectId,
+      sourceUploadId: source.sourceUploadId,
+      localUploadId: source.localUploadId,
+      filename: source.filename,
+    }),
+  });
+}
+
+export async function fetchLatestRepurposeResult(
+  projectId: string,
+): Promise<RepurposeResultResponse> {
+  return request<RepurposeResultResponse>(`/api/repurpose/projects/${projectId}/latest-result`, {
     cache: "no-store",
   });
 }

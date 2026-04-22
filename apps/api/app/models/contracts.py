@@ -413,6 +413,17 @@ EditorDraftStage = Literal[
     "failed",
 ]
 OrderingConfidence = Literal["low", "medium", "high"]
+RepurposeResultStatus = Literal["queued", "running", "completed", "failed"]
+RepurposeStage = Literal[
+    "queued",
+    "preparing_source",
+    "planning_variants",
+    "rendering_variants",
+    "finalizing",
+    "completed",
+    "failed",
+]
+RepurposeDurationTarget = Literal["source", "short"]
 
 
 class EditorClipDescriptor(BaseModel):
@@ -425,6 +436,13 @@ class EditorClipDescriptor(BaseModel):
 class EditorGenerateRequest(BaseModel):
     convexProjectId: str
     clips: list[EditorClipDescriptor] = Field(min_length=2)
+
+
+class RepurposeGenerateRequest(BaseModel):
+    convexProjectId: str
+    sourceUploadId: str
+    localUploadId: str
+    filename: str
 
 
 class EditorDraftExport(BaseModel):
@@ -472,3 +490,52 @@ class EditorDraftResponse(BaseModel):
     updatedAt: datetime
     error: str | None = None
     payload: EditorDraftPayload | None = None
+
+
+class RepurposeSourceSummary(BaseModel):
+    sourceUploadId: str
+    filename: str
+    durationSec: float
+    summary: str
+    speechCoverage: float
+
+
+class RepurposeSegmentSummary(BaseModel):
+    segmentId: str
+    startSec: float
+    endSec: float
+    transcriptPreview: str
+    summary: str
+
+
+class RepurposeVariant(BaseModel):
+    variantId: str
+    title: str
+    angleSummary: str
+    rationale: str
+    durationTarget: RepurposeDurationTarget
+    durationSec: float
+    videoUrl: str
+    videoStorageId: str | None = None
+    segmentCount: int
+    segments: list[RepurposeSegmentSummary] = Field(default_factory=list)
+
+
+class RepurposeResultPayload(BaseModel):
+    source: RepurposeSourceSummary
+    summary: str
+    variants: list[RepurposeVariant] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class RepurposeResultResponse(BaseModel):
+    resultId: str
+    projectId: str
+    status: RepurposeResultStatus
+    stage: RepurposeStage | None = None
+    progressPercent: int | None = Field(default=None, ge=0, le=100)
+    statusMessage: str | None = None
+    createdAt: datetime
+    updatedAt: datetime
+    error: str | None = None
+    payload: RepurposeResultPayload | None = None

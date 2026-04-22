@@ -18,6 +18,8 @@ from app.models.contracts import (
     AudienceWorldPayload,
     EditorDraftPayload,
     EditorDraftResponse,
+    RepurposeResultPayload,
+    RepurposeResultResponse,
     UploadResponse,
     VideoAsset,
 )
@@ -58,6 +60,17 @@ class EditorDraftPaths:
 
 
 @dataclass
+class RepurposeResultPaths:
+    result_id: str
+    directory: Path
+    record_path: Path
+    payload_path: Path
+
+    def variant_video_path(self, variant_key: str) -> Path:
+        return self.directory / f"{variant_key}.mp4"
+
+
+@dataclass
 class StoredMedia:
     storage_id: str | None
     url: str
@@ -78,6 +91,7 @@ class StorageService:
         self.settings.results_dir.mkdir(parents=True, exist_ok=True)
         self.settings.cache_dir.mkdir(parents=True, exist_ok=True)
         (self.settings.storage_root / "editor-drafts").mkdir(parents=True, exist_ok=True)
+        (self.settings.storage_root / "repurpose-results").mkdir(parents=True, exist_ok=True)
 
     def create_upload_paths(self, filename: str) -> UploadPaths:
         upload_id = uuid4().hex
@@ -136,6 +150,17 @@ class StorageService:
             video_path=directory / "draft.mp4",
         )
 
+    def create_repurpose_result_paths(self) -> RepurposeResultPaths:
+        result_id = uuid4().hex
+        directory = self.settings.storage_root / "repurpose-results" / result_id
+        directory.mkdir(parents=True, exist_ok=True)
+        return RepurposeResultPaths(
+            result_id=result_id,
+            directory=directory,
+            record_path=directory / "record.json",
+            payload_path=directory / "payload.json",
+        )
+
     def analysis_paths(self, analysis_id: str) -> AnalysisPaths:
         self._validate_analysis_id(analysis_id)
         directory = self.settings.results_dir / analysis_id
@@ -162,6 +187,16 @@ class StorageService:
             record_path=directory / "record.json",
             payload_path=directory / "payload.json",
             video_path=directory / "draft.mp4",
+        )
+
+    def repurpose_result_paths(self, result_id: str) -> RepurposeResultPaths:
+        self._validate_analysis_id(result_id)
+        directory = self.settings.storage_root / "repurpose-results" / result_id
+        return RepurposeResultPaths(
+            result_id=result_id,
+            directory=directory,
+            record_path=directory / "record.json",
+            payload_path=directory / "payload.json",
         )
 
     @staticmethod
@@ -270,6 +305,27 @@ class StorageService:
         self.write_editor_draft_record(record)
         return record
 
+    def init_repurpose_result_record(
+        self,
+        result_id: str,
+        project_id: str,
+    ) -> RepurposeResultResponse:
+        now = datetime.now(UTC)
+        record = RepurposeResultResponse(
+            resultId=result_id,
+            projectId=project_id,
+            status="queued",
+            stage="queued",
+            progressPercent=5,
+            statusMessage="Queued for repurpose generation.",
+            createdAt=now,
+            updatedAt=now,
+            error=None,
+            payload=None,
+        )
+        self.write_repurpose_result_record(record)
+        return record
+
     def write_analysis_record(self, record: AnalysisResponse) -> None:
         paths = self.analysis_paths(record.analysisId)
         dump_json(paths.record_path, record.model_dump(mode="json"))
@@ -290,6 +346,16 @@ class StorageService:
         if not paths.record_path.exists():
             raise FileNotFoundError(f"Editor draft {draft_id} not found")
         return EditorDraftResponse.model_validate(load_json(paths.record_path))
+
+    def write_repurpose_result_record(self, record: RepurposeResultResponse) -> None:
+        paths = self.repurpose_result_paths(record.resultId)
+        dump_json(paths.record_path, record.model_dump(mode="json"))
+
+    def read_repurpose_result_record(self, result_id: str) -> RepurposeResultResponse:
+        paths = self.repurpose_result_paths(result_id)
+        if not paths.record_path.exists():
+            raise FileNotFoundError(f"Repurpose result {result_id} not found")
+        return RepurposeResultResponse.model_validate(load_json(paths.record_path))
 
     def write_analysis_payload(self, analysis_id: str, payload: AnalysisPayload) -> None:
         paths = self.analysis_paths(analysis_id)
@@ -331,6 +397,15 @@ class StorageService:
         if not path.exists():
             raise FileNotFoundError(f"Editor draft payload {draft_id} not found")
         return EditorDraftPayload.model_validate(load_json(path))
+
+    def write_repurpose_result_payload(self, result_id: str, payload: RepurposeResultPayload) -> None:
+        dump_json(self.repurpose_result_paths(result_id).payload_path, payload.model_dump(mode="json"))
+
+    def read_repurpose_result_payload(self, result_id: str) -> RepurposeResultPayload:
+        path = self.repurpose_result_paths(result_id).payload_path
+        if not path.exists():
+            raise FileNotFoundError(f"Repurpose result payload {result_id} not found")
+        return RepurposeResultPayload.model_validate(load_json(path))
 
     def find_latest_analysis_for_upload(self, upload_id: str) -> AnalysisResponse:
         self._validate_analysis_id(upload_id)
@@ -382,6 +457,31 @@ class StorageService:
         if latest is None:
             raise FileNotFoundError(f"No editor drafts found for project {project_id!r}")
         return self.hydrate_editor_draft_response(latest)
+
+    def find_latest_repurpose_result_for_project(self, project_id: str) -> RepurposeResultResponse:
+        latest: RepurposeResultResponse | None = None
+        repurpose_root = self.settings.storage_root / "repurpose-results"
+        if not repurpose_root.exists():
+            raise FileNotFoundError(f"No repurpose results found for project {project_id!r}")
+
+        for record_path in sorted(repurpose_root.glob("*/record.json")):
+            record = RepurposeResultResponse.model_validate(load_json(record_path))
+            if record.projectId != project_id:
+                continue
+
+            hydrated = record
+            payload_path = record_path.parent / "payload.json"
+            if record.status == "completed" and payload_path.exists():
+                hydrated = record.model_copy(
+                    update={"payload": RepurposeResultPayload.model_validate(load_json(payload_path))}
+                )
+
+            if latest is None or hydrated.updatedAt > latest.updatedAt:
+                latest = hydrated
+
+        if latest is None:
+            raise FileNotFoundError(f"No repurpose results found for project {project_id!r}")
+        return self.hydrate_repurpose_result_response(latest)
 
     def write_segments(self, analysis_id: str, payload: list[dict[str, Any]]) -> None:
         dump_json(self.analysis_paths(analysis_id).segments_path, payload)
@@ -535,6 +635,29 @@ class StorageService:
             return record
         export = record.payload.export.model_copy(update={"videoUrl": url})
         payload = record.payload.model_copy(update={"export": export})
+        return record.model_copy(update={"payload": payload})
+
+    def hydrate_repurpose_result_response(self, record: RepurposeResultResponse) -> RepurposeResultResponse:
+        if self.convex_sync is None or not self.convex_sync.enabled or record.payload is None:
+            return record
+        storage_ids = [
+            variant.videoStorageId
+            for variant in record.payload.variants
+            if variant.videoStorageId
+        ]
+        if not storage_ids:
+            return record
+        try:
+            urls = self.convex_sync.resolve_storage_urls(storage_ids)
+        except RuntimeError:
+            return record
+        variants = [
+            variant.model_copy(
+                update={"videoUrl": urls.get(variant.videoStorageId) or variant.videoUrl}
+            )
+            for variant in record.payload.variants
+        ]
+        payload = record.payload.model_copy(update={"variants": variants})
         return record.model_copy(update={"payload": payload})
 
     def video_asset_from_upload(

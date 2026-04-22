@@ -159,3 +159,27 @@ def test_proxy_payload_compresses_brain_activation_without_muting_room_sentiment
     assert artifacts.payload.audienceOutlook.timeline[1].sentiment == 0.87
     assert artifacts.payload.brainSummary.averageActivation < 0.75
     assert artifacts.payload.brainSummary.averageActivation < np.mean([0.94, 0.87])
+
+
+def test_proxy_cut_normalization_requires_at_least_hundred_ms() -> None:
+    cuts = AnalysisEngine._normalize_proxy_cuts(
+        [
+            {
+                "id": "too-short",
+                "start": 1.0,
+                "end": 1.09,
+                "reason": "Ignore this tiny cut.",
+            },
+            {
+                "id": "kept",
+                "start": 2.0,
+                "end": 2.1,
+                "reason": "Keep this cut.",
+            },
+        ],
+        "deadspace",
+    )
+
+    assert [cut.id for cut in cuts] == ["kept"]
+    assert cuts[0].start == 2.0
+    assert cuts[0].end == 2.1

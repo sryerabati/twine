@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, Manrope, Sora } from "next/font/google";
+import { IBM_Plex_Mono, Manrope, Nunito, Sora } from "next/font/google";
 
 import { ConvexClientProvider } from "@/app/ConvexClientProvider";
 
@@ -21,6 +21,13 @@ const monoFont = IBM_Plex_Mono({
   weight: ["400", "500", "600", "700"],
 });
 
+const cartoonFont = Nunito({
+  variable: "--font-nunito",
+  subsets: ["latin"],
+  weight: ["400", "700", "900"],
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: "Twine",
   description:
@@ -39,7 +46,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${headingFont.variable} ${bodyFont.variable} ${monoFont.variable} h-full antialiased`}
+      className={`${headingFont.variable} ${bodyFont.variable} ${monoFont.variable} ${cartoonFont.variable} h-full antialiased`}
     >
       <body className="min-h-full bg-background text-foreground flex flex-col">
         <ConvexClientProvider>{children}</ConvexClientProvider>

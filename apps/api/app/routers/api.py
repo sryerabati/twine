@@ -26,12 +26,15 @@ from app.models.contracts import (
     EditorGenerateRequest,
     ExportArtifact,
     HealthResponse,
+    RepurposeGenerateRequest,
+    RepurposeResultResponse,
     TrimRequest,
     TrimResponse,
     UploadResponse,
 )
 from app.services.gemini_runner import GeminiIntegrationError
 from app.services.media import MediaInspectionError
+from app.services.jobs import RepurposeSourceDescriptor
 
 
 router = APIRouter(prefix="/api")
@@ -296,6 +299,44 @@ def generate_editor_draft(
     return record
 
 
+@router.post("/repurpose/generate", response_model=RepurposeResultResponse, status_code=status.HTTP_202_ACCEPTED)
+def generate_repurpose_result(
+    request: RepurposeGenerateRequest,
+    context: APIContext = Depends(get_context),
+) -> RepurposeResultResponse:
+    storage = context.storage
+    try:
+        context.editor_ai.require_editor_support()
+    except (GeminiIntegrationError, RuntimeError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    try:
+        storage.read_upload_metadata(request.localUploadId)
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Local upload {request.localUploadId} was not found.",
+        ) from exc
+
+    result_paths = storage.create_repurpose_result_paths()
+    record = storage.init_repurpose_result_record(result_paths.result_id, request.convexProjectId)
+    context.convex_sync.update_repurpose_project_status(
+        convex_project_id=request.convexProjectId,
+        status="queued",
+        latest_local_result_id=result_paths.result_id,
+    )
+    context.repurpose_jobs.enqueue(
+        request.convexProjectId,
+        result_paths.result_id,
+        RepurposeSourceDescriptor(
+            source_upload_id=request.sourceUploadId,
+            local_upload_id=request.localUploadId,
+            filename=request.filename,
+        ),
+    )
+    return record
+
+
 @router.get("/analysis/{analysis_id}", response_model=AnalysisResponse)
 def get_analysis(
     analysis_id: str,
@@ -442,6 +483,17 @@ def get_latest_editor_draft(
         return context.storage.find_latest_editor_draft_for_project(project_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Editor draft not found.") from exc
+
+
+@router.get("/repurpose/projects/{project_id}/latest-result", response_model=RepurposeResultResponse)
+def get_latest_repurpose_result(
+    project_id: str,
+    context: APIContext = Depends(get_context),
+) -> RepurposeResultResponse:
+    try:
+        return context.storage.find_latest_repurpose_result_for_project(project_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Repurpose result not found.") from exc
 
 
 def _maybe_backfill_room_voices(record: AnalysisResponse, context: APIContext) -> AnalysisResponse:

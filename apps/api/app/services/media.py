@@ -58,7 +58,40 @@ class SequenceClipTiming:
     output_end_sec: float
 
 
+@dataclass
+class SequenceRenderValidation:
+    video_duration_sec: float
+    audio_duration_sec: float
+    container_duration_sec: float
+
+
+@dataclass
+class SequenceSourceMetadata:
+    width: int
+    height: int
+    fps: float
+    container_duration_sec: float
+    video_start_sec: float
+    video_duration_sec: float
+    audio_start_sec: float
+    audio_duration_sec: float
+    audio_sample_rate: int
+    audio_channel_layout: str
+
+    @property
+    def video_end_sec(self) -> float:
+        return self.video_start_sec + self.video_duration_sec
+
+    @property
+    def audio_end_sec(self) -> float:
+        return self.audio_start_sec + self.audio_duration_sec
+
+
 class MediaService:
+    MIN_CUT_DURATION_SEC = 0.1
+    MAX_SEQUENCE_DURATION_DRIFT_SEC = 0.1
+    STREAM_TIMING_EPSILON_SEC = 1e-3
+
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
@@ -289,69 +322,451 @@ class MediaService:
             raise MediaInspectionError("At least one clip is required to assemble a draft.")
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        timings: list[SequenceClipTiming] = []
+        cursor = 0.0
+        inspected = [
+            self._inspect_sequence_source_metadata(clip.source_path) for clip in clips
+        ]
+        expected_duration = 0.0
 
-        with tempfile.TemporaryDirectory() as temp_dir_name:
-            temp_dir = Path(temp_dir_name)
-            concat_list_path = temp_dir / "concat.txt"
-            concat_lines: list[str] = []
-            timings: list[SequenceClipTiming] = []
-            cursor = 0.0
-
-            for index, clip in enumerate(clips):
-                trimmed_path = temp_dir / f"clip-{index:02d}.mp4"
-                trimmed_duration = self.trim_deadspace(
-                    source_path=clip.source_path,
-                    output_path=trimmed_path,
-                    cuts=clip.cuts,
-                    total_duration_sec=clip.total_duration_sec,
+        for clip in clips:
+            keep_ranges = self._invert_cuts(clip.cuts, clip.total_duration_sec)
+            if not keep_ranges:
+                raise MediaInspectionError(
+                    f"Clip {clip.clip_id} would be fully removed by the selected cuts."
                 )
-                removed_seconds = round(max(0.0, clip.total_duration_sec - trimmed_duration), 2)
-                concat_lines.append(f"file '{trimmed_path.as_posix()}'")
-                timings.append(
-                    SequenceClipTiming(
-                        clip_id=clip.clip_id,
-                        trimmed_duration_sec=round(trimmed_duration, 2),
-                        removed_seconds=removed_seconds,
-                        output_start_sec=round(cursor, 2),
-                        output_end_sec=round(cursor + trimmed_duration, 2),
-                    )
+            trimmed_duration_raw = sum(end - start for start, end in keep_ranges)
+            removed_seconds = round(max(0.0, clip.total_duration_sec - trimmed_duration_raw), 2)
+            timings.append(
+                SequenceClipTiming(
+                    clip_id=clip.clip_id,
+                    trimmed_duration_sec=round(trimmed_duration_raw, 2),
+                    removed_seconds=removed_seconds,
+                    output_start_sec=round(cursor, 2),
+                    output_end_sec=round(cursor + trimmed_duration_raw, 2),
                 )
-                cursor += trimmed_duration
+            )
+            cursor += trimmed_duration_raw
+            expected_duration += trimmed_duration_raw
 
-            concat_list_path.write_text("\n".join(concat_lines) + "\n", encoding="utf-8")
-            cmd = [
-                self.settings.ffmpeg_bin,
-                "-y",
-                "-f",
-                "concat",
-                "-safe",
-                "0",
-                "-i",
-                str(concat_list_path),
+        target_metadata = inspected[0]
+        target_audio_sample_rate = target_metadata.audio_sample_rate
+        target_audio_layout = target_metadata.audio_channel_layout
+        normalize_video = any(
+            metadata.width != target_metadata.width
+            or metadata.height != target_metadata.height
+            or not self._fps_matches(metadata.fps, target_metadata.fps)
+            for metadata in inspected[1:]
+        )
+
+        filter_complex = self._build_sequence_filter_graph(
+            clips=clips,
+            source_metadata=inspected,
+            target_width=target_metadata.width,
+            target_height=target_metadata.height,
+            target_fps=target_metadata.fps,
+            target_audio_sample_rate=target_audio_sample_rate,
+            target_audio_layout=target_audio_layout,
+            normalize_video=normalize_video,
+        )
+        cmd = [self.settings.ffmpeg_bin, "-y"]
+        for clip in clips:
+            cmd.extend(["-i", str(clip.source_path)])
+        cmd.extend(
+            [
+                "-filter_complex",
+                filter_complex,
+                "-map",
+                "[outv]",
+                "-map",
+                "[outa]",
                 "-c:v",
                 "libx264",
                 "-preset",
-                "veryfast",
+                "medium",
                 "-crf",
-                "22",
+                "18",
+                "-pix_fmt",
+                "yuv420p",
                 "-c:a",
                 "aac",
                 "-b:a",
-                "160k",
+                "192k",
                 "-movflags",
                 "+faststart",
                 str(output_path),
             ]
-            result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-            if result.returncode != 0:
-                raise MediaInspectionError(
-                    "ffmpeg concat failed. Check backend logs for the full ffmpeg output."
+        )
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        if result.returncode != 0:
+            raise MediaInspectionError(
+                "ffmpeg rough cut render failed. Check backend logs for the full ffmpeg output."
+            )
+
+        self._validate_sequence_output(output_path=output_path, expected_duration_sec=expected_duration)
+        return round(expected_duration, 2), timings
+
+    def _build_sequence_filter_graph(
+        self,
+        *,
+        clips: list[SequenceClipPlan],
+        source_metadata: list[SequenceSourceMetadata],
+        target_width: int,
+        target_height: int,
+        target_fps: float,
+        target_audio_sample_rate: int,
+        target_audio_layout: str,
+        normalize_video: bool,
+    ) -> str:
+        filter_parts: list[str] = []
+        concat_labels: list[str] = []
+        target_fps_text = self._format_fps(target_fps)
+
+        for clip_index, (clip, metadata) in enumerate(zip(clips, source_metadata, strict=True)):
+            keep_ranges = self._invert_cuts(clip.cuts, clip.total_duration_sec)
+            video_labels: list[str] = []
+            audio_labels: list[str] = []
+            video_source = f"[{clip_index}:v]"
+            if normalize_video:
+                video_source = f"[vsrc{clip_index}]"
+                filter_parts.append(
+                    (
+                        f"[{clip_index}:v]"
+                        f"scale={target_width}:{target_height}:force_original_aspect_ratio=decrease,"
+                        f"pad={target_width}:{target_height}:(ow-iw)/2:(oh-ih)/2:color=black,"
+                        f"fps={target_fps_text},format=yuv420p,setsar=1"
+                        f"{video_source}"
+                    )
                 )
 
-        return round(sum(timing.trimmed_duration_sec for timing in timings), 2), timings
+            for segment_index, (start, end) in enumerate(keep_ranges):
+                if len(keep_ranges) == 1:
+                    video_label = f"[vc{clip_index}]"
+                    audio_label = f"[ac{clip_index}]"
+                else:
+                    video_label = f"[v{clip_index}_{segment_index}]"
+                    audio_label = f"[a{clip_index}_{segment_index}]"
+                segment_duration_sec = end - start
+                filter_parts.append(
+                    self._build_sequence_video_segment_filter(
+                        source_label=video_source,
+                        output_label=video_label,
+                        segment_start_sec=start,
+                        segment_end_sec=end,
+                        segment_duration_sec=segment_duration_sec,
+                        stream_start_sec=metadata.video_start_sec,
+                        stream_end_sec=metadata.video_end_sec,
+                        fallback_width=target_width,
+                        fallback_height=target_height,
+                        fallback_fps=target_fps_text,
+                    )
+                )
+                filter_parts.append(
+                    self._build_sequence_audio_segment_filter(
+                        source_label=f"[{clip_index}:a]",
+                        output_label=audio_label,
+                        segment_start_sec=start,
+                        segment_end_sec=end,
+                        segment_duration_sec=segment_duration_sec,
+                        stream_start_sec=metadata.audio_start_sec,
+                        stream_end_sec=metadata.audio_end_sec,
+                        source_sample_rate=metadata.audio_sample_rate,
+                        target_sample_rate=target_audio_sample_rate,
+                        target_channel_layout=target_audio_layout,
+                    )
+                )
+                video_labels.append(video_label)
+                audio_labels.append(audio_label)
+
+            if len(keep_ranges) == 1:
+                final_video_label = video_labels[0]
+                final_audio_label = audio_labels[0]
+            else:
+                final_video_label = f"[vc{clip_index}]"
+                final_audio_label = f"[ac{clip_index}]"
+                filter_parts.append(
+                    (
+                        "".join(
+                            f"{video_label}{audio_label}"
+                            for video_label, audio_label in zip(video_labels, audio_labels, strict=True)
+                        )
+                        + f"concat=n={len(keep_ranges)}:v=1:a=1{final_video_label}{final_audio_label}"
+                    )
+                )
+
+            concat_labels.append(final_video_label)
+            concat_labels.append(final_audio_label)
+
+        filter_parts.append(
+            "".join(concat_labels) + f"concat=n={len(clips)}:v=1:a=1[outv][outa]"
+        )
+        return ";".join(filter_parts)
+
+    def _build_sequence_video_segment_filter(
+        self,
+        *,
+        source_label: str,
+        output_label: str,
+        segment_start_sec: float,
+        segment_end_sec: float,
+        segment_duration_sec: float,
+        stream_start_sec: float,
+        stream_end_sec: float,
+        fallback_width: int,
+        fallback_height: int,
+        fallback_fps: str,
+    ) -> str:
+        overlap_start_sec = max(segment_start_sec, stream_start_sec)
+        overlap_end_sec = min(segment_end_sec, stream_end_sec)
+        overlap_duration_sec = max(0.0, overlap_end_sec - overlap_start_sec)
+        pad_start_sec = max(0.0, stream_start_sec - segment_start_sec)
+        pad_end_sec = max(0.0, segment_end_sec - stream_end_sec)
+
+        if overlap_duration_sec < self.STREAM_TIMING_EPSILON_SEC:
+            return (
+                f"color=c=black:s={fallback_width}x{fallback_height}:r={fallback_fps}:d={segment_duration_sec:.6f},"
+                f"format=yuv420p,setsar=1{output_label}"
+            )
+
+        chain = (
+            f"{source_label}"
+            f"trim=start={overlap_start_sec:.6f}:end={overlap_end_sec:.6f},"
+            "setpts=PTS-STARTPTS"
+        )
+        if (
+            pad_start_sec >= self.STREAM_TIMING_EPSILON_SEC
+            or pad_end_sec >= self.STREAM_TIMING_EPSILON_SEC
+        ):
+            chain += (
+                f",tpad=start_duration={pad_start_sec:.6f}:start_mode=clone:"
+                f"stop_duration={pad_end_sec:.6f}:stop_mode=clone"
+            )
+        chain += (
+            f",trim=duration={segment_duration_sec:.6f},setpts=PTS-STARTPTS{output_label}"
+        )
+        return chain
+
+    def _build_sequence_audio_segment_filter(
+        self,
+        *,
+        source_label: str,
+        output_label: str,
+        segment_start_sec: float,
+        segment_end_sec: float,
+        segment_duration_sec: float,
+        stream_start_sec: float,
+        stream_end_sec: float,
+        source_sample_rate: int,
+        target_sample_rate: int,
+        target_channel_layout: str,
+    ) -> str:
+        overlap_start_sec = max(segment_start_sec, stream_start_sec)
+        overlap_end_sec = min(segment_end_sec, stream_end_sec)
+        overlap_duration_sec = max(0.0, overlap_end_sec - overlap_start_sec)
+        pad_start_sec = max(0.0, stream_start_sec - segment_start_sec)
+        pad_end_sec = max(0.0, segment_end_sec - stream_end_sec)
+        target_audio_format = (
+            f"aresample={target_sample_rate},aformat=sample_rates={target_sample_rate}:"
+            f"channel_layouts={target_channel_layout}"
+        )
+
+        if overlap_duration_sec < self.STREAM_TIMING_EPSILON_SEC:
+            return (
+                f"anullsrc=channel_layout={target_channel_layout}:sample_rate={target_sample_rate}:"
+                f"d={segment_duration_sec:.6f},{target_audio_format},"
+                f"atrim=end={segment_duration_sec:.6f},asetpts=PTS-STARTPTS{output_label}"
+            )
+
+        chain = (
+            f"{source_label}"
+            f"atrim=start={overlap_start_sec:.6f}:end={overlap_end_sec:.6f},"
+            "asetpts=PTS-STARTPTS"
+        )
+        if pad_start_sec >= self.STREAM_TIMING_EPSILON_SEC:
+            chain += (
+                f",adelay={self._format_audio_delay(pad_start_sec, source_sample_rate)}:all=1"
+            )
+        if (
+            pad_start_sec >= self.STREAM_TIMING_EPSILON_SEC
+            or pad_end_sec >= self.STREAM_TIMING_EPSILON_SEC
+        ):
+            chain += f",apad=whole_dur={segment_duration_sec:.6f}"
+        chain += (
+            f",{target_audio_format},atrim=end={segment_duration_sec:.6f},"
+            f"asetpts=PTS-STARTPTS{output_label}"
+        )
+        return chain
+
+    def _validate_sequence_output(
+        self,
+        *,
+        output_path: Path,
+        expected_duration_sec: float,
+    ) -> SequenceRenderValidation:
+        cmd = [
+            self.settings.ffprobe_bin,
+            "-v",
+            "error",
+            "-show_entries",
+            "stream=codec_type,duration:format=duration",
+            "-of",
+            "json",
+            str(output_path),
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        if result.returncode != 0:
+            raise MediaInspectionError(result.stderr.strip() or "ffprobe validation failed")
+        payload = json.loads(result.stdout)
+        streams = payload.get("streams", [])
+        if not isinstance(streams, list):
+            raise MediaInspectionError("Rendered rough cut validation returned malformed stream data.")
+
+        video_duration = self._find_stream_duration(streams, "video")
+        audio_duration = self._find_stream_duration(streams, "audio")
+        format_payload = payload.get("format", {})
+        if not isinstance(format_payload, dict) or "duration" not in format_payload:
+            raise MediaInspectionError("Rendered rough cut validation returned no container duration.")
+        container_duration = float(format_payload["duration"])
+
+        if abs(video_duration - audio_duration) > self.MAX_SEQUENCE_DURATION_DRIFT_SEC:
+            raise MediaInspectionError(
+                (
+                    "Rendered rough cut failed validation: video and audio drifted after export "
+                    f"({video_duration:.3f}s video vs {audio_duration:.3f}s audio)."
+                )
+            )
+        if abs(video_duration - expected_duration_sec) > self.MAX_SEQUENCE_DURATION_DRIFT_SEC:
+            raise MediaInspectionError(
+                (
+                    "Rendered rough cut failed validation: video duration does not match the expected timeline "
+                    f"({video_duration:.3f}s vs {expected_duration_sec:.3f}s)."
+                )
+            )
+        if abs(audio_duration - expected_duration_sec) > self.MAX_SEQUENCE_DURATION_DRIFT_SEC:
+            raise MediaInspectionError(
+                (
+                    "Rendered rough cut failed validation: audio duration does not match the expected timeline "
+                    f"({audio_duration:.3f}s vs {expected_duration_sec:.3f}s)."
+                )
+            )
+        if abs(container_duration - expected_duration_sec) > self.MAX_SEQUENCE_DURATION_DRIFT_SEC:
+            raise MediaInspectionError(
+                (
+                    "Rendered rough cut failed validation: container duration does not match the expected timeline "
+                    f"({container_duration:.3f}s vs {expected_duration_sec:.3f}s)."
+                )
+            )
+
+        return SequenceRenderValidation(
+            video_duration_sec=video_duration,
+            audio_duration_sec=audio_duration,
+            container_duration_sec=container_duration,
+        )
 
     @staticmethod
+    def _find_stream_duration(streams: list[object], codec_type: str) -> float:
+        for stream in streams:
+            if not isinstance(stream, dict):
+                continue
+            if stream.get("codec_type") != codec_type:
+                continue
+            if "duration" not in stream:
+                break
+            return float(stream["duration"])
+        raise MediaInspectionError(f"Rendered rough cut is missing a {codec_type} stream duration.")
+
+    @staticmethod
+    def _fps_matches(left: float, right: float) -> bool:
+        return abs(left - right) <= 0.01
+
+    @staticmethod
+    def _format_fps(value: float) -> str:
+        return f"{value:.6f}".rstrip("0").rstrip(".")
+
+    @staticmethod
+    def _format_audio_delay(delay_sec: float, sample_rate: int) -> str:
+        samples = max(int(round(delay_sec * sample_rate)), 0)
+        return f"{samples}S"
+
+    def _inspect_sequence_source_metadata(self, path: Path) -> SequenceSourceMetadata:
+        cmd = [
+            self.settings.ffprobe_bin,
+            "-v",
+            "error",
+            "-show_entries",
+            (
+                "format=duration"
+                ":stream=codec_type,width,height,r_frame_rate,start_time,duration,sample_rate,channels,channel_layout"
+            ),
+            "-of",
+            "json",
+            str(path),
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        if result.returncode != 0:
+            raise MediaInspectionError(result.stderr.strip() or "ffprobe sequence inspection failed")
+        payload = json.loads(result.stdout)
+        streams = payload.get("streams", [])
+        if not isinstance(streams, list):
+            raise MediaInspectionError("Sequence source inspection returned malformed stream data.")
+
+        video_stream = next(
+            (
+                stream
+                for stream in streams
+                if isinstance(stream, dict) and stream.get("codec_type") == "video"
+            ),
+            None,
+        )
+        if not isinstance(video_stream, dict):
+            raise MediaInspectionError("Sequence clip is missing a video stream.")
+
+        audio_stream = next(
+            (
+                stream
+                for stream in streams
+                if isinstance(stream, dict) and stream.get("codec_type") == "audio"
+            ),
+            None,
+        )
+        if not isinstance(audio_stream, dict):
+            raise MediaInspectionError("Sequence clip is missing an audio stream.")
+
+        fps_text = str(video_stream.get("r_frame_rate", "0/1"))
+        numerator, denominator = fps_text.split("/")
+        fps = float(numerator) / float(denominator or 1)
+        format_payload = payload.get("format", {})
+        if not isinstance(format_payload, dict) or "duration" not in format_payload:
+            raise MediaInspectionError("Sequence clip is missing a container duration.")
+
+        return SequenceSourceMetadata(
+            width=int(video_stream["width"]),
+            height=int(video_stream["height"]),
+            fps=fps,
+            container_duration_sec=float(format_payload["duration"]),
+            video_start_sec=float(video_stream.get("start_time", 0.0)),
+            video_duration_sec=float(video_stream.get("duration", 0.0)),
+            audio_start_sec=float(audio_stream.get("start_time", 0.0)),
+            audio_duration_sec=float(audio_stream.get("duration", 0.0)),
+            audio_sample_rate=int(audio_stream.get("sample_rate", 44100)),
+            audio_channel_layout=self._resolve_audio_channel_layout(audio_stream),
+        )
+
+    @staticmethod
+    def _resolve_audio_channel_layout(stream: dict[str, object]) -> str:
+        layout = stream.get("channel_layout")
+        if isinstance(layout, str) and layout:
+            return layout
+        channels = int(stream.get("channels", 0) or 0)
+        if channels == 1:
+            return "mono"
+        if channels == 2:
+            return "stereo"
+        return "stereo"
+
+    @classmethod
     def _invert_cuts(
+        cls,
         cuts: list[tuple[float, float]],
         total_duration_sec: float,
     ) -> list[tuple[float, float]]:
@@ -360,7 +775,7 @@ class MediaService:
         Guarantees:
         - every returned range is strictly inside [0, total_duration_sec]
         - returned ranges are non-overlapping and in ascending order
-        - ranges shorter than 50ms are dropped to avoid ffmpeg artifacts
+        - ranges shorter than 100ms are dropped to avoid ffmpeg artifacts
         """
         if total_duration_sec <= 0:
             return []
@@ -370,7 +785,7 @@ class MediaService:
         for start, end in cuts:
             start_f = max(0.0, min(float(start), total_duration_sec))
             end_f = max(0.0, min(float(end), total_duration_sec))
-            if end_f - start_f <= 0.05:
+            if end_f - start_f < cls.MIN_CUT_DURATION_SEC:
                 continue
             clamped.append((start_f, end_f))
 
@@ -391,10 +806,10 @@ class MediaService:
         keep: list[tuple[float, float]] = []
         cursor = 0.0
         for cut_start, cut_end in merged:
-            if cut_start - cursor > 0.05:
+            if cut_start - cursor >= cls.MIN_CUT_DURATION_SEC:
                 keep.append((cursor, cut_start))
             cursor = cut_end
-        if total_duration_sec - cursor > 0.05:
+        if total_duration_sec - cursor >= cls.MIN_CUT_DURATION_SEC:
             keep.append((cursor, total_duration_sec))
         return keep
 

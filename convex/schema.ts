@@ -115,6 +115,45 @@ const schema = defineSchema({
   })
     .index("by_projectId_and_sourceOrder", ["projectId", "sourceOrder"])
     .index("by_projectId_and_createdAt", ["projectId", "createdAt"]),
+
+  repurposeProjects: defineTable({
+    userId: v.id("users"),
+    title: v.string(),
+    status: v.union(
+      v.literal("drafting"),
+      v.literal("queued"),
+      v.literal("running"),
+      v.literal("completed"),
+      v.literal("failed"),
+    ),
+    sourceUploadId: v.optional(v.id("uploads")),
+    sourceFilename: v.optional(v.string()),
+    sourceDurationSec: v.optional(v.number()),
+    latestLocalResultId: v.optional(v.string()),
+    variantCount: v.optional(v.number()),
+    summary: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId_createdAt", ["userId", "createdAt"])
+    .index("by_userId_status", ["userId", "status"]),
+
+  repurposeVariants: defineTable({
+    projectId: v.id("repurposeProjects"),
+    variantKey: v.string(),
+    title: v.string(),
+    angleSummary: v.string(),
+    durationTarget: v.union(v.literal("source"), v.literal("short")),
+    durationSec: v.number(),
+    exportUrl: v.optional(v.string()),
+    exportStorageId: v.optional(v.id("_storage")),
+    position: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_projectId_and_position", ["projectId", "position"])
+    .index("by_projectId_and_variantKey", ["projectId", "variantKey"]),
 });
 
 export default schema;

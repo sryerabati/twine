@@ -41,6 +41,7 @@ def strict_client(strict_settings: Settings) -> TestClient:
     from tests.conftest import (
         ImmediateEditorJobService,
         ImmediateJobService,
+        ImmediateRepurposeJobService,
         StubEditorAI,
         StubMediaService,
         StubRunner,
@@ -61,6 +62,7 @@ def strict_client(strict_settings: Settings) -> TestClient:
     jobs = ImmediateJobService(storage, runner, engine)
     editor_ai = StubEditorAI()
     editor_jobs = ImmediateEditorJobService(storage, runner, media, engine, editor_ai)
+    repurpose_jobs = ImmediateRepurposeJobService(storage, runner, media, engine, editor_ai)
     context = APIContext(
         settings=strict_settings,
         storage=storage,
@@ -71,6 +73,7 @@ def strict_client(strict_settings: Settings) -> TestClient:
         convex_sync=ConvexSyncService(strict_settings),
         editor_ai=editor_ai,
         editor_jobs=editor_jobs,
+        repurpose_jobs=repurpose_jobs,
     )
     return TestClient(create_app(context))
 
