@@ -12,7 +12,13 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from app.core.context import APIContext
 from app.models.contracts import (
     AnalyzeRequest,
+    AnalysisPayload,
     AnalysisResponse,
+    AudienceWorldInterview,
+    AudienceWorldInterviewRequest,
+    AudienceWorldInterviewResponse,
+    AudienceWorldPayload,
+    AudienceWorldResponse,
     AudienceVoice,
     CompareRequest,
     CompareResponse,
@@ -309,6 +315,7 @@ def get_analysis(
                 detail="Analysis is marked completed but its payload is missing.",
             ) from None
         record = record.model_copy(update={"payload": payload})
+    record = _maybe_attach_audience_world(record, context)
     record = _maybe_backfill_room_voices(record, context)
     return storage.hydrate_analysis_response(record)
 
@@ -326,7 +333,104 @@ def get_analysis_by_upload(
             status_code=404,
             detail="No completed analysis found for this upload yet.",
         ) from exc
+    record = _maybe_attach_audience_world(record, context)
     return _maybe_backfill_room_voices(record, context)
+
+
+@router.get("/analysis/{analysis_id}/world", response_model=AudienceWorldResponse)
+def get_analysis_world(
+    analysis_id: str,
+    context: APIContext = Depends(get_context),
+) -> AudienceWorldResponse:
+    try:
+        record = context.storage.read_analysis_record(analysis_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Analysis not found.") from exc
+    if record.status != "completed":
+        raise HTTPException(status_code=409, detail="Analysis must complete before the world is available.")
+    if record.payload is None:
+        try:
+            record = record.model_copy(update={"payload": context.storage.read_analysis_payload(analysis_id)})
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Analysis payload not found.") from exc
+    record = _maybe_attach_audience_world(record, context)
+    record = _maybe_refresh_audience_world(record, context)
+    if record.payload is None or record.payload.audienceWorld is None:
+        raise HTTPException(status_code=404, detail="No audience world is available for this analysis yet.")
+    return AudienceWorldResponse(analysisId=analysis_id, world=record.payload.audienceWorld)
+
+
+@router.post(
+    "/analysis/{analysis_id}/world/interviews",
+    response_model=AudienceWorldInterviewResponse,
+)
+def interview_analysis_world(
+    analysis_id: str,
+    request: AudienceWorldInterviewRequest,
+    context: APIContext = Depends(get_context),
+) -> AudienceWorldInterviewResponse:
+    try:
+        record = context.storage.read_analysis_record(analysis_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Analysis not found.") from exc
+    if record.status != "completed":
+        raise HTTPException(status_code=409, detail="Analysis must complete before agent interviews are available.")
+    if record.payload is None:
+        try:
+            record = record.model_copy(update={"payload": context.storage.read_analysis_payload(analysis_id)})
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Analysis payload not found.") from exc
+    record = _maybe_attach_audience_world(record, context)
+    world = record.payload.audienceWorld if record.payload else None
+    if world is None:
+        raise HTTPException(status_code=404, detail="No audience world is available for this analysis yet.")
+
+    simulation_id = str(world.simulationId).strip()
+    if not simulation_id:
+        try:
+            provider_raw = context.storage.read_provider_raw(analysis_id)
+        except FileNotFoundError:
+            provider_raw = {}
+        simulation_id = str(provider_raw.get("simulationId") or "").strip()
+    if not simulation_id:
+        raise HTTPException(status_code=404, detail="Simulation id is not available for this analysis.")
+
+    interview_agents = getattr(context.runner, "interview_agents", None)
+    if callable(interview_agents):
+        try:
+            live_interviews = interview_agents(
+                simulation_id,
+                agent_ids=request.agentIds,
+                prompt=request.prompt,
+                platform=request.platform,
+            )
+        except RuntimeError:
+            live_interviews = []
+        if live_interviews:
+            merged_world = _merge_interviews_into_world(world, live_interviews)
+            _persist_world_update(analysis_id, record, merged_world, context)
+            return AudienceWorldInterviewResponse(
+                analysisId=analysis_id,
+                prompt=request.prompt,
+                cached=False,
+                interviews=[AudienceWorldInterview.model_validate(item) for item in live_interviews],
+            )
+
+    cached_interviews = [
+        interview
+        for interview in world.interviews
+        if interview.agentId in request.agentIds
+        and interview.prompt == request.prompt
+        and (request.platform is None or interview.platform == request.platform)
+    ]
+    if cached_interviews:
+        return AudienceWorldInterviewResponse(
+            analysisId=analysis_id,
+            prompt=request.prompt,
+            cached=True,
+            interviews=cached_interviews,
+        )
+    raise HTTPException(status_code=503, detail="Live interviews are unavailable and no cached responses matched this prompt.")
 
 
 @router.get("/editor/projects/{project_id}/latest-draft", response_model=EditorDraftResponse)
@@ -379,6 +483,128 @@ def _maybe_backfill_room_voices(record: AnalysisResponse, context: APIContext) -
     next_payload = payload.model_copy(update={"audienceOutlook": audience_outlook})
     context.storage.write_analysis_payload(record.analysisId, next_payload)
     return record.model_copy(update={"payload": next_payload})
+
+
+def _maybe_attach_audience_world(record: AnalysisResponse, context: APIContext) -> AnalysisResponse:
+    payload = record.payload
+    if record.status != "completed" or payload is None or payload.analysisMode != "read_the_room":
+        return record
+
+    try:
+        stored_world = context.storage.read_analysis_world(record.analysisId)
+    except FileNotFoundError:
+        return record
+
+    current_world = payload.audienceWorld
+    if current_world is not None and not _should_upgrade_world(current_world, stored_world):
+        return record
+
+    next_payload = payload.model_copy(update={"audienceWorld": stored_world})
+    context.storage.write_analysis_payload(record.analysisId, next_payload)
+    return record.model_copy(update={"payload": next_payload})
+
+
+def _maybe_refresh_audience_world(record: AnalysisResponse, context: APIContext) -> AnalysisResponse:
+    payload = record.payload
+    if record.status != "completed" or payload is None or payload.analysisMode != "read_the_room":
+        return record
+
+    world = payload.audienceWorld
+    if world is None:
+        return record
+
+    if world.status == "ready" and len(world.cohorts) >= 3 and len(world.threads) >= 1 and len(world.interviews) >= 1:
+        return record
+
+    hydrate_world = getattr(context.runner, "hydrate_audience_world", None)
+    if not callable(hydrate_world):
+        return record
+
+    simulation_id = str(world.simulationId).strip()
+    if not simulation_id:
+        try:
+            provider_raw = context.storage.read_provider_raw(record.analysisId)
+        except FileNotFoundError:
+            provider_raw = {}
+        simulation_id = str(provider_raw.get("simulationId") or "").strip()
+    if not simulation_id:
+        return record
+
+    try:
+        refreshed = hydrate_world(
+            simulation_id,
+            windows=_world_windows(payload),
+            include_cached_interviews=True,
+        )
+    except RuntimeError:
+        return record
+
+    candidate = AudienceWorldPayload.model_validate(refreshed)
+    if not _should_upgrade_world(world, candidate):
+        return record
+
+    _persist_world_update(record.analysisId, record, candidate, context)
+    next_payload = payload.model_copy(update={"audienceWorld": candidate})
+    return record.model_copy(update={"payload": next_payload})
+
+
+def _should_upgrade_world(current: AudienceWorldPayload, candidate: AudienceWorldPayload) -> bool:
+    status_rank = {"unavailable": 0, "hydrating": 1, "partial": 2, "ready": 3}
+    if status_rank.get(candidate.status, 0) > status_rank.get(current.status, 0):
+        return True
+    return (
+        len(candidate.threads) > len(current.threads)
+        or len(candidate.cohorts) > len(current.cohorts)
+        or len(candidate.agents) > len(current.agents)
+        or len(candidate.interviews) > len(current.interviews)
+        or len(candidate.evidenceMoments) > len(current.evidenceMoments)
+    )
+
+
+def _world_windows(payload: AnalysisPayload) -> list[dict[str, object]]:
+    if payload.audienceOutlook is None:
+        return []
+    return [
+        {
+            "windowIndex": index,
+            "startSec": moment.startSec,
+            "endSec": moment.endSec,
+            "note": moment.note,
+        }
+        for index, moment in enumerate(payload.audienceOutlook.timeline, start=1)
+    ]
+
+
+def _merge_interviews_into_world(
+    world: AudienceWorldPayload,
+    interviews: list[dict[str, object]],
+) -> AudienceWorldPayload:
+    merged: dict[tuple[int, str, str | None], AudienceWorldInterview] = {
+        (item.agentId, item.prompt, item.platform): item for item in world.interviews
+    }
+    for item in interviews:
+        interview = AudienceWorldInterview.model_validate(item)
+        merged[(interview.agentId, interview.prompt, interview.platform)] = interview
+    status = "ready" if merged else world.status
+    return world.model_copy(
+        update={
+            "status": status,
+            "interviews": list(merged.values()),
+        }
+    )
+
+
+def _persist_world_update(
+    analysis_id: str,
+    record: AnalysisResponse,
+    world: AudienceWorldPayload,
+    context: APIContext,
+) -> None:
+    context.storage.write_analysis_world(analysis_id, world)
+    if record.payload is None:
+        return
+    next_payload = record.payload.model_copy(update={"audienceWorld": world})
+    context.storage.write_analysis_payload(analysis_id, next_payload)
 
 
 @router.post("/compare", response_model=CompareResponse)

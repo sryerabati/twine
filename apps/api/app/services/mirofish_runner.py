@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter, defaultdict
 import json
 import os
 import re
@@ -102,7 +103,14 @@ class MiroFishRunner:
                 graph_id = self._build_graph(client, base_url, project_id)
                 simulation_id = self._create_simulation(client, base_url, project_id, graph_id)
                 self._prepare_simulation(client, base_url, simulation_id)
-                self._run_simulation(client, base_url, simulation_id)
+                self._run_simulation(client, base_url, simulation_id, graph_id=graph_id)
+                audience_world = self._hydrate_audience_world(
+                    client,
+                    base_url,
+                    simulation_id,
+                    windows=brief.windows,
+                    include_cached_interviews=False,
+                )
                 response_payload = self._request_structured_outlook(
                     client,
                     base_url,
@@ -152,6 +160,7 @@ class MiroFishRunner:
                 "graphId": graph_id,
                 "simulationId": simulation_id,
                 "briefWarnings": brief.warnings,
+                "audienceWorld": audience_world,
                 "response": response_payload,
             },
             proxyAnalysis={
@@ -405,7 +414,7 @@ class MiroFishRunner:
     def _prepare_simulation(self, client: httpx.Client, base_url: str, simulation_id: str) -> None:
         response = client.post(
             f"{base_url}/api/simulation/prepare",
-            json={"simulation_id": simulation_id, "parallel_profile_count": 3},
+            json={"simulation_id": simulation_id, "parallel_profile_count": 5},
         )
         response.raise_for_status()
         payload = response.json()
@@ -439,13 +448,21 @@ class MiroFishRunner:
 
         raise MiroFishIntegrationError("Timed out waiting for MiroFish simulation preparation to finish.")
 
-    def _run_simulation(self, client: httpx.Client, base_url: str, simulation_id: str) -> None:
+    def _run_simulation(
+        self,
+        client: httpx.Client,
+        base_url: str,
+        simulation_id: str,
+        *,
+        graph_id: str,
+    ) -> None:
         response = client.post(
             f"{base_url}/api/simulation/start",
             json={
                 "simulation_id": simulation_id,
                 "platform": "parallel",
                 "max_rounds": self.settings.mirofish_simulation_max_rounds,
+                "enable_graph_memory_update": True,
             },
         )
         response.raise_for_status()
@@ -506,6 +523,711 @@ class MiroFishRunner:
         if not payload.get("success"):
             raise MiroFishIntegrationError(str(payload.get("error") or "MiroFish report agent chat failed."))
         return payload
+
+    def hydrate_audience_world(
+        self,
+        simulation_id: str,
+        *,
+        windows: list[dict[str, object]] | None = None,
+        include_cached_interviews: bool = True,
+    ) -> dict[str, Any]:
+        base_url = self._ensure_service_ready()
+        try:
+            with httpx.Client(
+                timeout=httpx.Timeout(30.0, read=120.0),
+                headers=self._service_headers(),
+            ) as client:
+                return self._hydrate_audience_world(
+                    client,
+                    base_url,
+                    simulation_id,
+                    windows=windows or [],
+                    include_cached_interviews=include_cached_interviews,
+                )
+        except httpx.HTTPStatusError as exc:
+            self._model_error = f"MiroFish returned HTTP {exc.response.status_code}."
+            raise MiroFishIntegrationError(self._model_error) from exc
+        except httpx.HTTPError as exc:
+            self._model_error = f"MiroFish request failed: {exc}"
+            raise MiroFishIntegrationError(self._model_error) from exc
+
+    def interview_agents(
+        self,
+        simulation_id: str,
+        *,
+        agent_ids: list[int],
+        prompt: str,
+        platform: str | None = None,
+    ) -> list[dict[str, Any]]:
+        base_url = self._ensure_service_ready()
+        try:
+            with httpx.Client(
+                timeout=httpx.Timeout(30.0, read=120.0),
+                headers=self._service_headers(),
+            ) as client:
+                return self._interview_agents(
+                    client,
+                    base_url,
+                    simulation_id,
+                    agent_ids=agent_ids,
+                    prompt=prompt,
+                    platform=platform,
+                )
+        except httpx.HTTPStatusError as exc:
+            self._model_error = f"MiroFish returned HTTP {exc.response.status_code}."
+            raise MiroFishIntegrationError(self._model_error) from exc
+        except httpx.HTTPError as exc:
+            self._model_error = f"MiroFish request failed: {exc}"
+            raise MiroFishIntegrationError(self._model_error) from exc
+
+    def _hydrate_audience_world(
+        self,
+        client: httpx.Client,
+        base_url: str,
+        simulation_id: str,
+        *,
+        windows: list[dict[str, object]],
+        include_cached_interviews: bool,
+    ) -> dict[str, Any]:
+        reddit_posts = self._service_data(
+            client,
+            f"{base_url}/api/simulation/{simulation_id}/posts",
+            params={"platform": "reddit", "limit": 120, "offset": 0},
+        ).get("posts", [])
+        twitter_posts = self._service_data(
+            client,
+            f"{base_url}/api/simulation/{simulation_id}/posts",
+            params={"platform": "twitter", "limit": 120, "offset": 0},
+        ).get("posts", [])
+        comments = self._service_data(
+            client,
+            f"{base_url}/api/simulation/{simulation_id}/comments",
+            params={"limit": 240, "offset": 0},
+        ).get("comments", [])
+        reddit_profiles = self._service_data(
+            client,
+            f"{base_url}/api/simulation/{simulation_id}/profiles/realtime",
+            params={"platform": "reddit"},
+        ).get("profiles", [])
+        twitter_profiles = self._service_data(
+            client,
+            f"{base_url}/api/simulation/{simulation_id}/profiles/realtime",
+            params={"platform": "twitter"},
+        ).get("profiles", [])
+        agent_stats = self._service_data(
+            client,
+            f"{base_url}/api/simulation/{simulation_id}/agent-stats",
+        ).get("stats", [])
+        timeline = self._service_data(
+            client,
+            f"{base_url}/api/simulation/{simulation_id}/timeline",
+        ).get("timeline", [])
+        run_detail = self._service_data(
+            client,
+            f"{base_url}/api/simulation/{simulation_id}/run-status/detail",
+        )
+
+        merged_profiles, agent_platforms = self._merge_profiles(
+            reddit_profiles=reddit_profiles,
+            twitter_profiles=twitter_profiles,
+        )
+        stats_by_agent = {
+            int(item.get("agent_id", 0)): item for item in agent_stats if item.get("agent_id") is not None
+        }
+        agents = self._normalize_world_agents(merged_profiles, agent_platforms, stats_by_agent)
+        cohorts, agent_to_cohort = self._build_audience_cohorts(
+            agents=agents,
+            posts=[*reddit_posts, *twitter_posts],
+            comments=comments,
+        )
+        threads = self._build_threads(
+            reddit_posts=reddit_posts,
+            twitter_posts=twitter_posts,
+            comments=comments,
+            profiles=merged_profiles,
+            stats_by_agent=stats_by_agent,
+            agent_to_cohort=agent_to_cohort,
+        )
+        platform_breakdown = self._platform_breakdown(threads)
+        interviews: list[dict[str, Any]] = []
+        if include_cached_interviews:
+            interviews = self._cached_interviews(
+                client,
+                base_url,
+                simulation_id,
+                threads=threads,
+            )
+        evidence_moments = self._build_evidence_moments(
+            windows=windows,
+            threads=threads,
+            timeline=timeline,
+            run_detail=run_detail,
+            agent_to_cohort=agent_to_cohort,
+        )
+        if windows:
+            moment_ids = {item["windowId"] for item in evidence_moments}
+            for cohort in cohorts:
+                if not cohort["momentIds"]:
+                    cohort["momentIds"] = sorted(moment_ids)
+
+        status = "hydrating"
+        if threads or agents:
+            status = "ready" if include_cached_interviews else "hydrating"
+            if include_cached_interviews and not interviews:
+                status = "partial"
+        else:
+            status = "unavailable"
+
+        return {
+            "status": status,
+            "simulationId": simulation_id,
+            "platformBreakdown": platform_breakdown,
+            "cohorts": cohorts,
+            "threads": threads,
+            "agents": agents,
+            "interviews": interviews,
+            "evidenceMoments": evidence_moments,
+        }
+
+    @staticmethod
+    def _service_data(
+        client: httpx.Client,
+        url: str,
+        *,
+        params: dict[str, object] | None = None,
+        json_body: dict[str, object] | None = None,
+        method: str = "GET",
+    ) -> dict[str, Any]:
+        response = (
+            client.post(url, json=json_body)
+            if method.upper() == "POST"
+            else client.get(url, params=params)
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if not payload.get("success"):
+            raise MiroFishIntegrationError(str(payload.get("error") or f"MiroFish request failed for {url}."))
+        data = payload.get("data")
+        return data if isinstance(data, dict) else {}
+
+    def _merge_profiles(
+        self,
+        *,
+        reddit_profiles: list[dict[str, Any]],
+        twitter_profiles: list[dict[str, Any]],
+    ) -> tuple[dict[int, dict[str, Any]], dict[int, set[str]]]:
+        merged: dict[int, dict[str, Any]] = {}
+        platforms: dict[int, set[str]] = defaultdict(set)
+
+        for platform, profiles in (("reddit", reddit_profiles), ("twitter", twitter_profiles)):
+            for item in profiles:
+                agent_id = int(item.get("agent_id", 0) or 0)
+                if agent_id <= 0:
+                    continue
+                current = merged.setdefault(agent_id, {"agent_id": agent_id})
+                for key in ("name", "username", "profession", "bio"):
+                    value = str(item.get(key) or "").strip()
+                    if value and not current.get(key):
+                        current[key] = value
+                platforms[agent_id].add(platform)
+        return merged, platforms
+
+    def _normalize_world_agents(
+        self,
+        merged_profiles: dict[int, dict[str, Any]],
+        agent_platforms: dict[int, set[str]],
+        stats_by_agent: dict[int, dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        all_agent_ids = sorted(
+            set(merged_profiles.keys()) | set(stats_by_agent.keys()),
+            key=lambda agent_id: int(stats_by_agent.get(agent_id, {}).get("total_actions", 0)),
+            reverse=True,
+        )
+        agents: list[dict[str, Any]] = []
+        for agent_id in all_agent_ids:
+            profile = merged_profiles.get(agent_id, {})
+            stats = stats_by_agent.get(agent_id, {})
+            username = str(profile.get("username") or stats.get("agent_name") or f"agent_{agent_id}").strip()
+            display_name = str(profile.get("name") or stats.get("agent_name") or self._humanize_handle(username)).strip()
+            role = str(profile.get("profession") or profile.get("bio") or "Simulated audience agent").strip()
+            handle = f"@{username.lstrip('@')}"
+            platforms = sorted(agent_platforms.get(agent_id) or self._platforms_from_stats(stats))
+            agents.append(
+                {
+                    "id": agent_id,
+                    "displayName": display_name,
+                    "handle": handle,
+                    "role": role,
+                    "platforms": platforms,
+                    "bio": str(profile.get("bio") or "").strip() or None,
+                    "stats": {
+                        "totalActions": int(stats.get("total_actions", 0) or 0),
+                        "redditActions": int(stats.get("reddit_actions", 0) or 0),
+                        "twitterActions": int(stats.get("twitter_actions", 0) or 0),
+                    },
+                }
+            )
+        return agents
+
+    @staticmethod
+    def _platforms_from_stats(stats: dict[str, Any]) -> set[str]:
+        platforms: set[str] = set()
+        if int(stats.get("reddit_actions", 0) or 0) > 0:
+            platforms.add("reddit")
+        if int(stats.get("twitter_actions", 0) or 0) > 0:
+            platforms.add("twitter")
+        return platforms
+
+    def _build_threads(
+        self,
+        *,
+        reddit_posts: list[dict[str, Any]],
+        twitter_posts: list[dict[str, Any]],
+        comments: list[dict[str, Any]],
+        profiles: dict[int, dict[str, Any]],
+        stats_by_agent: dict[int, dict[str, Any]],
+        agent_to_cohort: dict[int, str],
+    ) -> list[dict[str, Any]]:
+        comments_by_post: dict[int, list[dict[str, Any]]] = defaultdict(list)
+        for comment in comments:
+            post_id = int(comment.get("post_id", 0) or 0)
+            if post_id:
+                comments_by_post[post_id].append(comment)
+
+        threads: list[dict[str, Any]] = []
+        for platform, posts in (("reddit", reddit_posts), ("twitter", twitter_posts)):
+            for post in posts:
+                post_id = int(post.get("post_id", 0) or 0)
+                if post_id <= 0:
+                    continue
+                root = self._world_comment_from_record(
+                    record=post,
+                    platform=platform,
+                    kind="post",
+                    profiles=profiles,
+                    stats_by_agent=stats_by_agent,
+                )
+                replies = []
+                if platform == "reddit":
+                    replies = [
+                        self._world_comment_from_record(
+                            record=comment,
+                            platform=platform,
+                            kind="comment",
+                            profiles=profiles,
+                            stats_by_agent=stats_by_agent,
+                        )
+                        for comment in sorted(
+                            comments_by_post.get(post_id, []),
+                            key=lambda item: (
+                                -int(item.get("num_likes", 0) or 0),
+                                str(item.get("created_at", "")),
+                            ),
+                        )
+                    ]
+                stances = [self._voice_stance(root["content"]), *(self._voice_stance(reply["content"]) for reply in replies)]
+                stance_counts = Counter(stances)
+                dominant_stance = "mixed"
+                if stance_counts:
+                    ordered_stances = stance_counts.most_common()
+                    dominant_stance = ordered_stances[0][0]
+                    if len(ordered_stances) > 1 and ordered_stances[0][1] == ordered_stances[1][1]:
+                        dominant_stance = "mixed"
+                cohort_ids = {
+                    agent_to_cohort.get(root.get("agentId") or -1),
+                    *(agent_to_cohort.get(reply.get("agentId") or -1) for reply in replies),
+                }
+                engagement = int(root["likes"]) + int(root["shares"]) + sum(int(reply["likes"]) for reply in replies)
+                threads.append(
+                    {
+                        "id": root["id"],
+                        "platform": platform,
+                        "dominantStance": dominant_stance,
+                        "engagement": engagement,
+                        "replyCount": len(replies),
+                        "participatingCohortIds": sorted(cohort_id for cohort_id in cohort_ids if cohort_id),
+                        "rootPost": root,
+                        "replies": replies,
+                    }
+                )
+        return sorted(
+            threads,
+            key=lambda item: (-int(item["engagement"]), -int(item["replyCount"]), str(item["id"])),
+        )
+
+    def _world_comment_from_record(
+        self,
+        *,
+        record: dict[str, Any],
+        platform: str,
+        kind: str,
+        profiles: dict[int, dict[str, Any]],
+        stats_by_agent: dict[int, dict[str, Any]],
+    ) -> dict[str, Any]:
+        agent_id = int(record.get("user_id", 0) or 0)
+        profile = profiles.get(agent_id, {})
+        stats = stats_by_agent.get(agent_id, {})
+        username = str(profile.get("username") or stats.get("agent_name") or f"agent_{agent_id}").strip()
+        display_name = str(profile.get("name") or stats.get("agent_name") or self._humanize_handle(username)).strip()
+        content = str(record.get("content") or record.get("title") or "").strip()
+        role = str(profile.get("profession") or profile.get("bio") or "Simulated audience agent").strip()
+        record_id = int(record.get(f"{kind}_id", 0) or 0)
+        return {
+            "id": f"{platform}-{kind}-{record_id}",
+            "agentId": agent_id if agent_id > 0 else None,
+            "speaker": display_name,
+            "handle": f"@{username.lstrip('@')}",
+            "role": role,
+            "platform": platform,
+            "content": content,
+            "createdAt": record.get("created_at"),
+            "likes": int(record.get("num_likes", 0) or 0),
+            "shares": int(record.get("num_shares", 0) or 0),
+        }
+
+    def _build_audience_cohorts(
+        self,
+        *,
+        agents: list[dict[str, Any]],
+        posts: list[dict[str, Any]],
+        comments: list[dict[str, Any]],
+    ) -> tuple[list[dict[str, Any]], dict[int, str]]:
+        text_by_agent: dict[int, list[str]] = defaultdict(list)
+        for item in [*posts, *comments]:
+            agent_id = int(item.get("user_id", 0) or 0)
+            if agent_id > 0:
+                text_by_agent[agent_id].append(str(item.get("content") or "").strip())
+
+        grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        agent_to_cohort: dict[int, str] = {}
+        for agent in agents:
+            agent_id = int(agent["id"])
+            agent_texts = text_by_agent.get(agent_id, [])
+            dominant_stance = self._dominant_stance(agent_texts)
+            cohort_id, label = self._cohort_identity(agent, dominant_stance=dominant_stance)
+            grouped[cohort_id].append(
+                {
+                    **agent,
+                    "_label": label,
+                    "_texts": agent_texts,
+                    "_dominant_stance": dominant_stance,
+                }
+            )
+            agent_to_cohort[agent_id] = cohort_id
+
+        cohorts: list[dict[str, Any]] = []
+        for cohort_id, members in sorted(grouped.items(), key=lambda item: len(item[1]), reverse=True):
+            members = sorted(
+                members,
+                key=lambda item: (
+                    -int(item["stats"]["totalActions"]),
+                    str(item["displayName"]).lower(),
+                ),
+            )
+            label = str(members[0]["_label"])
+            sentiments = [self._voice_stance(text) for member in members for text in member["_texts"] if text]
+            leaning = self._dominant_stance_from_values(
+                sentiments or [str(member["_dominant_stance"]) for member in members]
+            )
+            liked = self._top_supporting_lines([text for member in members for text in member["_texts"]])
+            blocked = self._top_blocking_lines([text for member in members for text in member["_texts"]])
+            proof_threshold = (
+                "Needs clearer proof before the claim fully lands."
+                if blocked
+                else "Needs enough proof to justify trying the workflow."
+            )
+            cohorts.append(
+                {
+                    "id": cohort_id,
+                    "label": label,
+                    "size": len(members),
+                    "leaning": leaning,
+                    "proofThreshold": proof_threshold,
+                    "keyConcerns": blocked[:3] or ["Still looking for stronger proof in the back half."],
+                    "liked": liked[:3],
+                    "blocked": blocked[:3],
+                    "representativeAgentIds": [int(member["id"]) for member in members[:3]],
+                    "momentIds": [],
+                }
+            )
+        return cohorts[:5], agent_to_cohort
+
+    @staticmethod
+    def _cohort_identity(
+        agent: dict[str, Any],
+        *,
+        dominant_stance: str,
+    ) -> tuple[str, str]:
+        role_text = " ".join(
+            part.strip().lower()
+            for part in (str(agent.get("role") or ""), str(agent.get("bio") or ""))
+            if part and part.strip()
+        ).strip()
+        generic_role = role_text in {"", "simulated audience agent"}
+        if not generic_role and any(token in role_text for token in ("ugc", "creator", "editor")):
+            return ("ugc-creators", "UGC creators")
+        if not generic_role and any(token in role_text for token in ("brand", "growth", "marketing", "strategist")):
+            return ("growth-brand", "Growth and brand operators")
+        if not generic_role and any(token in role_text for token in ("analyst", "research", "strategy")):
+            return ("analysts", "Analysts and planners")
+        if not generic_role and any(token in role_text for token in ("parent", "mom", "dad", "family")):
+            return ("parents", "Parents")
+
+        stats = agent.get("stats", {})
+        total_actions = int(stats.get("totalActions", 0) or 0)
+        reddit_actions = int(stats.get("redditActions", 0) or 0)
+        twitter_actions = int(stats.get("twitterActions", 0) or 0)
+
+        if total_actions <= 4:
+            return ("quiet-observers", "Quiet observers")
+
+        if twitter_actions >= reddit_actions + 2:
+            if dominant_stance == "negative":
+                return ("twitter-skeptics", "Twitter-first skeptics")
+            if dominant_stance == "positive":
+                return ("twitter-boosters", "Twitter-first boosters")
+            return ("twitter-watchers", "Twitter-first watchers")
+
+        if reddit_actions >= twitter_actions + 2:
+            if dominant_stance == "negative":
+                return ("reddit-skeptics", "Reddit-first skeptics")
+            if dominant_stance == "positive":
+                return ("reddit-advocates", "Reddit-first advocates")
+            return ("reddit-evaluators", "Reddit-first evaluators")
+
+        if dominant_stance == "negative":
+            return ("cross-platform-skeptics", "Cross-platform skeptics")
+        if dominant_stance == "positive":
+            return ("cross-platform-supporters", "Cross-platform supporters")
+        return ("cross-platform-watchers", "Cross-platform watchers")
+
+    @classmethod
+    def _dominant_stance(cls, texts: list[str]) -> str:
+        sentiments = [cls._voice_stance(text) for text in texts if text.strip()]
+        return cls._dominant_stance_from_values(sentiments)
+
+    @staticmethod
+    def _dominant_stance_from_values(sentiments: list[str]) -> str:
+        if not sentiments:
+            return "mixed"
+        counts = Counter(sentiments)
+        ordered = counts.most_common()
+        if len(ordered) > 1 and ordered[0][1] == ordered[1][1]:
+            return "mixed"
+        return str(ordered[0][0])
+
+    def _platform_breakdown(self, threads: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        by_platform: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for thread in threads:
+            by_platform[str(thread["platform"])].append(thread)
+        breakdown: list[dict[str, Any]] = []
+        for platform, platform_threads in sorted(by_platform.items()):
+            stances = Counter(str(thread["dominantStance"]) for thread in platform_threads)
+            dominant = stances.most_common(1)[0][0] if stances else "mixed"
+            breakdown.append(
+                {
+                    "platform": platform,
+                    "volume": len(platform_threads) + sum(int(thread["replyCount"]) for thread in platform_threads),
+                    "engagement": sum(int(thread["engagement"]) for thread in platform_threads),
+                    "leaning": dominant,
+                    "dominantNarratives": self._dominant_narratives(platform_threads),
+                }
+            )
+        return sorted(breakdown, key=lambda item: (-int(item["engagement"]), str(item["platform"])))
+
+    @staticmethod
+    def _dominant_narratives(threads: list[dict[str, Any]]) -> list[str]:
+        narratives: list[str] = []
+        for thread in threads[:3]:
+            content = str(thread["rootPost"]["content"]).strip()
+            if not content:
+                continue
+            narratives.append(content[:120].rstrip(". ") + ("." if not content.endswith(".") else ""))
+        return narratives
+
+    def _cached_interviews(
+        self,
+        client: httpx.Client,
+        base_url: str,
+        simulation_id: str,
+        *,
+        threads: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        if not threads:
+            return []
+        ranked_agents: list[tuple[int, str]] = []
+        seen_agents: set[int] = set()
+        for thread in threads:
+            root = thread.get("rootPost") or {}
+            agent_id = int(root.get("agentId") or 0)
+            if agent_id > 0 and agent_id not in seen_agents:
+                stance = str(thread.get("dominantStance") or "mixed")
+                ranked_agents.append((agent_id, stance))
+                seen_agents.add(agent_id)
+
+        positive_agent = next((agent_id for agent_id, stance in ranked_agents if stance == "positive"), None)
+        if positive_agent is None and ranked_agents:
+            positive_agent = ranked_agents[0][0]
+        skeptical_agent = next((agent_id for agent_id, stance in ranked_agents if stance == "negative"), None)
+        interviews_request: list[dict[str, Any]] = []
+        if positive_agent is not None:
+            interviews_request.append(
+                {"agent_id": positive_agent, "prompt": "What made you trust this moment?"}
+            )
+        if skeptical_agent is not None:
+            interviews_request.append(
+                {"agent_id": skeptical_agent, "prompt": "What made you skeptical of this video?"}
+            )
+        if not interviews_request:
+            return []
+
+        payload = self._service_data(
+            client,
+            f"{base_url}/api/simulation/interview/batch",
+            json_body={
+                "simulation_id": simulation_id,
+                "interviews": interviews_request,
+                "timeout": 120,
+            },
+            method="POST",
+        )
+        results = ((payload.get("result") or {}).get("results") or {})
+        interviews: list[dict[str, Any]] = []
+        prompt_by_agent = {int(item["agent_id"]): str(item["prompt"]) for item in interviews_request}
+        for value in results.values():
+            if not isinstance(value, dict):
+                continue
+            agent_id = int(value.get("agent_id", 0) or 0)
+            response = str(value.get("response") or "").strip()
+            if agent_id <= 0 or not response:
+                continue
+            interviews.append(
+                {
+                    "agentId": agent_id,
+                    "prompt": prompt_by_agent.get(agent_id, ""),
+                    "response": response,
+                    "platform": value.get("platform"),
+                    "cached": True,
+                }
+            )
+        return interviews
+
+    def _build_evidence_moments(
+        self,
+        *,
+        windows: list[dict[str, object]],
+        threads: list[dict[str, Any]],
+        timeline: list[dict[str, Any]],
+        run_detail: dict[str, Any],
+        agent_to_cohort: dict[int, str],
+    ) -> list[dict[str, Any]]:
+        evidence: list[dict[str, Any]] = []
+        all_actions = run_detail.get("all_actions") or []
+        sorted_threads = threads or []
+        for index, window in enumerate(windows, start=1):
+            thread = sorted_threads[min(index - 1, max(len(sorted_threads) - 1, 0))] if sorted_threads else None
+            headline = str(window.get("note") or "The room reacts strongly here.").strip()
+            reason = headline
+            thread_ids: list[str] = []
+            cohort_ids: list[str] = []
+            agent_ids: list[int] = []
+            if thread:
+                thread_ids = [str(thread["id"])]
+                cohort_ids = list(thread.get("participatingCohortIds") or [])
+                root_agent_id = int(thread["rootPost"].get("agentId") or 0)
+                if root_agent_id > 0:
+                    agent_ids.append(root_agent_id)
+                reason = str(thread["rootPost"]["content"]).strip()[:180]
+            if index - 1 < len(timeline):
+                round_num = int(timeline[index - 1].get("round_num", 0) or 0)
+                action = next(
+                    (
+                        item
+                        for item in all_actions
+                        if int(item.get("round_num", 0) or 0) == round_num
+                    ),
+                    None,
+                )
+                if action:
+                    action_agent_id = int(action.get("agent_id", 0) or 0)
+                    if action_agent_id > 0 and action_agent_id not in agent_ids:
+                        agent_ids.append(action_agent_id)
+                    cohort_id = agent_to_cohort.get(action_agent_id)
+                    if cohort_id and cohort_id not in cohort_ids:
+                        cohort_ids.append(cohort_id)
+            evidence.append(
+                {
+                    "windowId": f"window-{index}",
+                    "startSec": float(window.get("startSec", 0.0) or 0.0),
+                    "endSec": float(window.get("endSec", 0.0) or 0.0),
+                    "headline": headline,
+                    "reason": reason,
+                    "threadIds": thread_ids,
+                    "cohortIds": cohort_ids,
+                    "agentIds": agent_ids,
+                }
+            )
+        return evidence
+
+    def _interview_agents(
+        self,
+        client: httpx.Client,
+        base_url: str,
+        simulation_id: str,
+        *,
+        agent_ids: list[int],
+        prompt: str,
+        platform: str | None,
+    ) -> list[dict[str, Any]]:
+        payload = self._service_data(
+            client,
+            f"{base_url}/api/simulation/interview/batch",
+            json_body={
+                "simulation_id": simulation_id,
+                "interviews": [
+                    {"agent_id": int(agent_id), "prompt": prompt, **({"platform": platform} if platform else {})}
+                    for agent_id in agent_ids
+                ],
+                **({"platform": platform} if platform else {}),
+                "timeout": 120,
+            },
+            method="POST",
+        )
+        results = ((payload.get("result") or {}).get("results") or {})
+        interviews: list[dict[str, Any]] = []
+        for value in results.values():
+            if not isinstance(value, dict):
+                continue
+            agent_id = int(value.get("agent_id", 0) or 0)
+            response = str(value.get("response") or "").strip()
+            if agent_id <= 0 or not response:
+                continue
+            interviews.append(
+                {
+                    "agentId": agent_id,
+                    "prompt": prompt,
+                    "response": response,
+                    "platform": value.get("platform") or platform,
+                    "cached": False,
+                }
+            )
+        return sorted(interviews, key=lambda item: (agent_ids.index(int(item["agentId"])), str(item.get("platform") or "")))
+
+    @staticmethod
+    def _top_supporting_lines(texts: list[str]) -> list[str]:
+        return [
+            text.strip()
+            for text in texts
+            if text.strip() and MiroFishRunner._voice_stance(text) == "positive"
+        ][:3]
+
+    @staticmethod
+    def _top_blocking_lines(texts: list[str]) -> list[str]:
+        return [
+            text.strip()
+            for text in texts
+            if text.strip() and MiroFishRunner._voice_stance(text) == "negative"
+        ][:3]
 
     def _load_room_voices(
         self,
@@ -805,7 +1527,9 @@ class MiroFishRunner:
         ]
         positive_score = sum(lowered.count(marker) for marker in positive_markers)
         negative_score = sum(lowered.count(marker) for marker in negative_markers)
-        return "negative" if negative_score >= positive_score else "positive"
+        if positive_score == negative_score:
+            return "mixed"
+        return "negative" if negative_score > positive_score else "positive"
 
     def _extract_analysis(self, payload: dict[str, Any]) -> dict[str, Any]:
         response_text = str((payload.get("data") or {}).get("response") or "").strip()

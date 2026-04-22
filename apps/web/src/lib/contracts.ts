@@ -109,6 +109,97 @@ export type AudienceOutlook = {
   roomVoices?: AudienceVoice[];
 };
 
+export type AudienceWorldPlatformBreakdown = {
+  platform: string;
+  volume: number;
+  engagement: number;
+  leaning: string;
+  dominantNarratives: string[];
+};
+
+export type AudienceWorldCohort = {
+  id: string;
+  label: string;
+  size: number;
+  leaning: string;
+  proofThreshold: string;
+  keyConcerns: string[];
+  liked: string[];
+  blocked: string[];
+  representativeAgentIds: number[];
+  momentIds: string[];
+};
+
+export type AudienceWorldComment = {
+  id: string;
+  agentId?: number | null;
+  speaker: string;
+  handle: string;
+  role: string;
+  platform: string;
+  content: string;
+  createdAt?: string | null;
+  likes: number;
+  shares: number;
+};
+
+export type AudienceWorldThread = {
+  id: string;
+  platform: string;
+  dominantStance: string;
+  engagement: number;
+  replyCount: number;
+  participatingCohortIds: string[];
+  rootPost: AudienceWorldComment;
+  replies: AudienceWorldComment[];
+};
+
+export type AudienceWorldAgentStats = {
+  totalActions: number;
+  redditActions: number;
+  twitterActions: number;
+};
+
+export type AudienceWorldAgent = {
+  id: number;
+  displayName: string;
+  handle: string;
+  role: string;
+  platforms: string[];
+  bio?: string | null;
+  stats: AudienceWorldAgentStats;
+};
+
+export type AudienceWorldInterview = {
+  agentId: number;
+  prompt: string;
+  response: string;
+  platform?: string | null;
+  cached: boolean;
+};
+
+export type AudienceWorldEvidenceMoment = {
+  windowId: string;
+  startSec: number;
+  endSec: number;
+  headline: string;
+  reason: string;
+  threadIds: string[];
+  cohortIds: string[];
+  agentIds: number[];
+};
+
+export type AudienceWorld = {
+  status: "hydrating" | "ready" | "partial" | "unavailable";
+  simulationId: string;
+  platformBreakdown: AudienceWorldPlatformBreakdown[];
+  cohorts: AudienceWorldCohort[];
+  threads: AudienceWorldThread[];
+  agents: AudienceWorldAgent[];
+  interviews: AudienceWorldInterview[];
+  evidenceMoments: AudienceWorldEvidenceMoment[];
+};
+
 export type Marker = {
   t: number;
   type: MarkerType;
@@ -180,6 +271,7 @@ export type AnalysisPayload = {
     };
   };
   audienceOutlook?: AudienceOutlook | null;
+  audienceWorld?: AudienceWorld | null;
   brainSummary?: BrainSignalSummary | null;
   markers: Marker[];
   deadspaceCuts: DeadspaceCut[];
@@ -238,6 +330,18 @@ export type CompareResponse = {
     aScore: number;
     bScore: number;
   }>;
+};
+
+export type AudienceWorldResponse = {
+  analysisId: string;
+  world: AudienceWorld;
+};
+
+export type AudienceWorldInterviewResponse = {
+  analysisId: string;
+  prompt: string;
+  cached: boolean;
+  interviews: AudienceWorldInterview[];
 };
 
 export type ScanType = "single" | "compare";

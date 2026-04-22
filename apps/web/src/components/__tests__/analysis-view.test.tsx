@@ -8,6 +8,8 @@ import type { AnalysisResponse } from "@/lib/contracts";
 
 vi.mock("@/lib/api", () => ({
   fetchAnalysis: vi.fn(),
+  fetchAnalysisWorld: vi.fn(),
+  interviewAudienceWorld: vi.fn(),
   trimAnalysis: vi.fn(),
 }));
 
@@ -101,6 +103,198 @@ const completedResponse: AnalysisResponse = {
           dropoffRisk: 0.18,
           primaryReaction: "leaning in",
           note: "The room gets the setup fast.",
+        },
+      ],
+    },
+    audienceWorld: {
+      status: "ready",
+      simulationId: "sim-123",
+      platformBreakdown: [
+        {
+          platform: "reddit",
+          volume: 5,
+          engagement: 24,
+          leaning: "mixed",
+          dominantNarratives: [
+            "UGC creators will save time on rough cuts with this workflow.",
+            "The feature pitch is sharp, but the proof still feels thin.",
+          ],
+        },
+        {
+          platform: "twitter",
+          volume: 2,
+          engagement: 13,
+          leaning: "negative",
+          dominantNarratives: [
+            "This opener would stop my scroll, but the back half needs harder proof.",
+          ],
+        },
+      ],
+      cohorts: [
+        {
+          id: "ugc-creators",
+          label: "UGC creators",
+          size: 2,
+          leaning: "positive",
+          proofThreshold: "Needs clearer proof before the claim fully lands.",
+          keyConcerns: ["The ending still drags."],
+          liked: ["UGC creators will save time on rough cuts with this workflow."],
+          blocked: ["The feature pitch is sharp, but the proof still feels thin."],
+          representativeAgentIds: [1, 3],
+          momentIds: ["window-1", "window-2"],
+        },
+        {
+          id: "growth-brand",
+          label: "Growth and brand operators",
+          size: 1,
+          leaning: "negative",
+          proofThreshold: "Needs clearer proof before the claim fully lands.",
+          keyConcerns: ["This opener would stop my scroll, but the back half needs harder proof."],
+          liked: [],
+          blocked: ["This opener would stop my scroll, but the back half needs harder proof."],
+          representativeAgentIds: [2],
+          momentIds: ["window-2"],
+        },
+      ],
+      threads: [
+        {
+          id: "reddit-post-101",
+          platform: "reddit",
+          dominantStance: "mixed",
+          engagement: 19,
+          replyCount: 2,
+          participatingCohortIds: ["ugc-creators"],
+          rootPost: {
+            id: "reddit-post-101",
+            agentId: 1,
+            speaker: "Jules",
+            handle: "@jules_cut",
+            role: "UGC creator and freelance editor",
+            platform: "reddit",
+            content: "UGC creators will save time on rough cuts with this workflow.",
+            createdAt: "2026-04-21T12:00:00",
+            likes: 12,
+            shares: 3,
+          },
+          replies: [
+            {
+              id: "reddit-comment-1001",
+              agentId: 2,
+              speaker: "Nina",
+              handle: "@nina_brand",
+              role: "Brand strategist for consumer apps",
+              platform: "reddit",
+              content: "I like the speed, but the ending still drags.",
+              createdAt: "2026-04-21T12:01:00",
+              likes: 4,
+              shares: 0,
+            },
+            {
+              id: "reddit-comment-1002",
+              agentId: 3,
+              speaker: "Omar",
+              handle: "@omar_growth",
+              role: "Growth marketer and creative analyst",
+              platform: "reddit",
+              content: "I would test this on my next batch because the first beat lands fast.",
+              createdAt: "2026-04-21T12:02:00",
+              likes: 3,
+              shares: 0,
+            },
+          ],
+        },
+        {
+          id: "twitter-post-201",
+          platform: "twitter",
+          dominantStance: "negative",
+          engagement: 13,
+          replyCount: 0,
+          participatingCohortIds: ["growth-brand"],
+          rootPost: {
+            id: "twitter-post-201",
+            agentId: 3,
+            speaker: "Omar",
+            handle: "@omar_growth",
+            role: "Growth marketer and creative analyst",
+            platform: "twitter",
+            content: "This opener would stop my scroll, but the back half needs harder proof.",
+            createdAt: "2026-04-21T12:06:00",
+            likes: 9,
+            shares: 4,
+          },
+          replies: [],
+        },
+      ],
+      agents: [
+        {
+          id: 1,
+          displayName: "Jules",
+          handle: "@jules_cut",
+          role: "UGC creator and freelance editor",
+          platforms: ["reddit"],
+          bio: "Runs creator workflows for product launches.",
+          stats: {
+            totalActions: 7,
+            redditActions: 7,
+            twitterActions: 0,
+          },
+        },
+        {
+          id: 2,
+          displayName: "Nina",
+          handle: "@nina_brand",
+          role: "Brand strategist for consumer apps",
+          platforms: ["reddit"],
+          bio: "Looks for proof and trust gaps in short-form ads.",
+          stats: {
+            totalActions: 5,
+            redditActions: 5,
+            twitterActions: 0,
+          },
+        },
+        {
+          id: 3,
+          displayName: "Omar",
+          handle: "@omar_growth",
+          role: "Growth marketer and creative analyst",
+          platforms: ["reddit", "twitter"],
+          bio: "Tracks hooks, drop-off, and shareability.",
+          stats: {
+            totalActions: 6,
+            redditActions: 2,
+            twitterActions: 4,
+          },
+        },
+      ],
+      interviews: [
+        {
+          agentId: 1,
+          prompt: "What made you trust this?",
+          response: "The first three seconds solved a real workflow pain immediately.",
+          platform: "reddit",
+          cached: true,
+        },
+      ],
+      evidenceMoments: [
+        {
+          windowId: "window-1",
+          startSec: 0,
+          endSec: 4,
+          headline: "The hook solves a real workflow pain before the room asks for proof.",
+          reason: "UGC creators will save time on rough cuts with this workflow.",
+          threadIds: ["reddit-post-101"],
+          cohortIds: ["ugc-creators"],
+          agentIds: [1],
+        },
+        {
+          windowId: "window-2",
+          startSec: 4,
+          endSec: 8,
+          headline: "Interest stays high, but the room starts asking for harder proof.",
+          reason: "This opener would stop my scroll, but the back half needs harder proof.",
+          threadIds: ["twitter-post-201"],
+          cohortIds: ["growth-brand"],
+          agentIds: [3],
         },
       ],
     },
@@ -261,8 +455,12 @@ describe("AnalysisView", () => {
   });
 
   it("prioritizes read the room copy and hides the large brain viewer for audience-mode scans", async () => {
-    const { fetchAnalysis } = await import("@/lib/api");
+    const { fetchAnalysis, fetchAnalysisWorld } = await import("@/lib/api");
     vi.mocked(fetchAnalysis).mockResolvedValue(completedResponse);
+    vi.mocked(fetchAnalysisWorld).mockResolvedValue({
+      analysisId: "analysis-1",
+      world: completedResponse.payload!.audienceWorld!,
+    });
 
     render(<AnalysisView analysisId="analysis-1" />);
 
@@ -271,8 +469,10 @@ describe("AnalysisView", () => {
     });
 
     expect(screen.getByText(/This mode simulates audience reaction alongside a compact brain scan summary/i)).toBeInTheDocument();
-    expect(screen.getByText(/Room voices/i)).toBeInTheDocument();
-    expect(screen.getByText(/Room pulse/i)).toBeInTheDocument();
+    expect(screen.getByText(/Comment graph/i)).toBeInTheDocument();
+    expect(screen.getByText(/Cohorts/i)).toBeInTheDocument();
+    expect(screen.getByText(/Agent interviews/i)).toBeInTheDocument();
+    expect(screen.getByText(/Why the room turned/i)).toBeInTheDocument();
     expect(screen.queryByTestId("brain-viewport")).not.toBeInTheDocument();
     expect(screen.getByText(/Brain scan side signal/i)).toBeInTheDocument();
   });
@@ -360,7 +560,7 @@ describe("AnalysisView", () => {
   });
 
   it("polls until completed and renders the payload without nested soft panels", async () => {
-    const { fetchAnalysis } = await import("@/lib/api");
+    const { fetchAnalysis, fetchAnalysisWorld } = await import("@/lib/api");
     vi.mocked(fetchAnalysis)
       .mockResolvedValueOnce({
         analysisId: "analysis-1",
@@ -371,6 +571,10 @@ describe("AnalysisView", () => {
         payload: null,
       })
       .mockResolvedValueOnce(completedResponse);
+    vi.mocked(fetchAnalysisWorld).mockResolvedValue({
+      analysisId: "analysis-1",
+      world: completedResponse.payload!.audienceWorld!,
+    });
 
     const { container } = render(<AnalysisView analysisId="analysis-1" pollIntervalMs={5} />);
 
@@ -384,11 +588,13 @@ describe("AnalysisView", () => {
       expect(screen.getByText(/Read the room/i)).toBeInTheDocument();
       expect(screen.getByRole("heading", { name: /secondary details/i })).toBeInTheDocument();
     });
-    expect(screen.getByText(/Room voices/i)).toBeInTheDocument();
-    expect(screen.getAllByText("Maya").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Comment graph/i)).toBeInTheDocument();
+    expect(screen.getAllByText("Jules").length).toBeGreaterThan(0);
     expect(
-      screen.getByText(/Wait, I've been seeing this 'Twine' app everywhere/i),
-    ).toBeInTheDocument();
+      screen.getAllByText(/UGC creators will save time on rough cuts with this workflow/i).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Growth and brand operators/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/The hook solves a real workflow pain before the room asks for proof/i)).toBeInTheDocument();
     expect(screen.getByText(/Automatic deadspace trim/i)).toBeInTheDocument();
     expect(screen.getByText(/Quiet stretch\./i)).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Provider response JSON/i })).not.toBeInTheDocument();
@@ -407,17 +613,65 @@ describe("AnalysisView", () => {
   });
 
   it("places room voices after the audience sentiment timeline in read-the-room mode", async () => {
-    const { fetchAnalysis } = await import("@/lib/api");
+    const { fetchAnalysis, fetchAnalysisWorld } = await import("@/lib/api");
     vi.mocked(fetchAnalysis).mockResolvedValue(completedResponse);
+    vi.mocked(fetchAnalysisWorld).mockResolvedValue({
+      analysisId: "analysis-1",
+      world: completedResponse.payload!.audienceWorld!,
+    });
 
     render(<AnalysisView analysisId="analysis-1" />);
 
     const sentimentHeading = await screen.findByText(/Audience sentiment timeline/i);
-    const roomVoicesHeading = await screen.findByText(/Room voices/i);
+    const commentGraphHeading = await screen.findByText(/Comment graph/i);
 
     expect(
-      sentimentHeading.compareDocumentPosition(roomVoicesHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+      sentimentHeading.compareDocumentPosition(commentGraphHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  it("loads live agent interviews for the selected room prompt", async () => {
+    const { fetchAnalysis, fetchAnalysisWorld, interviewAudienceWorld } = await import("@/lib/api");
+    vi.mocked(fetchAnalysis).mockResolvedValue(completedResponse);
+    vi.mocked(fetchAnalysisWorld).mockResolvedValue({
+      analysisId: "analysis-1",
+      world: completedResponse.payload!.audienceWorld!,
+    });
+    vi.mocked(interviewAudienceWorld).mockResolvedValue({
+      analysisId: "analysis-1",
+      prompt: "What made you skeptical?",
+      cached: false,
+      interviews: [
+        {
+          agentId: 3,
+          prompt: "What made you skeptical?",
+          response: "The hook works, but the back half still needs harder proof before I would repost it.",
+          platform: "twitter",
+          cached: false,
+        },
+      ],
+    });
+    const user = userEvent.setup();
+
+    render(<AnalysisView analysisId="analysis-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Agent interviews/i)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /what made you skeptical\?/i }));
+
+    await waitFor(() => {
+      expect(interviewAudienceWorld).toHaveBeenCalledWith(
+        "analysis-1",
+        expect.objectContaining({
+          agentIds: [1, 2, 3],
+          prompt: "What made you skeptical?",
+        }),
+      );
+    });
+
+    expect(screen.getByText(/back half still needs harder proof/i)).toBeInTheDocument();
   });
 
   it("shows an estimated scan progress bar with a front-loaded curve", async () => {

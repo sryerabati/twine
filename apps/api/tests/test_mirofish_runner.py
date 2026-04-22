@@ -32,6 +32,12 @@ def make_mirofish_settings(tmp_path: Path) -> Settings:
     )
 
 
+def test_mirofish_settings_default_to_premium_round_budget() -> None:
+    settings = Settings()
+
+    assert settings.mirofish_simulation_max_rounds == 10
+
+
 def test_mirofish_runner_executes_service_workflow_and_returns_proxy_analysis(
     tmp_path: Path,
     monkeypatch,
@@ -68,12 +74,28 @@ def test_mirofish_runner_executes_service_workflow_and_returns_proxy_analysis(
             warnings=[],
         ),
     )
+    monkeypatch.setattr(
+        runner,
+        "_hydrate_audience_world",
+        lambda client, base_url, simulation_id, *, windows, include_cached_interviews: {
+            "status": "hydrating",
+            "simulationId": simulation_id,
+            "platformBreakdown": [],
+            "cohorts": [],
+            "threads": [],
+            "agents": [],
+            "interviews": [],
+            "evidenceMoments": [],
+        },
+    )
 
     seen_request_headers: list[tuple[str, str, str | None]] = []
     report_prompt: str | None = None
+    prepare_payload: dict[str, object] | None = None
+    start_payload: dict[str, object] | None = None
 
     def handler(request: httpx.Request) -> httpx.Response:
-        nonlocal report_prompt
+        nonlocal report_prompt, prepare_payload, start_payload
         path = request.url.path
         method = request.method
         seen_request_headers.append((method, path, request.headers.get("accept-language")))
@@ -110,6 +132,7 @@ def test_mirofish_runner_executes_service_workflow_and_returns_proxy_analysis(
                 json={"success": True, "data": {"simulation_id": "sim_123"}},
             )
         if method == "POST" and path == "/api/simulation/prepare":
+            prepare_payload = json.loads(request.content.decode("utf-8"))
             return httpx.Response(
                 200,
                 request=request,
@@ -122,6 +145,7 @@ def test_mirofish_runner_executes_service_workflow_and_returns_proxy_analysis(
                 json={"success": True, "data": {"status": "completed", "progress": 100}},
             )
         if method == "POST" and path == "/api/simulation/start":
+            start_payload = json.loads(request.content.decode("utf-8"))
             return httpx.Response(
                 200,
                 request=request,
@@ -203,6 +227,13 @@ def test_mirofish_runner_executes_service_workflow_and_returns_proxy_analysis(
     assert result.providerRaw is not None
     assert result.providerRaw["projectId"] == "proj_123"
     assert report_prompt is not None
+    assert prepare_payload == {"simulation_id": "sim_123", "parallel_profile_count": 5}
+    assert start_payload == {
+        "simulation_id": "sim_123",
+        "platform": "parallel",
+        "max_rounds": 6,
+        "enable_graph_memory_update": True,
+    }
     assert "All natural-language output must be English only." in report_prompt
     assert "Do not use Chinese or any other non-English language" in report_prompt
     assert seen_request_headers
@@ -519,6 +550,328 @@ def test_mirofish_runner_keeps_more_than_four_room_voices_and_longer_quotes(tmp_
     assert voices[-1]["speaker"] == "Voice 6"
 
 
+def test_mirofish_runner_hydrates_native_audience_world_from_service_payloads(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from app.services.mirofish_runner import MiroFishRunner
+
+    settings = make_mirofish_settings(tmp_path)
+    runner = MiroFishRunner(settings)
+
+    interview_requests: list[dict[str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        method = request.method
+        if method == "GET" and path == "/health":
+            return httpx.Response(200, request=request, json={"status": "ok"})
+
+        if method == "GET" and path == "/api/simulation/sim_world/posts":
+            platform = request.url.params.get("platform")
+            if platform == "reddit":
+                return httpx.Response(
+                    200,
+                    request=request,
+                    json={
+                        "success": True,
+                        "data": {
+                            "platform": "reddit",
+                            "count": 2,
+                            "posts": [
+                                {
+                                    "post_id": 101,
+                                    "user_id": 1,
+                                    "content": "UGC creators will save time on rough cuts with this workflow.",
+                                    "created_at": "2026-04-21T12:00:00",
+                                    "num_likes": 12,
+                                    "num_shares": 3,
+                                },
+                                {
+                                    "post_id": 102,
+                                    "user_id": 2,
+                                    "content": "The feature pitch is sharp, but the proof still feels thin.",
+                                    "created_at": "2026-04-21T12:05:00",
+                                    "num_likes": 6,
+                                    "num_shares": 1,
+                                },
+                            ],
+                        },
+                    },
+                )
+            return httpx.Response(
+                200,
+                request=request,
+                json={
+                    "success": True,
+                    "data": {
+                        "platform": "twitter",
+                        "count": 1,
+                        "posts": [
+                            {
+                                "post_id": 201,
+                                "user_id": 3,
+                                "content": "This opener would stop my scroll, but the back half needs harder proof.",
+                                "created_at": "2026-04-21T12:06:00",
+                                "num_likes": 9,
+                                "num_shares": 4,
+                            }
+                        ],
+                    },
+                },
+            )
+
+        if method == "GET" and path == "/api/simulation/sim_world/comments":
+            return httpx.Response(
+                200,
+                request=request,
+                json={
+                    "success": True,
+                    "data": {
+                        "count": 2,
+                        "comments": [
+                            {
+                                "comment_id": 1001,
+                                "post_id": 101,
+                                "user_id": 2,
+                                "content": "I like the speed, but the ending still drags.",
+                                "created_at": "2026-04-21T12:01:00",
+                                "num_likes": 4,
+                            },
+                            {
+                                "comment_id": 1002,
+                                "post_id": 101,
+                                "user_id": 3,
+                                "content": "I would test this on my next batch because the first beat lands fast.",
+                                "created_at": "2026-04-21T12:02:00",
+                                "num_likes": 3,
+                            },
+                        ],
+                    },
+                },
+            )
+
+        if method == "GET" and path == "/api/simulation/sim_world/profiles/realtime":
+            platform = request.url.params.get("platform")
+            if platform == "reddit":
+                profiles = [
+                    {
+                        "agent_id": 1,
+                        "username": "jules_cut",
+                        "name": "Jules",
+                        "profession": "UGC creator and freelance editor",
+                        "bio": "Runs creator workflows for product launches.",
+                    },
+                    {
+                        "agent_id": 2,
+                        "username": "nina_brand",
+                        "name": "Nina",
+                        "profession": "Brand strategist for consumer apps",
+                        "bio": "Looks for proof and trust gaps in short-form ads.",
+                    },
+                ]
+            else:
+                profiles = [
+                    {
+                        "agent_id": 3,
+                        "username": "omar_growth",
+                        "name": "Omar",
+                        "profession": "Growth marketer and creative analyst",
+                        "bio": "Tracks hooks, drop-off, and shareability.",
+                    }
+                ]
+            return httpx.Response(
+                200,
+                request=request,
+                json={
+                    "success": True,
+                    "data": {
+                        "platform": platform,
+                        "count": len(profiles),
+                        "profiles": profiles,
+                    },
+                },
+            )
+
+        if method == "GET" and path == "/api/simulation/sim_world/agent-stats":
+            return httpx.Response(
+                200,
+                request=request,
+                json={
+                    "success": True,
+                    "data": {
+                        "agents_count": 3,
+                        "stats": [
+                            {
+                                "agent_id": 1,
+                                "agent_name": "Jules",
+                                "total_actions": 7,
+                                "twitter_actions": 0,
+                                "reddit_actions": 7,
+                                "action_types": {"CREATE_POST": 2, "COMMENT": 3},
+                            },
+                            {
+                                "agent_id": 2,
+                                "agent_name": "Nina",
+                                "total_actions": 5,
+                                "twitter_actions": 0,
+                                "reddit_actions": 5,
+                                "action_types": {"CREATE_POST": 1, "COMMENT": 2},
+                            },
+                            {
+                                "agent_id": 3,
+                                "agent_name": "Omar",
+                                "total_actions": 6,
+                                "twitter_actions": 4,
+                                "reddit_actions": 2,
+                                "action_types": {"CREATE_POST": 2, "LIKE_POST": 2},
+                            },
+                        ],
+                    },
+                },
+            )
+
+        if method == "GET" and path == "/api/simulation/sim_world/timeline":
+            return httpx.Response(
+                200,
+                request=request,
+                json={
+                    "success": True,
+                    "data": {
+                        "rounds_count": 2,
+                        "timeline": [
+                            {
+                                "round_num": 1,
+                                "twitter_actions": 2,
+                                "reddit_actions": 3,
+                                "total_actions": 5,
+                                "active_agents_count": 3,
+                                "active_agents": [1, 2, 3],
+                                "action_types": {"CREATE_POST": 2, "COMMENT": 1},
+                            },
+                            {
+                                "round_num": 2,
+                                "twitter_actions": 1,
+                                "reddit_actions": 2,
+                                "total_actions": 3,
+                                "active_agents_count": 2,
+                                "active_agents": [1, 2],
+                                "action_types": {"COMMENT": 2, "LIKE_POST": 1},
+                            },
+                        ],
+                    },
+                },
+            )
+
+        if method == "GET" and path == "/api/simulation/sim_world/run-status/detail":
+            return httpx.Response(
+                200,
+                request=request,
+                json={
+                    "success": True,
+                    "data": {
+                        "simulation_id": "sim_world",
+                        "runner_status": "completed",
+                        "current_round": 2,
+                        "total_rounds": 2,
+                        "all_actions": [
+                            {
+                                "round_num": 1,
+                                "timestamp": "2026-04-21T12:00:00",
+                                "platform": "reddit",
+                                "agent_id": 1,
+                                "agent_name": "Jules",
+                                "action_type": "CREATE_POST",
+                                "action_args": {
+                                    "content": "UGC creators will save time on rough cuts with this workflow."
+                                },
+                            },
+                            {
+                                "round_num": 2,
+                                "timestamp": "2026-04-21T12:02:00",
+                                "platform": "reddit",
+                                "agent_id": 2,
+                                "agent_name": "Nina",
+                                "action_type": "COMMENT",
+                                "action_args": {"content": "I like the speed, but the ending still drags."},
+                            },
+                        ],
+                    },
+                },
+            )
+
+        if method == "POST" and path == "/api/simulation/interview/batch":
+            interview_requests.append(json.loads(request.content.decode("utf-8")))
+            return httpx.Response(
+                200,
+                request=request,
+                json={
+                    "success": True,
+                    "data": {
+                        "interviews_count": 2,
+                        "result": {
+                            "interviews_count": 2,
+                            "results": {
+                                "reddit_1": {
+                                    "agent_id": 1,
+                                    "response": "The first three seconds earned my attention because the hook solves a real workflow pain.",
+                                    "platform": "reddit",
+                                },
+                                "twitter_3": {
+                                    "agent_id": 3,
+                                    "response": "I needed a cleaner proof beat in the back half before I would repost it.",
+                                    "platform": "twitter",
+                                },
+                            },
+                        },
+                    },
+                },
+            )
+
+        raise AssertionError(f"Unexpected request: {method} {request.url}")
+
+    transport = httpx.MockTransport(handler)
+    original_client = httpx.Client
+
+    class StubClientFactory:
+        def __call__(self, *args, **kwargs) -> httpx.Client:
+            return original_client(*args, transport=transport, **kwargs)
+
+    monkeypatch.setattr("app.services.mirofish_runner.httpx.Client", StubClientFactory())
+
+    world = runner.hydrate_audience_world(
+        "sim_world",
+        windows=[
+            {"windowIndex": 1, "startSec": 0.0, "endSec": 4.0, "note": "Hook lands quickly."},
+            {"windowIndex": 2, "startSec": 4.0, "endSec": 8.0, "note": "Proof starts softening."},
+        ],
+        include_cached_interviews=True,
+    )
+
+    assert world["status"] == "ready"
+    assert world["simulationId"] == "sim_world"
+    assert [item["platform"] for item in world["platformBreakdown"]] == ["reddit", "twitter"]
+    assert world["threads"][0]["rootPost"]["id"] == "reddit-post-101"
+    assert world["threads"][0]["replyCount"] == 2
+    assert world["threads"][0]["replies"][0]["content"] == "I like the speed, but the ending still drags."
+    assert len(world["cohorts"]) >= 2
+    assert world["cohorts"][0]["representativeAgentIds"]
+    assert world["agents"][0]["displayName"] == "Jules"
+    assert world["interviews"][0]["response"].startswith("The first three seconds")
+    assert world["evidenceMoments"][0]["windowId"] == "window-1"
+    assert world["evidenceMoments"][0]["threadIds"] == ["reddit-post-101"]
+    assert interview_requests == [
+        {
+            "simulation_id": "sim_world",
+            "interviews": [
+                {"agent_id": 1, "prompt": "What made you trust this moment?"},
+                {"agent_id": 3, "prompt": "What made you skeptical of this video?"},
+            ],
+            "timeout": 120,
+        }
+    ]
+
+
 def test_mirofish_brief_markdown_uses_readable_timeline_moments() -> None:
     from app.services.mirofish_runner import MiroFishRunner
 
@@ -596,3 +949,78 @@ def test_mirofish_brief_markdown_includes_room_seed_personas() -> None:
     assert "Maya (CasualViewer)" in markdown
     assert "Theo (ExpertViewer)" in markdown
     assert "Jordan (TrendCommentator)" in markdown
+
+
+def test_mirofish_runner_builds_multiple_cohorts_even_for_generic_profiles(tmp_path: Path) -> None:
+    from app.services.mirofish_runner import MiroFishRunner
+
+    runner = MiroFishRunner(make_mirofish_settings(tmp_path))
+    agents = [
+        {
+            "id": 1,
+            "displayName": "Avery",
+            "role": "Simulated audience agent",
+            "bio": None,
+            "platforms": ["reddit", "twitter"],
+            "stats": {"totalActions": 14, "redditActions": 3, "twitterActions": 11},
+        },
+        {
+            "id": 2,
+            "displayName": "BrandObserver",
+            "role": "Simulated audience agent",
+            "bio": None,
+            "platforms": ["reddit", "twitter"],
+            "stats": {"totalActions": 12, "redditActions": 2, "twitterActions": 10},
+        },
+        {
+            "id": 3,
+            "displayName": "Theo",
+            "role": "Simulated audience agent",
+            "bio": None,
+            "platforms": ["reddit", "twitter"],
+            "stats": {"totalActions": 9, "redditActions": 8, "twitterActions": 1},
+        },
+        {
+            "id": 4,
+            "displayName": "Maya",
+            "role": "Simulated audience agent",
+            "bio": None,
+            "platforms": ["reddit", "twitter"],
+            "stats": {"totalActions": 8, "redditActions": 7, "twitterActions": 1},
+        },
+        {
+            "id": 5,
+            "displayName": "Lena",
+            "role": "Simulated audience agent",
+            "bio": None,
+            "platforms": ["reddit", "twitter"],
+            "stats": {"totalActions": 3, "redditActions": 1, "twitterActions": 2},
+        },
+    ]
+    posts = [
+        {"user_id": 1, "content": "This still needs harder proof before the trust gap closes."},
+        {"user_id": 2, "content": "Sharp hook, but I still question the trust gap."},
+        {"user_id": 3, "content": "Useful workflow breakdown. The proof lands better here."},
+        {"user_id": 4, "content": "Good pacing and clearer payoff for editors."},
+    ]
+    comments = [
+        {"user_id": 1, "content": "I would not repost this without proof."},
+        {"user_id": 2, "content": "The claim still feels unclear to me."},
+        {"user_id": 3, "content": "This feels worth testing on my next cut."},
+        {"user_id": 4, "content": "Helpful framing for a faster rough cut."},
+    ]
+
+    cohorts, agent_to_cohort = runner._build_audience_cohorts(
+        agents=agents,
+        posts=posts,
+        comments=comments,
+    )
+
+    assert len(cohorts) >= 3
+    labels = {cohort["label"] for cohort in cohorts}
+    assert "Twitter-first skeptics" in labels
+    assert "Reddit-first evaluators" in labels
+    assert "Quiet observers" in labels
+    assert agent_to_cohort[1] == "twitter-skeptics"
+    assert agent_to_cohort[3] == "reddit-evaluators"
+    assert agent_to_cohort[5] == "quiet-observers"

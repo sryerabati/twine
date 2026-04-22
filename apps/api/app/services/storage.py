@@ -15,6 +15,7 @@ from app.core.serialization import dump_json, load_json
 from app.models.contracts import (
     AnalysisPayload,
     AnalysisResponse,
+    AudienceWorldPayload,
     EditorDraftPayload,
     EditorDraftResponse,
     UploadResponse,
@@ -38,6 +39,7 @@ class AnalysisPaths:
     directory: Path
     record_path: Path
     payload_path: Path
+    world_path: Path
     preds_path: Path
     provider_raw_path: Path
     events_path: Path
@@ -113,6 +115,7 @@ class StorageService:
             directory=directory,
             record_path=directory / "record.json",
             payload_path=directory / "payload.json",
+            world_path=directory / "world.json",
             preds_path=directory / "preds.npy",
             provider_raw_path=directory / "provider-response.json",
             events_path=directory / "events.csv",
@@ -141,6 +144,7 @@ class StorageService:
             directory=directory,
             record_path=directory / "record.json",
             payload_path=directory / "payload.json",
+            world_path=directory / "world.json",
             preds_path=directory / "preds.npy",
             provider_raw_path=directory / "provider-response.json",
             events_path=directory / "events.csv",
@@ -291,12 +295,33 @@ class StorageService:
         paths = self.analysis_paths(analysis_id)
         dump_json(paths.payload_path, payload.model_dump(mode="json"))
         dump_json(paths.cuts_path, [cut.model_dump(mode="json") for cut in payload.cutPlan])
+        if payload.audienceWorld is not None:
+            world = (
+                payload.audienceWorld
+                if isinstance(payload.audienceWorld, AudienceWorldPayload)
+                else AudienceWorldPayload.model_validate(payload.audienceWorld)
+            )
+            dump_json(paths.world_path, world.model_dump(mode="json"))
 
     def read_analysis_payload(self, analysis_id: str) -> AnalysisPayload:
         path = self.analysis_paths(analysis_id).payload_path
         if not path.exists():
             raise FileNotFoundError(f"Analysis payload {analysis_id} not found")
         return AnalysisPayload.model_validate(load_json(path))
+
+    def write_analysis_world(self, analysis_id: str, payload: AudienceWorldPayload | dict[str, Any]) -> None:
+        world = (
+            payload
+            if isinstance(payload, AudienceWorldPayload)
+            else AudienceWorldPayload.model_validate(payload)
+        )
+        dump_json(self.analysis_paths(analysis_id).world_path, world.model_dump(mode="json"))
+
+    def read_analysis_world(self, analysis_id: str) -> AudienceWorldPayload:
+        path = self.analysis_paths(analysis_id).world_path
+        if not path.exists():
+            raise FileNotFoundError(f"Analysis world {analysis_id} not found")
+        return AudienceWorldPayload.model_validate(load_json(path))
 
     def write_editor_draft_payload(self, draft_id: str, payload: EditorDraftPayload) -> None:
         dump_json(self.editor_draft_paths(draft_id).payload_path, payload.model_dump(mode="json"))

@@ -18,6 +18,7 @@ MarkerType = Literal[
 ]
 ConfidenceBand = Literal["low", "medium", "high"]
 CutType = Literal["deadspace", "low_value"]
+AudienceWorldStatus = Literal["hydrating", "ready", "partial", "unavailable"]
 
 
 class VideoAsset(BaseModel):
@@ -120,6 +121,97 @@ class AudienceOutlook(BaseModel):
     roomVoices: list[AudienceVoice] = Field(default_factory=list)
 
 
+class AudienceWorldPlatformBreakdown(BaseModel):
+    platform: str
+    volume: int
+    engagement: int
+    leaning: str
+    dominantNarratives: list[str] = Field(default_factory=list)
+
+
+class AudienceWorldCohort(BaseModel):
+    id: str
+    label: str
+    size: int
+    leaning: str
+    proofThreshold: str
+    keyConcerns: list[str] = Field(default_factory=list)
+    liked: list[str] = Field(default_factory=list)
+    blocked: list[str] = Field(default_factory=list)
+    representativeAgentIds: list[int] = Field(default_factory=list)
+    momentIds: list[str] = Field(default_factory=list)
+
+
+class AudienceWorldComment(BaseModel):
+    id: str
+    agentId: int | None = None
+    speaker: str
+    handle: str
+    role: str
+    platform: str
+    content: str
+    createdAt: datetime | None = None
+    likes: int = 0
+    shares: int = 0
+
+
+class AudienceWorldThread(BaseModel):
+    id: str
+    platform: str
+    dominantStance: str
+    engagement: int
+    replyCount: int = 0
+    participatingCohortIds: list[str] = Field(default_factory=list)
+    rootPost: AudienceWorldComment
+    replies: list[AudienceWorldComment] = Field(default_factory=list)
+
+
+class AudienceWorldAgentStats(BaseModel):
+    totalActions: int = 0
+    redditActions: int = 0
+    twitterActions: int = 0
+
+
+class AudienceWorldAgent(BaseModel):
+    id: int
+    displayName: str
+    handle: str
+    role: str
+    platforms: list[str] = Field(default_factory=list)
+    bio: str | None = None
+    stats: AudienceWorldAgentStats = Field(default_factory=AudienceWorldAgentStats)
+
+
+class AudienceWorldInterview(BaseModel):
+    agentId: int
+    prompt: str
+    response: str
+    platform: str | None = None
+    cached: bool = True
+
+
+class AudienceWorldEvidenceMoment(BaseModel):
+    windowId: str
+    startSec: float
+    endSec: float
+    headline: str
+    reason: str
+    threadIds: list[str] = Field(default_factory=list)
+    cohortIds: list[str] = Field(default_factory=list)
+    agentIds: list[int] = Field(default_factory=list)
+
+
+class AudienceWorldPayload(BaseModel):
+    status: AudienceWorldStatus
+    simulationId: str
+    platformBreakdown: list[AudienceWorldPlatformBreakdown] = Field(default_factory=list)
+    cohorts: list[AudienceWorldCohort] = Field(default_factory=list)
+    threads: list[AudienceWorldThread] = Field(default_factory=list)
+    agents: list[AudienceWorldAgent] = Field(default_factory=list)
+    interviews: list[AudienceWorldInterview] = Field(default_factory=list)
+    evidenceMoments: list[AudienceWorldEvidenceMoment] = Field(default_factory=list)
+
+
 
 class Marker(BaseModel):
     t: float
@@ -212,6 +304,7 @@ class AnalysisPayload(BaseModel):
     video: VideoAsset
     brainResponse: BrainResponsePayload
     audienceOutlook: AudienceOutlook | None = None
+    audienceWorld: AudienceWorldPayload | None = None
     brainSummary: BrainSignalSummary | None = None
     markers: list[Marker]
     deadspaceCuts: list[DeadspaceCut] = Field(default_factory=list)
@@ -233,6 +326,24 @@ class AnalysisResponse(BaseModel):
     updatedAt: datetime
     error: str | None = None
     payload: AnalysisPayload | None = None
+
+
+class AudienceWorldResponse(BaseModel):
+    analysisId: str
+    world: AudienceWorldPayload
+
+
+class AudienceWorldInterviewRequest(BaseModel):
+    agentIds: list[int] = Field(min_length=1)
+    prompt: str
+    platform: str | None = None
+
+
+class AudienceWorldInterviewResponse(BaseModel):
+    analysisId: str
+    prompt: str
+    cached: bool
+    interviews: list[AudienceWorldInterview] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):

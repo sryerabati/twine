@@ -15,10 +15,10 @@ import {
   YAxis,
 } from "recharts";
 
+import { AudienceWorldPanel } from "@/components/audience-world-panel";
 import { BrainScanViewer } from "@/components/brain-scan-viewer";
 import { AnalysisWorkspaceSkeleton } from "@/components/loading-states";
 import { RecommendationTimeline } from "@/components/recommendation-timeline";
-import { RoomVoicesPanel } from "@/components/room-voices-panel";
 import { ScanSecondaryDetails } from "@/components/scan-secondary-details";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -613,7 +613,11 @@ function CompletedAnalysis({
 
           {isReadTheRoom && payload.audienceOutlook ? (
             <div className="space-y-4 border-t border-border/70 pt-6">
-              <RoomVoicesPanel audienceOutlook={payload.audienceOutlook} />
+              <AudienceWorldPanel
+                analysisId={payload.analysisId}
+                audienceOutlook={payload.audienceOutlook}
+                initialWorld={payload.audienceWorld ?? null}
+              />
 
               <div className="grid gap-4 lg:grid-cols-2">
                 <AudienceNotesCard

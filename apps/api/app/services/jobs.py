@@ -53,6 +53,7 @@ class AnalysisJobService:
         self.engine = engine
         self.convex_sync = convex_sync
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="tribe-analysis")
+        self.hydration_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mirofish-world")
 
     def enqueue(self, analysis_id: str, upload_id: str, convex_scan_id: str | None = None) -> None:
         self.executor.submit(self._run_analysis, analysis_id, upload_id, convex_scan_id)
@@ -114,6 +115,8 @@ class AnalysisJobService:
                 trimmed_duration_sec=artifacts.payload.diagnostics.trimmedDurationSec,
                 overall_recommendation=artifacts.payload.summary.overallRecommendation,
             )
+            if artifacts.payload.analysisMode == "read_the_room":
+                self.hydration_executor.submit(self._hydrate_world, analysis_id)
         except (GeminiIntegrationError, TribeIntegrationError, FileNotFoundError, RuntimeError) as exc:
             failed = AnalysisResponse(
                 analysisId=analysis_id,
@@ -130,6 +133,55 @@ class AnalysisJobService:
                 local_analysis_id=analysis_id,
                 error_message=str(exc),
             )
+
+    def _hydrate_world(self, analysis_id: str) -> None:
+        hydrate_world = getattr(self.runner, "hydrate_audience_world", None)
+        if not callable(hydrate_world):
+            return
+        try:
+            record = self.storage.read_analysis_record(analysis_id)
+            payload = record.payload or self.storage.read_analysis_payload(analysis_id)
+            provider_raw = self.storage.read_provider_raw(analysis_id)
+        except FileNotFoundError:
+            return
+
+        simulation_id = str(provider_raw.get("simulationId") or "").strip()
+        if not simulation_id:
+            return
+
+        windows = [
+            {
+                "windowIndex": index + 1,
+                "startSec": point.startSec,
+                "endSec": point.endSec,
+                "note": point.note,
+            }
+            for index, point in enumerate(payload.audienceOutlook.timeline if payload.audienceOutlook else [])
+        ]
+
+        try:
+            world = hydrate_world(
+                simulation_id,
+                windows=windows,
+                include_cached_interviews=True,
+            )
+        except RuntimeError:
+            if payload.audienceWorld is None:
+                return
+            world = payload.audienceWorld.model_dump(mode="json")
+            world["status"] = "unavailable"
+
+        next_payload = payload.model_copy(update={"audienceWorld": world})
+        self.storage.write_analysis_world(analysis_id, world)
+        self.storage.write_analysis_payload(analysis_id, next_payload)
+        self.storage.write_analysis_record(
+            record.model_copy(
+                update={
+                    "updatedAt": datetime.now(UTC),
+                    "payload": next_payload,
+                }
+            )
+        )
 
 
 class EditorDraftJobService:

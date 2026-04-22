@@ -1,4 +1,6 @@
 import type {
+  AudienceWorldInterviewResponse,
+  AudienceWorldResponse,
   AnalysisResponse,
   CompareResponse,
   EditorDraftResponse,
@@ -69,6 +71,29 @@ export async function fetchAnalysis(analysisId: string): Promise<AnalysisRespons
 export async function fetchAnalysisByUpload(uploadId: string): Promise<AnalysisResponse> {
   return request<AnalysisResponse>(`/api/analysis/by-upload/${uploadId}`, {
     cache: "no-store",
+  });
+}
+
+export async function fetchAnalysisWorld(analysisId: string): Promise<AudienceWorldResponse> {
+  return request<AudienceWorldResponse>(`/api/analysis/${analysisId}/world`, {
+    cache: "no-store",
+  });
+}
+
+export async function interviewAudienceWorld(
+  analysisId: string,
+  body: {
+    agentIds: number[];
+    prompt: string;
+    platform?: string;
+  },
+): Promise<AudienceWorldInterviewResponse> {
+  return request<AudienceWorldInterviewResponse>(`/api/analysis/${analysisId}/world/interviews`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
   });
 }
 

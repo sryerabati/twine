@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.context import APIContext
-from app.models.contracts import UploadResponse
+from app.models.contracts import AudienceWorldPayload, UploadResponse
 
 
 class FakeConvexStorageBridge:
@@ -568,6 +568,546 @@ def test_get_analysis_upgrades_existing_room_voices_when_more_are_available(
     payload = response.json()["payload"]
     assert len(payload["audienceOutlook"]["roomVoices"]) == 3
     assert payload["audienceOutlook"]["roomVoices"][2]["speaker"] == "Avery"
+
+
+def test_get_analysis_world_returns_hydrated_audience_world(
+    client: TestClient,
+    test_context: APIContext,
+) -> None:
+    upload_paths = test_context.storage.create_upload_paths("clip.mp4")
+    upload_paths.source_path.write_bytes(b"video")
+    video = test_context.storage.video_asset_from_upload(
+        upload_id=upload_paths.upload_id,
+        filename="clip.mp4",
+        duration_sec=12.0,
+        width=1080,
+        height=1920,
+        size_bytes=1024,
+    )
+    test_context.storage.write_upload_metadata(UploadResponse(uploadId=upload_paths.upload_id, video=video))
+    analysis_paths = test_context.storage.create_analysis_paths()
+
+    result = test_context.runner.analyze_video(upload_paths.source_path)
+    result.proxyAnalysis = {
+        "summary": {
+            "overallRecommendation": "The room leans in early, then splits over proof.",
+            "strengths": ["Strong opening line"],
+            "weaknesses": ["Proof softens in the back half"],
+        },
+        "scores": {
+            "hookScore": 84,
+            "pacingScore": 70,
+            "retentionEstimate": 73,
+            "viralPotential": 77,
+            "confidence": "medium",
+            "helpingFactors": ["Fast opener"],
+            "hurtingFactors": ["Trust dips late"],
+        },
+        "timeline": [
+            {
+                "startSec": 0,
+                "endSec": 4,
+                "globalActivation": 0.82,
+                "motionScore": 0.61,
+                "audioEnergy": 0.71,
+                "transcriptDensity": 0.54,
+                "sceneChange": True,
+                "silenceOverlap": False,
+                "note": "The opening lands quickly.",
+            }
+        ],
+        "markers": [],
+        "deadspaceCuts": [],
+        "warnings": [],
+    }
+    artifacts = test_context.engine.build_payload(
+        analysis_id=analysis_paths.analysis_id,
+        video=video,
+        source_path=upload_paths.source_path,
+        result=result,
+    )
+    world = {
+        "status": "ready",
+        "simulationId": "sim_world",
+        "platformBreakdown": [
+            {
+                "platform": "reddit",
+                "volume": 4,
+                "engagement": 19,
+                "leaning": "positive",
+                "dominantNarratives": ["Speed lands fast"],
+            }
+        ],
+        "cohorts": [
+            {
+                "id": "ugc-creators",
+                "label": "UGC creators",
+                "size": 2,
+                "leaning": "positive",
+                "proofThreshold": "Needs fast proof of workflow gains.",
+                "keyConcerns": ["Back-half proof"],
+                "liked": ["Hook solves a real workflow pain"],
+                "blocked": ["Ending still lingers"],
+                "representativeAgentIds": [1],
+                "momentIds": ["window-1"],
+            }
+        ],
+        "threads": [
+            {
+                "id": "reddit-post-101",
+                "platform": "reddit",
+                "dominantStance": "positive",
+                "engagement": 15,
+                "replyCount": 1,
+                "participatingCohortIds": ["ugc-creators"],
+                "rootPost": {
+                    "id": "reddit-post-101",
+                    "agentId": 1,
+                    "speaker": "Jules",
+                    "handle": "@jules_cut",
+                    "role": "UGC creator and freelance editor",
+                    "platform": "reddit",
+                    "content": "UGC creators will save time on rough cuts with this workflow.",
+                    "createdAt": "2026-04-21T12:00:00",
+                    "likes": 12,
+                    "shares": 3,
+                },
+                "replies": [
+                    {
+                        "id": "reddit-comment-1001",
+                        "agentId": 2,
+                        "speaker": "Nina",
+                        "handle": "@nina_brand",
+                        "role": "Brand strategist for consumer apps",
+                        "platform": "reddit",
+                        "content": "I like the speed, but the ending still drags.",
+                        "createdAt": "2026-04-21T12:01:00",
+                        "likes": 4,
+                        "shares": 0,
+                    }
+                ],
+            }
+        ],
+        "agents": [
+            {
+                "id": 1,
+                "displayName": "Jules",
+                "handle": "@jules_cut",
+                "role": "UGC creator and freelance editor",
+                "platforms": ["reddit"],
+                "bio": "Runs creator workflows for product launches.",
+                "stats": {"totalActions": 7, "redditActions": 7, "twitterActions": 0},
+            }
+        ],
+        "interviews": [
+            {
+                "agentId": 1,
+                "prompt": "What made you trust this moment?",
+                "response": "The hook solved a real workflow pain right away.",
+                "platform": "reddit",
+                "cached": True,
+            }
+        ],
+        "evidenceMoments": [
+            {
+                "windowId": "window-1",
+                "startSec": 0.0,
+                "endSec": 4.0,
+                "headline": "Hook lands before the room asks for proof.",
+                "reason": "The opening promise matched a real editing pain point.",
+                "threadIds": ["reddit-post-101"],
+                "cohortIds": ["ugc-creators"],
+                "agentIds": [1],
+            }
+        ],
+    }
+    next_payload = artifacts.payload.model_copy(
+        update={"audienceWorld": AudienceWorldPayload.model_validate(world)}
+    )
+    test_context.storage.write_analysis_payload(analysis_paths.analysis_id, next_payload)
+    test_context.storage.write_analysis_world(analysis_paths.analysis_id, world)
+    test_context.storage.write_provider_raw(analysis_paths.analysis_id, {"simulationId": "sim_world"})
+    completed = test_context.storage.init_analysis_record(analysis_paths.analysis_id).model_copy(
+        update={
+            "status": "completed",
+            "createdAt": datetime.now(UTC),
+            "updatedAt": datetime.now(UTC),
+            "payload": None,
+        }
+    )
+    test_context.storage.write_analysis_record(completed)
+
+    response = client.get(f"/api/analysis/{analysis_paths.analysis_id}/world")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["analysisId"] == analysis_paths.analysis_id
+    assert payload["world"]["status"] == "ready"
+    assert payload["world"]["threads"][0]["rootPost"]["speaker"] == "Jules"
+    assert payload["world"]["cohorts"][0]["label"] == "UGC creators"
+
+
+def test_get_analysis_world_refreshes_stale_world_with_richer_hydration(
+    client: TestClient,
+    test_context: APIContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    upload_paths = test_context.storage.create_upload_paths("clip.mp4")
+    upload_paths.source_path.write_bytes(b"video")
+    video = test_context.storage.video_asset_from_upload(
+        upload_id=upload_paths.upload_id,
+        filename="clip.mp4",
+        duration_sec=12.0,
+        width=1080,
+        height=1920,
+        size_bytes=1024,
+    )
+    test_context.storage.write_upload_metadata(UploadResponse(uploadId=upload_paths.upload_id, video=video))
+    analysis_paths = test_context.storage.create_analysis_paths()
+
+    result = test_context.runner.analyze_video(upload_paths.source_path)
+    result.proxyAnalysis = {
+        "summary": {
+            "overallRecommendation": "The room leans in early, then splits over proof.",
+            "strengths": ["Strong opening line"],
+            "weaknesses": ["Proof softens in the back half"],
+        },
+        "scores": {
+            "hookScore": 84,
+            "pacingScore": 70,
+            "retentionEstimate": 73,
+            "viralPotential": 77,
+            "confidence": "medium",
+            "helpingFactors": ["Fast opener"],
+            "hurtingFactors": ["Trust dips late"],
+        },
+        "timeline": [
+            {
+                "startSec": 0,
+                "endSec": 4,
+                "globalActivation": 0.82,
+                "motionScore": 0.61,
+                "audioEnergy": 0.71,
+                "transcriptDensity": 0.54,
+                "sceneChange": True,
+                "silenceOverlap": False,
+                "note": "The opening lands quickly.",
+            }
+        ],
+        "markers": [],
+        "deadspaceCuts": [],
+        "warnings": [],
+    }
+    artifacts = test_context.engine.build_payload(
+        analysis_id=analysis_paths.analysis_id,
+        video=video,
+        source_path=upload_paths.source_path,
+        result=result,
+    )
+    stale_world = {
+        "status": "ready",
+        "simulationId": "sim_world",
+        "platformBreakdown": [],
+        "cohorts": [
+            {
+                "id": "general-audience",
+                "label": "General audience",
+                "size": 6,
+                "leaning": "mixed",
+                "proofThreshold": "Needs clearer proof before the claim fully lands.",
+                "keyConcerns": ["Needs more proof."],
+                "liked": ["Strong opener"],
+                "blocked": ["Proof softens late."],
+                "representativeAgentIds": [1],
+                "momentIds": ["window-1"],
+            }
+        ],
+        "threads": [],
+        "agents": [],
+        "interviews": [],
+        "evidenceMoments": [],
+    }
+    richer_world = {
+        "status": "ready",
+        "simulationId": "sim_world",
+        "platformBreakdown": [
+            {
+                "platform": "reddit",
+                "volume": 5,
+                "engagement": 20,
+                "leaning": "mixed",
+                "dominantNarratives": ["Fast opener", "Needs stronger proof"],
+            }
+        ],
+        "cohorts": [
+            {
+                "id": "reddit-evaluators",
+                "label": "Reddit-first evaluators",
+                "size": 3,
+                "leaning": "mixed",
+                "proofThreshold": "Needs clearer proof before the claim fully lands.",
+                "keyConcerns": ["Needs stronger proof."],
+                "liked": ["Hook lands fast"],
+                "blocked": ["Back-half drags"],
+                "representativeAgentIds": [1, 2],
+                "momentIds": ["window-1"],
+            },
+            {
+                "id": "twitter-skeptics",
+                "label": "Twitter-first skeptics",
+                "size": 2,
+                "leaning": "negative",
+                "proofThreshold": "Needs clearer proof before the claim fully lands.",
+                "keyConcerns": ["Claim is still too soft."],
+                "liked": ["Fast opener"],
+                "blocked": ["Trust gap"],
+                "representativeAgentIds": [3],
+                "momentIds": ["window-1"],
+            },
+            {
+                "id": "quiet-observers",
+                "label": "Quiet observers",
+                "size": 1,
+                "leaning": "mixed",
+                "proofThreshold": "Needs clearer proof before the claim fully lands.",
+                "keyConcerns": ["Needs more evidence."],
+                "liked": ["Fast opener"],
+                "blocked": ["Waiting for proof."],
+                "representativeAgentIds": [4],
+                "momentIds": ["window-1"],
+            },
+        ],
+        "threads": [
+            {
+                "id": "reddit-post-101",
+                "platform": "reddit",
+                "dominantStance": "mixed",
+                "engagement": 15,
+                "replyCount": 1,
+                "participatingCohortIds": ["reddit-evaluators", "twitter-skeptics"],
+                "rootPost": {
+                    "id": "reddit-post-101",
+                    "agentId": 1,
+                    "speaker": "Jules",
+                    "handle": "@jules_cut",
+                    "role": "Simulated audience agent",
+                    "platform": "reddit",
+                    "content": "UGC creators will save time on rough cuts with this workflow.",
+                    "createdAt": "2026-04-21T12:00:00",
+                    "likes": 12,
+                    "shares": 3,
+                },
+                "replies": [],
+            }
+        ],
+        "agents": [
+            {
+                "id": 1,
+                "displayName": "Jules",
+                "handle": "@jules_cut",
+                "role": "Simulated audience agent",
+                "platforms": ["reddit"],
+                "bio": None,
+                "stats": {"totalActions": 7, "redditActions": 7, "twitterActions": 0},
+            }
+        ],
+        "interviews": [
+            {
+                "agentId": 1,
+                "prompt": "What made you trust this moment?",
+                "response": "The hook solved a real workflow pain.",
+                "platform": "reddit",
+                "cached": True,
+            }
+        ],
+        "evidenceMoments": [
+            {
+                "windowId": "window-1",
+                "startSec": 0.0,
+                "endSec": 4.0,
+                "headline": "Hook lands before the room asks for proof.",
+                "reason": "The opening promise matched a real editing pain point.",
+                "threadIds": ["reddit-post-101"],
+                "cohortIds": ["reddit-evaluators"],
+                "agentIds": [1],
+            }
+        ],
+    }
+    next_payload = artifacts.payload.model_copy(
+        update={"audienceWorld": AudienceWorldPayload.model_validate(stale_world)}
+    )
+    test_context.storage.write_analysis_payload(analysis_paths.analysis_id, next_payload)
+    test_context.storage.write_analysis_world(analysis_paths.analysis_id, stale_world)
+    test_context.storage.write_provider_raw(analysis_paths.analysis_id, {"simulationId": "sim_world"})
+    completed = test_context.storage.init_analysis_record(analysis_paths.analysis_id).model_copy(
+        update={
+            "status": "completed",
+            "createdAt": datetime.now(UTC),
+            "updatedAt": datetime.now(UTC),
+            "payload": None,
+        }
+    )
+    test_context.storage.write_analysis_record(completed)
+
+    monkeypatch.setattr(
+        test_context.runner,
+        "hydrate_audience_world",
+        lambda simulation_id, windows=None, include_cached_interviews=True: richer_world,
+        raising=False,
+    )
+
+    response = client.get(f"/api/analysis/{analysis_paths.analysis_id}/world")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["world"]["cohorts"]) == 3
+    assert payload["world"]["cohorts"][0]["label"] == "Reddit-first evaluators"
+    stored_world = test_context.storage.read_analysis_world(analysis_paths.analysis_id)
+    assert len(stored_world.cohorts) == 3
+
+
+def test_world_interviews_route_uses_live_proxy_and_cached_fallback(
+    client: TestClient,
+    test_context: APIContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    upload_paths = test_context.storage.create_upload_paths("clip.mp4")
+    upload_paths.source_path.write_bytes(b"video")
+    video = test_context.storage.video_asset_from_upload(
+        upload_id=upload_paths.upload_id,
+        filename="clip.mp4",
+        duration_sec=12.0,
+        width=1080,
+        height=1920,
+        size_bytes=1024,
+    )
+    test_context.storage.write_upload_metadata(UploadResponse(uploadId=upload_paths.upload_id, video=video))
+    analysis_paths = test_context.storage.create_analysis_paths()
+
+    result = test_context.runner.analyze_video(upload_paths.source_path)
+    result.proxyAnalysis = {
+        "summary": {
+            "overallRecommendation": "The room leans in early, then splits over proof.",
+            "strengths": ["Strong opening line"],
+            "weaknesses": ["Proof softens in the back half"],
+        },
+        "scores": {
+            "hookScore": 84,
+            "pacingScore": 70,
+            "retentionEstimate": 73,
+            "viralPotential": 77,
+            "confidence": "medium",
+            "helpingFactors": ["Fast opener"],
+            "hurtingFactors": ["Trust dips late"],
+        },
+        "timeline": [
+            {
+                "startSec": 0,
+                "endSec": 4,
+                "globalActivation": 0.82,
+                "motionScore": 0.61,
+                "audioEnergy": 0.71,
+                "transcriptDensity": 0.54,
+                "sceneChange": True,
+                "silenceOverlap": False,
+                "note": "The opening lands quickly.",
+            }
+        ],
+        "markers": [],
+        "deadspaceCuts": [],
+        "warnings": [],
+    }
+    artifacts = test_context.engine.build_payload(
+        analysis_id=analysis_paths.analysis_id,
+        video=video,
+        source_path=upload_paths.source_path,
+        result=result,
+    )
+    world = {
+        "status": "partial",
+        "simulationId": "sim_world",
+        "platformBreakdown": [],
+        "cohorts": [],
+        "threads": [],
+        "agents": [
+            {
+                "id": 1,
+                "displayName": "Jules",
+                "handle": "@jules_cut",
+                "role": "UGC creator and freelance editor",
+                "platforms": ["reddit"],
+                "bio": "Runs creator workflows for product launches.",
+                "stats": {"totalActions": 7, "redditActions": 7, "twitterActions": 0},
+            }
+        ],
+        "interviews": [
+            {
+                "agentId": 1,
+                "prompt": "What made you skeptical?",
+                "response": "The proof beat was still too soft for me.",
+                "platform": "reddit",
+                "cached": True,
+            }
+        ],
+        "evidenceMoments": [],
+    }
+    next_payload = artifacts.payload.model_copy(
+        update={"audienceWorld": AudienceWorldPayload.model_validate(world)}
+    )
+    test_context.storage.write_analysis_payload(analysis_paths.analysis_id, next_payload)
+    test_context.storage.write_analysis_world(analysis_paths.analysis_id, world)
+    test_context.storage.write_provider_raw(analysis_paths.analysis_id, {"simulationId": "sim_world"})
+    completed = test_context.storage.init_analysis_record(analysis_paths.analysis_id).model_copy(
+        update={
+            "status": "completed",
+            "createdAt": datetime.now(UTC),
+            "updatedAt": datetime.now(UTC),
+            "payload": None,
+        }
+    )
+    test_context.storage.write_analysis_record(completed)
+
+    monkeypatch.setattr(
+        test_context.runner,
+        "interview_agents",
+        lambda simulation_id, *, agent_ids, prompt, platform=None: [
+            {
+                "agentId": 1,
+                "prompt": prompt,
+                "response": "The first three seconds earned trust because the pain point was obvious.",
+                "platform": platform or "reddit",
+                "cached": False,
+            }
+        ],
+        raising=False,
+    )
+
+    live = client.post(
+        f"/api/analysis/{analysis_paths.analysis_id}/world/interviews",
+        json={"agentIds": [1], "prompt": "What made you trust this?", "platform": "reddit"},
+    )
+
+    assert live.status_code == 200
+    live_payload = live.json()
+    assert live_payload["cached"] is False
+    assert live_payload["interviews"][0]["response"].startswith("The first three seconds")
+
+    monkeypatch.setattr(
+        test_context.runner,
+        "interview_agents",
+        lambda simulation_id, *, agent_ids, prompt, platform=None: (_ for _ in ()).throw(RuntimeError("env down")),
+        raising=False,
+    )
+
+    cached = client.post(
+        f"/api/analysis/{analysis_paths.analysis_id}/world/interviews",
+        json={"agentIds": [1], "prompt": "What made you skeptical?", "platform": "reddit"},
+    )
+
+    assert cached.status_code == 200
+    cached_payload = cached.json()
+    assert cached_payload["cached"] is True
+    assert cached_payload["interviews"][0]["response"] == "The proof beat was still too soft for me."
 
 
 def test_upload_endpoint_stores_media_in_convex_and_rehydrates_local_cache(

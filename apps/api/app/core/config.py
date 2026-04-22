@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     mirofish_auto_start: bool = Field(default=False, alias="MIROFISH_AUTO_START")
     mirofish_timeout_seconds: int = Field(default=900, alias="MIROFISH_TIMEOUT_SECONDS")
     mirofish_poll_seconds: float = Field(default=3.0, alias="MIROFISH_POLL_SECONDS")
-    mirofish_simulation_max_rounds: int = Field(default=12, alias="MIROFISH_SIMULATION_MAX_ROUNDS")
+    mirofish_simulation_max_rounds: int = Field(default=10, alias="MIROFISH_SIMULATION_MAX_ROUNDS")
     mirofish_llm_api_key: str | None = Field(default=None, alias="MIROFISH_LLM_API_KEY")
     mirofish_llm_base_url: str | None = Field(default=None, alias="MIROFISH_LLM_BASE_URL")
     mirofish_llm_model_name: str | None = Field(default=None, alias="MIROFISH_LLM_MODEL_NAME")

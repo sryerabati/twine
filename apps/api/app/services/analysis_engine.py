@@ -15,6 +15,7 @@ from app.models.contracts import (
     AudienceOutlook,
     AudienceTimelinePoint,
     AudienceVoice,
+    AudienceWorldPayload,
     BrainResponsePayload,
     BrainResponsePoint,
     BrainSignalSummary,
@@ -311,6 +312,7 @@ class AnalysisEngine:
                 ),
             ),
             audienceOutlook=self._audience_outlook_from_proxy(proxy, summary, points),
+            audienceWorld=self._audience_world_from_provider(result.providerRaw),
             brainSummary=self._brain_signal_summary(points),
             markers=markers,
             deadspaceCuts=cuts,
@@ -823,6 +825,26 @@ class AnalysisEngine:
             likelyPushback=summary.weaknesses[:3],
             timeline=timeline,
             roomVoices=room_voices[:10],
+        )
+
+    @staticmethod
+    def _audience_world_from_provider(provider_raw: dict[str, Any] | None) -> AudienceWorldPayload | None:
+        if not provider_raw:
+            return None
+        if provider_raw.get("audienceWorld"):
+            return AudienceWorldPayload.model_validate(provider_raw["audienceWorld"])
+        simulation_id = str(provider_raw.get("simulationId") or "").strip()
+        if not simulation_id:
+            return None
+        return AudienceWorldPayload(
+            status="hydrating",
+            simulationId=simulation_id,
+            platformBreakdown=[],
+            cohorts=[],
+            threads=[],
+            agents=[],
+            interviews=[],
+            evidenceMoments=[],
         )
 
     @staticmethod
