@@ -4,13 +4,7 @@ import type { MouseEvent } from "react";
 import Link from "next/link";
 
 import { PublicAuthLink } from "@/components/auth/public-auth-link";
-import { LandingBrainModel } from "@/components/landing-brain-model";
-
-const heroStats = [
-  { val: "84%", label: "Hook" },
-  { val: "71%", label: "Pace" },
-  { val: "91%", label: "Clarity" },
-];
+import { LandingRoomVisual } from "@/components/landing-room-visual";
 
 function Sparkle({
   size = 24,
@@ -73,17 +67,23 @@ export function LandingHero() {
 
           <h1 className="mt-5 font-cartoon font-black text-foreground" style={{ fontSize: "clamp(3rem, 6vw, 5.6rem)", letterSpacing: "-0.05em", lineHeight: 0.96 }}>
             Read the{" "}
-            <span
-              style={{
-                color: "var(--primary)",
-                backgroundImage:
-                  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='10' viewBox='0 0 120 10'%3E%3Cpath d='M0 5 Q15 1 30 5 Q45 9 60 5 Q75 1 90 5 Q105 9 120 5' fill='none' stroke='%2335b85f' stroke-width='2.5'/%3E%3C/svg%3E\")",
-                backgroundRepeat: "repeat-x",
-                backgroundPosition: "bottom -2px center",
-                paddingBottom: "12px",
-              }}
-            >
+            <span className="relative inline-block text-primary">
               room
+              <svg
+                aria-hidden
+                className="absolute bottom-[-3px] left-0 w-full"
+                height="8"
+                viewBox="0 0 100 8"
+                preserveAspectRatio="none"
+              >
+                <path
+                  d="M0 4 Q12.5 0 25 4 Q37.5 8 50 4 Q62.5 0 75 4 Q87.5 8 100 4"
+                  fill="none"
+                  stroke="#35b85f"
+                  strokeWidth="2.5"
+                  vectorEffect="non-scaling-stroke"
+                />
+              </svg>
             </span>{" "}
             before you post.
           </h1>
@@ -114,59 +114,7 @@ export function LandingHero() {
           className="relative z-10 flex items-center justify-center lg:justify-end"
           style={{ animation: "pop-in 0.5s cubic-bezier(.34,1.56,.64,1) 0.18s both" }}
         >
-          <div className="surface relative w-full max-w-[42rem] p-5 md:p-6">
-            <div className="absolute left-5 top-5 flex items-center gap-2">
-              <span className="sticker">Signal map</span>
-              <span className="sticker sticker-green">● Live</span>
-            </div>
-
-            {/* Brain visualization area */}
-            <div className="relative mt-8 overflow-hidden rounded-[1.6rem] border-[3px] border-dashed border-border bg-[linear-gradient(135deg,var(--cartoon-green-xdk)_0%,rgba(30,107,56,0.12)_100%)]" style={{ aspectRatio: "16/11" }}>
-              {/* Glow blob */}
-              <div
-                className="absolute left-1/2 top-1/2 h-[65%] w-[65%] -translate-x-1/2 -translate-y-1/2"
-                style={{
-                  borderRadius: "42% 58% 63% 37% / 36% 42% 58% 64%",
-                  background: "radial-gradient(ellipse, rgba(53,184,95,0.18) 0%, transparent 70%)",
-                  animation: "brain-orbit 12s ease-in-out infinite",
-                }}
-              />
-
-              {/* SVG network diagram */}
-              <svg viewBox="0 0 200 130" className="absolute inset-0 h-full w-full" aria-hidden>
-                <ellipse cx="100" cy="65" rx="88" ry="53" fill="none" stroke="#35b85f" strokeWidth="2.5" />
-                <ellipse cx="100" cy="65" rx="63" ry="38" fill="none" stroke="#2a4e39" strokeWidth="2" />
-                <ellipse cx="100" cy="65" rx="44" ry="29" fill="rgba(53,184,95,0.06)" />
-                <circle cx="100" cy="28" r="5" fill="#35b85f" />
-                <circle cx="142" cy="82" r="4" fill="#86d89e" />
-                <circle cx="62" cy="84" r="4" fill="#35b85f" />
-                <line x1="100" y1="28" x2="142" y2="82" stroke="#2a4e39" strokeWidth="1.5" strokeDasharray="3 4" />
-                <line x1="142" y1="82" x2="62" y2="84" stroke="#2a4e39" strokeWidth="1.5" strokeDasharray="3 4" />
-                <line x1="62" y1="84" x2="100" y2="28" stroke="#2a4e39" strokeWidth="1.5" strokeDasharray="3 4" />
-              </svg>
-
-              <p className="absolute bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap text-[0.6rem] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
-                Signal analysis
-              </p>
-            </div>
-
-            {/* Stat row */}
-            <div className="mt-3 grid grid-cols-3 gap-2.5">
-              {heroStats.map((s) => (
-                <div
-                  key={s.label}
-                  className="rounded-[1rem] border-2 border-border bg-muted px-3 py-2.5 shadow-[3px_3px_0_0_var(--shadow-stamp)]"
-                >
-                  <p className="font-cartoon text-[1.3rem] font-black tracking-[-0.04em] text-foreground">
-                    {s.val}
-                  </p>
-                  <p className="text-[0.54rem] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">
-                    {s.label}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
+          <LandingRoomVisual />
         </div>
       </div>
     </section>

@@ -206,8 +206,9 @@ html::-webkit-scrollbar-corner,
 
   /* spring easing for cartoon interactions */
   .spring {
-    transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1),
-      box-shadow 0.12s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
+      translate 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
+      box-shadow 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
   .cartoon-dot-bg {

@@ -100,8 +100,10 @@ export function UploadDropzone({
       }}
       onDrop={handleDrop}
       className={cn(
-        "group relative overflow-hidden rounded-[1.75rem] border border-border/70 bg-muted/35 p-5 text-foreground transition-colors",
-        busy ? "cursor-not-allowed opacity-80" : "cursor-pointer hover:border-primary/70 hover:bg-muted/55",
+        "spring group relative overflow-hidden rounded-[1.75rem] border-[3px] border-border bg-muted/35 p-5 text-foreground shadow-[5px_5px_0_0_var(--shadow-stamp)] transition-colors",
+        busy
+          ? "cursor-not-allowed opacity-80"
+          : "cursor-pointer hover:border-primary/70 hover:bg-muted/55 hover:-translate-x-[1px] hover:-translate-y-[1px] hover:shadow-[8px_8px_0_0_var(--shadow-stamp)]",
         isDragging && "border-primary bg-primary/10",
         className,
       )}
@@ -126,7 +128,13 @@ export function UploadDropzone({
             {description}
           </p>
         </div>
-        <span className="rounded-full border border-border/80 bg-secondary/80 px-3 py-1 text-[0.7rem] font-medium uppercase tracking-[0.18em] text-secondary-foreground">
+        <span
+          className={cn(
+            status === "uploading" || status === "analyzing"
+              ? "sticker sticker-green"
+              : "sticker",
+          )}
+        >
           {status === "uploading" ? "Uploading" : status === "analyzing" ? "Queued" : "Ready"}
         </span>
       </div>

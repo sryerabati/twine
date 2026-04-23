@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { RefObject } from "react";
 import { useEffect, useRef, useState } from "react";
 import { LoaderCircle, Scissors, WandSparkles } from "lucide-react";
@@ -61,11 +62,14 @@ export function AnalysisView({
   onPersistSelectedCuts,
   onPersistExport,
 }: AnalysisViewProps) {
+  const router = useRouter();
   const [response, setResponse] = useState<AnalysisResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [trimModeByAnalysis, setTrimModeByAnalysis] = useState<Record<string, TrimMode>>({});
   const [trimPending, setTrimPending] = useState(false);
   const [trimError, setTrimError] = useState<string | null>(null);
+  const [cancelPending, setCancelPending] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const [activeTimeSec, setActiveTimeSec] = useState(0);
   const [previewTimeSec, setPreviewTimeSec] = useState<number | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -105,6 +109,27 @@ export function AnalysisView({
   async function reloadAnalysis() {
     const next = await fetchAnalysis(analysisId);
     setResponse(next);
+  }
+
+  async function handleCancelScan() {
+    setCancelPending(true);
+    setCancelError(null);
+    try {
+      const cancelResponse = await fetch(`/api/analysis/${analysisId}/cancel`, {
+        method: "POST",
+      });
+      if (!cancelResponse.ok) {
+        const payload = (await cancelResponse.json().catch(() => null)) as { detail?: string } | null;
+        throw new Error(payload?.detail ?? `Request failed with status ${cancelResponse.status}`);
+      }
+      router.push("/app/library");
+    } catch (cancelScanError) {
+      setCancelError(
+        cancelScanError instanceof Error ? cancelScanError.message : "Could not cancel the scan.",
+      );
+    } finally {
+      setCancelPending(false);
+    }
   }
 
   const trimMode = deriveTrimMode(
@@ -175,6 +200,9 @@ export function AnalysisView({
       <AnalysisLoading
         analysisId={analysisId}
         createdAt={response?.createdAt}
+        cancelError={cancelError}
+        cancelPending={cancelPending}
+        onCancel={handleCancelScan}
         status={response?.status === "running" ? "running" : "queued"}
       />
     );
@@ -206,20 +234,50 @@ function AnalysisLoading({
   analysisId,
   status,
   createdAt,
+  onCancel,
+  cancelPending,
+  cancelError,
 }: {
   analysisId: string;
   status: "queued" | "running";
   createdAt?: string | null;
+  onCancel: () => Promise<void>;
+  cancelPending: boolean;
+  cancelError: string | null;
 }) {
   const progress = useEstimatedScanProgress(status, createdAt);
 
   return (
-    <AnalysisWorkspaceSkeleton
-      badge={status === "queued" ? "Queued" : "Running"}
-      title="Processing analysis"
-      body={`Waiting for FastAPI to finish the scan output for analysis \`${analysisId.slice(0, 8)}\`.`}
-      progress={progress}
-    />
+    <div className="space-y-4">
+      <AnalysisWorkspaceSkeleton
+        badge={status === "queued" ? "Queued" : "Running"}
+        title="Processing analysis"
+        body={`Waiting for FastAPI to finish the scan output for analysis \`${analysisId.slice(0, 8)}\`.`}
+        progress={progress}
+      />
+      {status === "running" ? (
+        <div className="surface mx-auto flex w-full max-w-4xl flex-wrap items-center justify-between gap-3 rounded-[1.75rem] p-4">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Scan taking too long?</p>
+            <p className="text-sm text-muted-foreground">
+              Cancel this run and return to the library.
+            </p>
+            {cancelError ? <p className="mt-2 text-sm text-destructive">{cancelError}</p> : null}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-destructive text-destructive hover:border-destructive hover:bg-destructive/10 hover:text-destructive"
+            disabled={cancelPending}
+            onClick={() => {
+              void onCancel();
+            }}
+          >
+            {cancelPending ? "Cancelling..." : "Cancel scan"}
+          </Button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -414,7 +472,7 @@ function CompletedAnalysis({
       <section className="surface rounded-[2.5rem] p-6 text-foreground">
         <section
           data-testid="scan-verdict-bar"
-          className="flex flex-col gap-3 rounded-[1.45rem] border border-border/70 bg-background/70 px-4 py-4 lg:flex-row lg:items-center lg:justify-between"
+          className="flex flex-col gap-3 rounded-[1.45rem] border-[3px] border-border/70 bg-background/70 px-4 py-4 lg:flex-row lg:items-center lg:justify-between"
         >
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-3">
@@ -448,69 +506,78 @@ function CompletedAnalysis({
           }
         >
           <div className="min-w-0 space-y-4">
-            <section className="rounded-[1.5rem] border border-border/70 bg-background/70 p-4">
-              <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Inspect the video</p>
-                  <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-                    Check the exact beat, scrub the clip, and decide whether the next cut should stay or go.
-                  </p>
-                </div>
-
-                {isReadTheRoom ? null : (
-                  <PlayerControlStack
-                    activeCutIds={activeCutIds}
-                    latestExport={latestExport}
-                    onExport={onExport}
-                    onTrimModeChange={onTrimModeChange}
-                    trimMode={trimMode}
-                    trimPending={trimPending}
-                  />
-                )}
+            <section className="space-y-4">
+              <div className="space-y-3">
+                <span className="sticker">Video review</span>
+                <h2 className="font-cartoon text-[1.4rem] font-black text-foreground">
+                  Watch the cut and scrub the timeline
+                </h2>
               </div>
 
-              {trimError && !isReadTheRoom ? (
-                <div className="mb-4 rounded-[1.25rem] border-2 border-destructive bg-destructive/10 p-4 text-sm text-destructive">
-                  {trimError}
-                </div>
-              ) : null}
+              <section className="rounded-[1.5rem] border-[3px] border-border/70 bg-background/70 p-4">
+                <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Inspect the video</p>
+                    <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+                      Check the exact beat, scrub the clip, and decide whether the next cut should stay or go.
+                    </p>
+                  </div>
 
-              <div
-                data-testid="player-stage"
-                className={cn(
-                  "mx-auto",
-                  isPortraitClip ? "w-full max-w-[24rem]" : "w-full max-w-5xl",
-                )}
-              >
-                <video
-                  ref={videoRef}
-                  className={cn(
-                    "w-full rounded-[1.5rem] border-2 border-border bg-black object-contain",
-                    isPortraitClip ? "aspect-[9/16]" : "aspect-video",
+                  {isReadTheRoom ? null : (
+                    <PlayerControlStack
+                      activeCutIds={activeCutIds}
+                      latestExport={latestExport}
+                      onExport={onExport}
+                      onTrimModeChange={onTrimModeChange}
+                      trimMode={trimMode}
+                      trimPending={trimPending}
+                    />
                   )}
-                  preload="metadata"
-                  playsInline
-                  src={playerSourceUrl}
-                  onClick={() => void togglePlayback()}
-                  onLoadedMetadata={(event) => onActiveTimeChange(event.currentTarget.currentTime)}
-                  onPlay={() => setIsPlaying(true)}
-                  onPause={() => setIsPlaying(false)}
-                  onEnded={() => setIsPlaying(false)}
-                  onSeeked={(event) => onActiveTimeChange(event.currentTarget.currentTime)}
-                  onTimeUpdate={(event) => onActiveTimeChange(event.currentTarget.currentTime)}
-                />
+                </div>
 
-                <RecommendationTimeline
-                  currentTimeSec={activeTimeSec}
-                  durationSec={payload.video.durationSec}
-                  isPlaying={isPlaying}
-                  segments={payload.timelineSegments}
-                  selectedCutIds={activeCutIds}
-                  onSeek={seekToTime}
-                  onTogglePlayback={togglePlayback}
-                  onPreviewTimeChange={onPreviewTimeChange}
-                />
-              </div>
+                {trimError && !isReadTheRoom ? (
+                  <div className="mb-4 rounded-[1.25rem] border-2 border-destructive bg-destructive/10 p-4 text-sm text-destructive">
+                    {trimError}
+                  </div>
+                ) : null}
+
+                <div
+                  data-testid="player-stage"
+                  className={cn(
+                    "mx-auto",
+                    isPortraitClip ? "w-full max-w-[24rem]" : "w-full max-w-5xl",
+                  )}
+                >
+                  <video
+                    ref={videoRef}
+                    className={cn(
+                      "w-full rounded-[1.5rem] border-[3px] border-border bg-black object-contain",
+                      isPortraitClip ? "aspect-[9/16]" : "aspect-video",
+                    )}
+                    preload="metadata"
+                    playsInline
+                    src={playerSourceUrl}
+                    onClick={() => void togglePlayback()}
+                    onLoadedMetadata={(event) => onActiveTimeChange(event.currentTarget.currentTime)}
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
+                    onEnded={() => setIsPlaying(false)}
+                    onSeeked={(event) => onActiveTimeChange(event.currentTarget.currentTime)}
+                    onTimeUpdate={(event) => onActiveTimeChange(event.currentTarget.currentTime)}
+                  />
+
+                  <RecommendationTimeline
+                    currentTimeSec={activeTimeSec}
+                    durationSec={payload.video.durationSec}
+                    isPlaying={isPlaying}
+                    segments={payload.timelineSegments}
+                    selectedCutIds={activeCutIds}
+                    onSeek={seekToTime}
+                    onTogglePlayback={togglePlayback}
+                    onPreviewTimeChange={onPreviewTimeChange}
+                  />
+                </div>
+              </section>
             </section>
 
             {isReadTheRoom ? (
@@ -524,13 +591,22 @@ function CompletedAnalysis({
               />
             ) : null}
 
-            <ScanSecondaryDetails
-              payload={payload}
-              activeCutIds={activeCutIds}
-              trimMode={trimMode}
-            />
+            <section className="space-y-4">
+              <div className="space-y-3">
+                <span className="sticker">Trim opportunities</span>
+                <h2 className="font-cartoon text-[1.4rem] font-black text-foreground">
+                  Review where the edit can tighten up
+                </h2>
+              </div>
 
-            <section className="rounded-[1.5rem] border border-border/70 bg-background/70 p-5">
+              <ScanSecondaryDetails
+                payload={payload}
+                activeCutIds={activeCutIds}
+                trimMode={trimMode}
+              />
+            </section>
+
+            <section className="rounded-[1.5rem] border-[3px] border-border/70 bg-background/70 p-5">
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="text-sm font-medium text-foreground">
@@ -637,11 +713,20 @@ function CompletedAnalysis({
       </section>
 
       {isReadTheRoom && payload.audienceOutlook ? (
-        <AudienceWorldPanel
-          analysisId={payload.analysisId}
-          audienceOutlook={payload.audienceOutlook}
-          initialWorld={payload.audienceWorld ?? null}
-        />
+        <section className="space-y-4">
+          <div className="space-y-3">
+            <span className="sticker-green">Audience insights</span>
+            <h2 className="font-cartoon text-[1.4rem] font-black text-foreground">
+              See how the room reacts over time
+            </h2>
+          </div>
+
+          <AudienceWorldPanel
+            analysisId={payload.analysisId}
+            audienceOutlook={payload.audienceOutlook}
+            initialWorld={payload.audienceWorld ?? null}
+          />
+        </section>
       ) : null}
     </div>
   );
@@ -670,7 +755,7 @@ function ActionStrip({
   return (
     <section
       data-testid="scan-action-strip"
-      className="rounded-[1.35rem] border border-border/70 bg-background/70 p-3"
+      className="rounded-[1.35rem] border-[3px] border-border/70 bg-background/70 p-3"
     >
       <div className="flex flex-wrap gap-2">
         {actions.map((action) => (
@@ -679,7 +764,7 @@ function ActionStrip({
             type="button"
             onClick={() => onSelect(action)}
             className={cn(
-              "flex min-w-0 flex-1 flex-col items-start rounded-[1rem] border px-3 py-3 text-left transition-colors hover:border-primary/30 hover:bg-primary/[0.06]",
+              "spring flex min-w-0 flex-1 flex-col items-start rounded-[1rem] border-[3px] px-3 py-3 text-left shadow-[5px_5px_0_0_var(--shadow-stamp)] transition-colors hover:border-primary/30 hover:bg-primary/[0.06] hover:-translate-x-[2px] hover:-translate-y-[2px] hover:shadow-[8px_8px_0_0_var(--shadow-stamp)]",
               action.tone === "fix"
                 ? "border-amber-300/20 bg-amber-400/[0.06]"
                 : "border-border/70 bg-card/50",
@@ -796,7 +881,7 @@ function DecisionRailCompact({
 
   return (
     <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
-      <div className="rounded-[1.35rem] border border-border/70 bg-background/70 p-4">
+      <div className="rounded-[1.35rem] border-[3px] border-border/70 bg-background/70 p-4">
         <p className="text-sm font-medium text-foreground">What to do</p>
         {primaryAction ? (
           <>
@@ -822,7 +907,7 @@ function DecisionRailCompact({
         ) : null}
       </div>
 
-      <div className="rounded-[1.35rem] border border-border/70 bg-background/70 p-4">
+      <div className="rounded-[1.35rem] border-[3px] border-border/70 bg-background/70 p-4">
         <div className="grid gap-4">
           <div>
             <p className="text-sm font-medium text-foreground">What landed</p>
@@ -843,7 +928,7 @@ function DecisionRailCompact({
         </div>
       </div>
 
-      <div className="rounded-[1.35rem] border border-border/70 bg-background/70 p-4">
+      <div className="rounded-[1.35rem] border-[3px] border-border/70 bg-background/70 p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm font-medium text-foreground">Export plan</p>
@@ -914,7 +999,7 @@ function BrainSignalUtility({ payload }: { payload: AnalysisPayload }) {
       : (payload.brainSummary ?? deriveBrainSummaryFromPoints(payload.brainResponse.timeSeries));
 
   return (
-    <section className="rounded-[1.35rem] border border-border/70 bg-background/70 p-4">
+    <section className="rounded-[1.35rem] border-[3px] border-border/70 bg-background/70 p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-medium text-foreground">Brain signal</p>
@@ -949,7 +1034,7 @@ function BrainSignalUtility({ payload }: { payload: AnalysisPayload }) {
 
 function SummaryStat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-[1.25rem] border border-border/70 bg-card/80 p-4">
+    <div className="rounded-[1.25rem] border-[3px] border-border/70 bg-card/80 p-4">
       <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">{label}</p>
       <p className="mt-2 text-2xl font-semibold text-foreground">{Math.round(value * 100)}</p>
     </div>

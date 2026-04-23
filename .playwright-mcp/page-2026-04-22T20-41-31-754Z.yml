@@ -1,0 +1,9 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]: Secure workspace
+    - generic [ref=e5]:
+      - heading "Loading Twine" [level=1] [ref=e6]
+      - paragraph [ref=e7]: Restoring auth and saved scans.
+  - button "Open Next.js Dev Tools" [ref=e18] [cursor=pointer]:
+    - img [ref=e19]
+  - alert [ref=e22]

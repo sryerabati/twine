@@ -128,7 +128,7 @@ export function RepurposeProjectClient({ projectId }: { projectId: string }) {
           return;
         }
         const message =
-          error instanceof Error ? error.message : "Could not load the latest repurpose result.";
+          error instanceof Error ? error.message : "Could not load the latest variants.";
         if (
           message.includes("Repurpose result not found") &&
           (projectStatus === "queued" || projectStatus === "running")
@@ -284,6 +284,10 @@ export function RepurposeProjectClient({ projectId }: { projectId: string }) {
   const stageMeta = resultResponse?.stage ? STAGE_COPY[resultResponse.stage] : null;
   const sourceReady = Boolean(project.sourceUploadId);
   const untitledProject = project.title.trim() === DEFAULT_PROJECT_TITLE;
+  const variantsAreGenerating =
+    generating ||
+    resultResponse?.status === "queued" ||
+    resultResponse?.status === "running";
 
   return (
     <div className="space-y-6">
@@ -387,159 +391,204 @@ export function RepurposeProjectClient({ projectId }: { projectId: string }) {
         {titleError ? <p className="mt-4 text-sm text-destructive">{titleError}</p> : null}
       </section>
 
-      <section className="surface rounded-[2rem] p-6 lg:p-8">
-        <div className="space-y-5">
-          <div>
-            <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Source video</p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
-              Upload one finished source
-            </h2>
+      {variantsAreGenerating ? (
+        <div className="surface-soft spring sticky top-[4.5rem] z-20 mb-4 rounded-[1.5rem] border-[3px] border-border/70 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="space-y-2">
+              <span className="sticker-green">Generating</span>
+              <p className="text-sm font-medium text-foreground">
+                {stageMeta?.label ?? "Queued"}
+              </p>
+            </div>
+            <p className="font-cartoon text-[1.2rem] font-black text-foreground">
+              {resultResponse?.progressPercent ?? stageMeta?.progress ?? 5}%
+            </p>
           </div>
+        </div>
+      ) : null}
 
-          <UploadDropzone
-            label="Source video"
-            description="Upload one source video for the repurpose engine."
-            file={sourceFile}
-            status={uploading ? "uploading" : generating ? "analyzing" : "idle"}
-            onFileChange={(file) => {
-              void handleSourceFile(file);
-            }}
-          />
+      <section className="surface space-y-4 rounded-[2rem] p-6 lg:p-8">
+        <div className="space-y-3">
+          <span className="sticker-green">Step 1 · Upload source</span>
+          <h2 className="font-cartoon text-[1.4rem] font-black text-foreground">
+            Bring in the source video
+          </h2>
+        </div>
 
-          {project.sourceFilename ? (
-            <article className="rounded-[1.5rem] border border-border/70 bg-background/40 p-5">
-              <div className="flex flex-wrap items-center gap-3">
-                <Badge variant="outline">{project.status}</Badge>
-                <span className="text-sm text-muted-foreground">{project.sourceFilename}</span>
-                <span className="text-sm text-muted-foreground">
-                  {formatDuration(project.sourceDurationSec)}
-                </span>
-              </div>
-            </article>
-          ) : (
-            <p className="text-sm text-muted-foreground">Upload a source video to start.</p>
-          )}
+        <UploadDropzone
+          label="Source video"
+          description="Upload one source video for the repurpose engine."
+          file={sourceFile}
+          status={uploading ? "uploading" : generating ? "analyzing" : "idle"}
+          onFileChange={(file) => {
+            void handleSourceFile(file);
+          }}
+        />
 
-          {uploadError ? (
-            <p className="text-sm text-destructive">{uploadError}</p>
-          ) : null}
-          {actionError ? (
-            <p className="text-sm text-destructive">{actionError}</p>
-          ) : null}
+        {project.sourceFilename ? (
+          <article className="rounded-[1.5rem] border border-border/70 bg-background/40 p-5">
+            <div className="flex flex-wrap items-center gap-3">
+              <Badge variant="outline">{project.status}</Badge>
+              <span className="text-sm text-muted-foreground">{project.sourceFilename}</span>
+              <span className="text-sm text-muted-foreground">
+                {formatDuration(project.sourceDurationSec)}
+              </span>
+            </div>
+          </article>
+        ) : (
+          <p className="text-sm text-muted-foreground">Upload a source video to start.</p>
+        )}
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        {uploadError ? <p className="text-sm text-destructive">{uploadError}</p> : null}
+      </section>
+
+      <section className="surface space-y-4 rounded-[2rem] p-6 lg:p-8">
+        <div className="space-y-3">
+          <span className="sticker-green">Step 2 · Generate variants</span>
+          <h2 className="font-cartoon text-[1.4rem] font-black text-foreground">
+            Let the AI spin alternate cuts
+          </h2>
+        </div>
+
+        {!sourceReady ? (
+          <p className="text-sm text-muted-foreground">Upload a source video to unlock.</p>
+        ) : null}
+
+        <div
+          aria-disabled={sourceReady ? undefined : "true"}
+          className={sourceReady ? undefined : "opacity-60 pointer-events-none"}
+        >
+          <div className="surface-soft flex flex-col gap-3 rounded-[1.5rem] border-[3px] border-border/70 p-5 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
               {sourceReady
                 ? "Generate up to three alternate cuts from this source."
-                : "Upload a source video before generating variants."}
+                : "The variants generator stays visible here so the next step is clear."}
             </p>
             <Button
               onClick={() => void handleGenerate()}
               disabled={!sourceReady || generating || uploading}
             >
-              {generating ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : <Sparkles data-icon="inline-start" />}
+              {generating ? (
+                <LoaderCircle data-icon="inline-start" className="animate-spin" />
+              ) : (
+                <Sparkles data-icon="inline-start" />
+              )}
               Generate variants
             </Button>
           </div>
         </div>
+
+        {actionError ? <p className="text-sm text-destructive">{actionError}</p> : null}
       </section>
 
-      {stageMeta ? (
-        <section className="surface rounded-[2rem] p-6 lg:p-8">
-          <div className="flex flex-wrap items-center gap-3">
-            <Badge variant="outline">{stageMeta.label}</Badge>
-            <p className="text-sm text-muted-foreground">
-              {resultResponse?.statusMessage ?? stageMeta.hint}
-            </p>
+      <section className="surface space-y-4 rounded-[2rem] p-6 lg:p-8">
+        <div className="space-y-3">
+          <span className="sticker-green">Step 3 · Review variants</span>
+          <h2 className="font-cartoon text-[1.4rem] font-black text-foreground">
+            Review the generated variants
+          </h2>
+        </div>
+
+        {stageMeta ? (
+          <div className="rounded-[1.5rem] border border-border/70 bg-background/45 p-5">
+            <div className="flex flex-wrap items-center gap-3">
+              <Badge variant="outline">{stageMeta.label}</Badge>
+              <p className="text-sm text-muted-foreground">
+                {resultResponse?.statusMessage ?? stageMeta.hint}
+              </p>
+            </div>
+            <div className="mt-4 h-2 rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-primary transition-[width]"
+                style={{ width: `${resultResponse?.progressPercent ?? stageMeta.progress}%` }}
+              />
+            </div>
           </div>
-          <div className="mt-4 h-2 rounded-full bg-muted">
+        ) : null}
+
+        {resultError ? (
+          <div className="rounded-[1.5rem] border border-destructive/40 bg-destructive/10 p-5 text-sm text-destructive">
+            {resultError}
+          </div>
+        ) : null}
+
+        {resultResponse?.payload ? (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <p className="text-sm leading-6 text-muted-foreground">
+                {resultResponse.payload.summary}
+              </p>
+            </div>
+
             <div
-              className="h-full rounded-full bg-primary transition-[width]"
-              style={{ width: `${resultResponse?.progressPercent ?? stageMeta.progress}%` }}
-            />
-          </div>
-        </section>
-      ) : null}
-
-      {resultError ? (
-        <section className="rounded-[1.5rem] border border-destructive/40 bg-destructive/10 p-5 text-sm text-destructive">
-          {resultError}
-        </section>
-      ) : null}
-
-      {resultResponse?.payload ? (
-        <section className="surface rounded-[2rem] p-6 lg:p-8">
-          <div className="space-y-2">
-            <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Variants</p>
-            <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-              Up to three alternate cuts from the same source
-            </h2>
-            <p className="text-sm leading-6 text-muted-foreground">
-              {resultResponse.payload.summary}
-            </p>
-          </div>
-
-          <div
-            className={`mt-6 grid gap-4 ${
-              resultResponse.payload.variants.length >= 3 ? "xl:grid-cols-3" : "xl:grid-cols-2"
-            }`}
-          >
-            {resultResponse.payload.variants.map((variant) => (
-              <article
-                key={variant.variantId}
-                className="rounded-[1.5rem] border border-border/70 bg-background/40 p-5"
-              >
-                <div className="space-y-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline">{variant.durationTarget}</Badge>
-                    <span className="text-sm text-muted-foreground">
-                      {formatDuration(variant.durationSec)}
-                    </span>
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-semibold tracking-tight text-foreground">
-                      {variant.title}
-                    </h3>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                      {variant.angleSummary}
-                    </p>
-                  </div>
-                  <p className="text-sm text-foreground/85">{variant.rationale}</p>
-                  <div className="overflow-hidden rounded-[1.25rem] border border-border/70 bg-black/70">
-                    {variant.videoUrl ? (
-                      <video
-                        className="aspect-[9/16] w-full bg-black object-cover"
-                        src={variant.videoUrl}
-                        controls
-                        preload="metadata"
-                      />
-                    ) : (
-                      <div className="flex aspect-[9/16] items-center justify-center text-sm text-muted-foreground">
-                        Export unavailable
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                      <Clapperboard className="size-4" />
-                      <span>{variant.segmentCount} segments</span>
+              className={`grid gap-4 ${
+                resultResponse.payload.variants.length >= 3 ? "xl:grid-cols-3" : "xl:grid-cols-2"
+              }`}
+            >
+              {resultResponse.payload.variants.map((variant) => (
+                <article
+                  key={variant.variantId}
+                  className="rounded-[1.5rem] border border-border/70 bg-background/40 p-5"
+                >
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline">{variant.durationTarget}</Badge>
+                      <span className="text-sm text-muted-foreground">
+                        {formatDuration(variant.durationSec)}
+                      </span>
                     </div>
-                    <a
-                      href={variant.videoUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      aria-label={`Open export ${variant.title}`}
-                      className="font-medium text-primary underline-offset-4 hover:underline"
-                    >
-                      Open export
-                    </a>
+                    <div>
+                      <h3 className="text-xl font-semibold tracking-tight text-foreground">
+                        {variant.title}
+                      </h3>
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                        {variant.angleSummary}
+                      </p>
+                    </div>
+                    <p className="text-sm text-foreground/85">{variant.rationale}</p>
+                    <div className="overflow-hidden rounded-[1.25rem] border border-border/70 bg-black/70">
+                      {variant.videoUrl ? (
+                        <video
+                          className="aspect-[9/16] w-full bg-black object-cover"
+                          src={variant.videoUrl}
+                          controls
+                          preload="metadata"
+                        />
+                      ) : (
+                        <div className="flex aspect-[9/16] items-center justify-center text-sm text-muted-foreground">
+                          Export unavailable
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-2">
+                        <Clapperboard className="size-4" />
+                        <span>{variant.segmentCount} segments</span>
+                      </div>
+                      <a
+                        href={variant.videoUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label={`Open export ${variant.title}`}
+                        className="font-medium text-primary underline-offset-4 hover:underline"
+                      >
+                        Open export
+                      </a>
+                    </div>
                   </div>
-                </div>
-              </article>
-            ))}
+                </article>
+              ))}
+            </div>
           </div>
-        </section>
-      ) : null}
+        ) : (
+          <div
+            aria-disabled="true"
+            className="rounded-[1.5rem] border border-dashed border-border/80 bg-muted/20 p-6 text-sm text-muted-foreground opacity-60"
+          >
+            Generate variants to see the rendered cuts here.
+          </div>
+        )}
+      </section>
     </div>
   );
 }

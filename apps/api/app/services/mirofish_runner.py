@@ -199,6 +199,10 @@ class MiroFishRunner:
     def _service_headers() -> dict[str, str]:
         return dict(MIROFISH_REQUEST_HEADERS)
 
+    @staticmethod
+    def _safe_dict(value) -> dict:
+        return value if isinstance(value, dict) else {}
+
     def _ensure_service_ready(self) -> str:
         if not self.has_install():
             raise MiroFishIntegrationError(
@@ -384,12 +388,13 @@ class MiroFishRunner:
             task_payload = task_response.json()
             if not task_payload.get("success"):
                 raise MiroFishIntegrationError(str(task_payload.get("error") or "MiroFish graph task failed."))
-            status = str(task_payload["data"].get("status", "")).lower()
+            task_data = self._safe_dict(task_payload.get("data"))
+            status = str(task_data.get("status", "")).lower()
             if status == "completed":
-                result = task_payload["data"].get("result") or {}
+                result = self._safe_dict(task_data.get("result"))
                 return str(result["graph_id"])
             if status == "failed":
-                raise MiroFishIntegrationError(str(task_payload["data"].get("error") or "MiroFish graph task failed."))
+                raise MiroFishIntegrationError(str(task_data.get("error") or "MiroFish graph task failed."))
             time.sleep(self.settings.mirofish_poll_seconds)
 
         raise MiroFishIntegrationError("Timed out waiting for MiroFish graph build to finish.")
@@ -420,7 +425,7 @@ class MiroFishRunner:
         payload = response.json()
         if not payload.get("success"):
             raise MiroFishIntegrationError(str(payload.get("error") or "MiroFish simulation preparation failed."))
-        data = payload.get("data") or {}
+        data = self._safe_dict(payload.get("data"))
         if data.get("already_prepared") or str(data.get("status", "")).lower() == "ready":
             return
         task_id = data.get("task_id")
@@ -437,12 +442,13 @@ class MiroFishRunner:
             status_payload = status_response.json()
             if not status_payload.get("success"):
                 raise MiroFishIntegrationError(str(status_payload.get("error") or "MiroFish prepare status failed."))
-            status = str(status_payload["data"].get("status", "")).lower()
+            status_data = self._safe_dict(status_payload.get("data"))
+            status = str(status_data.get("status", "")).lower()
             if status in {"completed", "ready"}:
                 return
             if status == "failed":
                 raise MiroFishIntegrationError(
-                    str(status_payload["data"].get("error") or "MiroFish simulation preparation failed.")
+                    str(status_data.get("error") or "MiroFish simulation preparation failed.")
                 )
             time.sleep(self.settings.mirofish_poll_seconds)
 
@@ -477,7 +483,8 @@ class MiroFishRunner:
             status_payload = status_response.json()
             if not status_payload.get("success"):
                 raise MiroFishIntegrationError(str(status_payload.get("error") or "MiroFish run status failed."))
-            runner_status = str(status_payload["data"].get("runner_status", "")).lower()
+            status_data = self._safe_dict(status_payload.get("data"))
+            runner_status = str(status_data.get("runner_status", "")).lower()
             if runner_status in {"completed", "stopped"}:
                 return
             if runner_status == "failed":
@@ -541,7 +548,7 @@ class MiroFishRunner:
                     client,
                     base_url,
                     simulation_id,
-                    windows=windows or [],
+                    windows=windows if isinstance(windows, list) else [],
                     include_cached_interviews=include_cached_interviews,
                 )
         except httpx.HTTPStatusError as exc:
@@ -708,7 +715,7 @@ class MiroFishRunner:
         if not payload.get("success"):
             raise MiroFishIntegrationError(str(payload.get("error") or f"MiroFish request failed for {url}."))
         data = payload.get("data")
-        return data if isinstance(data, dict) else {}
+        return MiroFishRunner._safe_dict(data)
 
     def _merge_profiles(
         self,
@@ -1058,7 +1065,7 @@ class MiroFishRunner:
         ranked_agents: list[tuple[int, str]] = []
         seen_agents: set[int] = set()
         for thread in threads:
-            root = thread.get("rootPost") or {}
+            root = self._safe_dict(thread.get("rootPost"))
             agent_id = int(root.get("agentId") or 0)
             if agent_id > 0 and agent_id not in seen_agents:
                 stance = str(thread.get("dominantStance") or "mixed")
@@ -1091,7 +1098,12 @@ class MiroFishRunner:
             },
             method="POST",
         )
-        results = ((payload.get("result") or {}).get("results") or {})
+        result_wrapper = payload.get("result")
+        if not isinstance(result_wrapper, dict):
+            results: dict = {}
+        else:
+            inner = result_wrapper.get("results")
+            results = inner if isinstance(inner, dict) else {}
         interviews: list[dict[str, Any]] = []
         prompt_by_agent = {int(item["agent_id"]): str(item["prompt"]) for item in interviews_request}
         for value in results.values():
@@ -1122,10 +1134,16 @@ class MiroFishRunner:
         agent_to_cohort: dict[int, str],
     ) -> list[dict[str, Any]]:
         evidence: list[dict[str, Any]] = []
-        all_actions = run_detail.get("all_actions") or []
-        sorted_threads = threads or []
+        raw_actions = run_detail.get("all_actions")
+        all_actions = raw_actions if isinstance(raw_actions, list) else []
+        sorted_threads = threads if isinstance(threads, list) else []
         for index, window in enumerate(windows, start=1):
-            thread = sorted_threads[min(index - 1, max(len(sorted_threads) - 1, 0))] if sorted_threads else None
+            thread_candidate = (
+                sorted_threads[min(index - 1, max(len(sorted_threads) - 1, 0))]
+                if sorted_threads
+                else None
+            )
+            thread = thread_candidate if isinstance(thread_candidate, dict) else None
             headline = str(window.get("note") or "The room reacts strongly here.").strip()
             reason = headline
             thread_ids: list[str] = []
@@ -1133,11 +1151,13 @@ class MiroFishRunner:
             agent_ids: list[int] = []
             if thread:
                 thread_ids = [str(thread["id"])]
-                cohort_ids = list(thread.get("participatingCohortIds") or [])
-                root_agent_id = int(thread["rootPost"].get("agentId") or 0)
+                raw_cohort_ids = thread.get("participatingCohortIds")
+                cohort_ids = list(raw_cohort_ids) if isinstance(raw_cohort_ids, list) else []
+                root_post = self._safe_dict(thread.get("rootPost"))
+                root_agent_id = int(root_post.get("agentId") or 0)
                 if root_agent_id > 0:
                     agent_ids.append(root_agent_id)
-                reason = str(thread["rootPost"]["content"]).strip()[:180]
+                reason = str(root_post.get("content") or "").strip()[:180] or reason
             if index - 1 < len(timeline):
                 round_num = int(timeline[index - 1].get("round_num", 0) or 0)
                 action = next(
@@ -1193,7 +1213,12 @@ class MiroFishRunner:
             },
             method="POST",
         )
-        results = ((payload.get("result") or {}).get("results") or {})
+        result_wrapper = payload.get("result")
+        if not isinstance(result_wrapper, dict):
+            results: dict = {}
+        else:
+            inner = result_wrapper.get("results")
+            results = inner if isinstance(inner, dict) else {}
         interviews: list[dict[str, Any]] = []
         for value in results.values():
             if not isinstance(value, dict):
@@ -1532,7 +1557,14 @@ class MiroFishRunner:
         return "negative" if negative_score > positive_score else "positive"
 
     def _extract_analysis(self, payload: dict[str, Any]) -> dict[str, Any]:
-        response_text = str((payload.get("data") or {}).get("response") or "").strip()
+        data = payload.get("data")
+        if not isinstance(data, dict):
+            raise MiroFishIntegrationError(
+                f"MiroFish returned unexpected response shape "
+                f"(expected dict with response key, got {type(data).__name__}). "
+                f"First 200 chars: {str(payload)[:200]!r}"
+            )
+        response_text = str(data.get("response") or "").strip()
         if not response_text:
             raise MiroFishIntegrationError("MiroFish report agent returned an empty response.")
 

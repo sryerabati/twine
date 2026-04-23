@@ -23,6 +23,8 @@ const INTERVIEW_PROMPTS = [
   "What made you skeptical?",
   "What would change your mind?",
 ] as const;
+const INTERVIEWS_NOT_READY_MESSAGE =
+  "Interviews aren't ready yet for this prompt. Re-scan this video to generate them.";
 
 const DEFAULT_VISIBLE_THREADS = 2;
 const DEFAULT_VISIBLE_MOMENTS = 6;
@@ -33,6 +35,17 @@ type AudienceWorldPanelProps = {
   audienceOutlook: AudienceOutlook;
   initialWorld?: AudienceWorld | null;
 };
+
+function resolveInterviewError(error: unknown, fallbackMessage: string): string {
+  const message = error instanceof Error ? error.message : fallbackMessage;
+  if (
+    message.includes("Live interviews are unavailable") &&
+    message.includes("no cached responses matched this prompt")
+  ) {
+    return INTERVIEWS_NOT_READY_MESSAGE;
+  }
+  return message;
+}
 
 export function AudienceWorldPanel({
   analysisId,
@@ -249,9 +262,7 @@ export function AudienceWorldPanel({
           : current,
       );
     } catch (error) {
-      setInterviewError(
-        error instanceof Error ? error.message : "Could not load live agent interviews.",
-      );
+      setInterviewError(resolveInterviewError(error, "Could not load live agent interviews."));
     } finally {
       setInterviewPending(false);
     }
@@ -288,14 +299,14 @@ export function AudienceWorldPanel({
           : current,
       );
     } catch (error) {
-      setInterviewError(error instanceof Error ? error.message : "Could not load an agent interview.");
+      setInterviewError(resolveInterviewError(error, "Could not load an agent interview."));
     } finally {
       setInterviewPending(false);
     }
   }
 
   return (
-    <section className="rounded-[1.5rem] border border-border/70 bg-background/70 p-5">
+    <section className="rounded-[1.5rem] border-[3px] border-border/70 bg-background/70 p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-sm font-medium text-foreground">Room evidence</p>
@@ -312,10 +323,10 @@ export function AudienceWorldPanel({
         </div>
       </div>
 
-      <div className="mt-4 rounded-[1.2rem] border border-border/70 bg-card/40 px-4 py-4">
+      <div className="mt-4 rounded-[1.2rem] border-[3px] border-border/70 bg-card/40 px-4 py-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
-            <p className="text-[11px] uppercase tracking-[0.24em] text-primary/80">Evidence preview</p>
+            <span className="sticker sticker-green">Evidence preview</span>
             <p className="mt-2 text-sm leading-6 text-foreground">{audienceOutlook.headline}</p>
           </div>
           <Button
@@ -457,7 +468,7 @@ export function AudienceWorldPanel({
                         type="button"
                         onClick={() => void selectInterviewAgent(agent.id)}
                         className={cn(
-                          "w-full rounded-[0.95rem] border px-3 py-3 text-left transition-colors",
+                          "spring w-full rounded-[0.95rem] border-[3px] px-3 py-3 text-left shadow-[5px_5px_0_0_var(--shadow-stamp)] transition-colors hover:-translate-x-[2px] hover:-translate-y-[2px] hover:shadow-[8px_8px_0_0_var(--shadow-stamp)]",
                           selected
                             ? "border-primary/30 bg-primary/12 text-foreground"
                             : "border-border/70 bg-card/40 text-muted-foreground hover:border-primary/20 hover:text-foreground",
@@ -476,7 +487,7 @@ export function AudienceWorldPanel({
                 )}
               </div>
 
-              <div className="rounded-[1rem] border border-border/70 bg-card/40 p-4">
+              <div className="rounded-[1rem] border-[3px] border-border/70 bg-card/40 p-4">
                 {interviewPending ? (
                   <div className="text-sm text-muted-foreground">
                     <LoaderCircle className="mb-3 h-4 w-4 animate-spin text-primary" />
@@ -493,7 +504,7 @@ export function AudienceWorldPanel({
                           {agentLookup.get(selectedInterview.agentId)?.role ?? "Simulated audience agent"}
                         </p>
                       </div>
-                      <span className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                      <span className={cn(selectedInterview.cached ? "sticker" : "sticker sticker-green")}>
                         {selectedInterview.cached ? "Cached" : "Live"}
                       </span>
                     </div>
@@ -650,11 +661,11 @@ function ToolbarSelect({
 }) {
   return (
     <label className="space-y-1">
-      <span className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">{label}</span>
+      <span className="sticker">{label}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-10 w-full rounded-[0.95rem] border border-border/70 bg-card/80 px-3 text-sm text-foreground outline-none transition-colors focus:border-primary/30"
+        className="h-10 w-full rounded-[0.95rem] border-[3px] border-border/70 bg-card/80 px-3 text-sm text-foreground outline-none transition-colors focus:border-primary/30"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -682,7 +693,7 @@ function ThreadCard({
   return (
     <article
       data-testid="audience-world-thread"
-      className="rounded-[1rem] border border-border/70 bg-card/40 p-4"
+      className="rounded-[1rem] border-[3px] border-border/70 bg-card/40 p-4"
     >
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
@@ -714,7 +725,7 @@ function ThreadCard({
         </div>
       </div>
 
-      <div className="mt-3 rounded-[0.95rem] border border-border/70 bg-background/60 p-3">
+      <div className="mt-3 rounded-[0.95rem] border-[3px] border-border/70 bg-background/60 p-3">
         <p className={cn("text-sm leading-6 text-foreground", !expanded ? "line-clamp-3" : "")}>
           {thread.rootPost.content}
         </p>
@@ -729,7 +740,7 @@ function ThreadCard({
       {visibleReplies.length ? (
         <div className="mt-3 space-y-2 border-l border-primary/15 pl-3">
           {visibleReplies.map((reply) => (
-            <div key={reply.id} className="rounded-[0.95rem] border border-border/70 bg-background/40 p-3">
+            <div key={reply.id} className="rounded-[0.95rem] border-[3px] border-border/70 bg-background/40 p-3">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-sm font-medium text-foreground">{reply.speaker}</p>
                 <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
@@ -771,7 +782,7 @@ function CohortCard({
   return (
     <article
       data-testid="audience-world-cohort"
-      className="rounded-[1rem] border border-border/70 bg-card/40 p-4"
+      className="rounded-[1rem] border-[3px] border-border/70 bg-card/40 p-4"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -797,7 +808,7 @@ function CohortCard({
 
       <div className="mt-4 space-y-3 text-sm">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.22em] text-primary/80">What landed</p>
+          <span className="sticker sticker-green">What landed</span>
           <ul className="mt-2 space-y-1 text-muted-foreground">
             {(cohort.liked.length ? cohort.liked : ["No dominant win surfaced yet."])
               .slice(0, 2)
@@ -807,7 +818,7 @@ function CohortCard({
           </ul>
         </div>
         <div>
-          <p className="text-[11px] uppercase tracking-[0.22em] text-primary/80">What blocked trust</p>
+          <span className="sticker">What blocked trust</span>
           <ul className="mt-2 space-y-1 text-muted-foreground">
             {(cohort.blocked.length ? cohort.blocked : ["No major blocker surfaced yet."])
               .slice(0, 2)
@@ -861,7 +872,7 @@ function MomentRow({
 
 function EmptyWorldState({ title, description }: { title: string; description: string }) {
   return (
-    <div className="rounded-[1.15rem] border border-dashed border-border/70 bg-card/40 p-4">
+    <div className="rounded-[1.15rem] border-[3px] border-dashed border-border/70 bg-card/40 p-4">
       <p className="text-sm font-medium text-foreground">{title}</p>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
     </div>

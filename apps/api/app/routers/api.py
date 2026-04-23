@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import platform
 import shutil
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -38,6 +38,7 @@ from app.services.jobs import RepurposeSourceDescriptor
 
 
 router = APIRouter(prefix="/api")
+ANALYSIS_RUNNING_TIMEOUT = timedelta(minutes=10)
 
 
 def get_context(request: Request) -> APIContext:
@@ -347,6 +348,15 @@ def get_analysis(
         record = storage.read_analysis_record(analysis_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Analysis not found.") from exc
+    if record.status == "running" and datetime.now(UTC) - record.updatedAt > ANALYSIS_RUNNING_TIMEOUT:
+        record = record.model_copy(
+            update={
+                "status": "failed",
+                "error": "Analysis timed out — server may have restarted. Please re-run the scan.",
+                "updatedAt": datetime.now(UTC),
+            }
+        )
+        storage.write_analysis_record(record)
     if record.status == "completed" and record.payload is None:
         try:
             payload = storage.read_analysis_payload(analysis_id)
@@ -358,6 +368,28 @@ def get_analysis(
         record = record.model_copy(update={"payload": payload})
     record = _maybe_attach_audience_world(record, context)
     record = _maybe_backfill_room_voices(record, context)
+    return storage.hydrate_analysis_response(record)
+
+
+@router.post("/analysis/{analysis_id}/cancel", response_model=AnalysisResponse)
+def cancel_analysis(
+    analysis_id: str,
+    context: APIContext = Depends(get_context),
+) -> AnalysisResponse:
+    storage = context.storage
+    try:
+        record = storage.read_analysis_record(analysis_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Analysis not found.") from exc
+    if record.status == "running":
+        record = record.model_copy(
+            update={
+                "status": "failed",
+                "error": "Cancelled by user.",
+                "updatedAt": datetime.now(UTC),
+            }
+        )
+        storage.write_analysis_record(record)
     return storage.hydrate_analysis_response(record)
 
 

@@ -36,7 +36,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-30 border-b-2 border-primary/20 bg-background/90 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-4 lg:px-10">
           <div className="flex min-w-0 items-center gap-4 lg:gap-6">
-            <BrandLockup href="/" showMeta={false} />
+            <BrandLockup href="/" variant="cartoon" showMeta={false} />
             <nav className="hidden items-center gap-1 md:flex">
               {navigation.map((item) => {
                 const active =

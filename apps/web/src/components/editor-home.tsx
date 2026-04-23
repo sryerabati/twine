@@ -168,9 +168,7 @@ export function EditorHome() {
       <section className="surface rounded-[2rem] p-6 lg:p-8">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
-              Recent projects
-            </p>
+            <span className="sticker">Recent projects</span>
             <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
               Open a draft or start a new one
             </h2>
@@ -180,14 +178,14 @@ export function EditorHome() {
 
         <div className="mt-6 grid gap-4">
           {projects === undefined ? (
-            <div className="rounded-[1.5rem] border border-border/60 bg-muted/25 p-5 text-sm text-muted-foreground">
+            <div className="rounded-[1.5rem] border-[3px] border-border/60 bg-muted/25 p-5 text-sm text-muted-foreground">
               Loading editor history...
             </div>
           ) : projects.length ? (
             projects.map((project) => (
               <div
                 key={project._id}
-                className="rounded-[1.5rem] border border-border/70 bg-background/40 p-5 transition-colors hover:border-primary/45 hover:bg-primary/5"
+                className="spring rounded-[1.5rem] border-[3px] border-border/70 bg-background/40 p-5 shadow-[5px_5px_0_0_var(--shadow-stamp)] transition-[background-color,border-color] hover:border-primary/45 hover:bg-primary/5 hover:-translate-x-[1px] hover:-translate-y-[1px] hover:shadow-[8px_8px_0_0_var(--shadow-stamp)]"
               >
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0 flex-1">
@@ -294,7 +292,7 @@ export function EditorHome() {
               </div>
             ))
           ) : (
-            <div className="rounded-[1.5rem] border border-dashed border-border/80 bg-muted/20 p-8 text-center">
+            <div className="rounded-[1.5rem] border-[3px] border-dashed border-border/80 bg-muted/20 p-8 text-center">
               <Clapperboard className="mx-auto size-8 text-primary/70" />
               <p className="mt-4 text-base font-medium text-foreground">No AI editor projects yet</p>
               <p className="mt-2 text-sm text-muted-foreground">
@@ -316,14 +314,12 @@ export function EditorHome() {
             aria-label="Delete project"
             aria-labelledby="delete-project-title"
             aria-describedby="delete-project-description"
-            className="surface w-full max-w-md rounded-[2rem] border border-border/80 p-6 shadow-2xl"
+            className="surface w-full max-w-md rounded-[2rem] border-[3px] border-border/80 p-6"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-2">
-                <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
-                  Delete project
-                </p>
+                <span className="sticker">Delete project</span>
                 <h3
                   id="delete-project-title"
                   className="text-2xl font-semibold tracking-tight text-foreground"

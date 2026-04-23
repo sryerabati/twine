@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowUpRight, Clock3, GitCompareArrows, ScanEye, Sparkles, Trash2, X } from "lucide-react";
+import { Clock3, GitCompareArrows, ScanEye, Sparkles, Trash2, X } from "lucide-react";
 
 import { SavedScanCardsSkeleton } from "@/components/loading-states";
 import { Badge } from "@/components/ui/badge";
@@ -97,8 +97,7 @@ export function SavedScanCards({
               href="/app/library"
               className={cn(buttonVariants({ variant: "outline" }))}
             >
-              Open full library
-              <ArrowUpRight data-icon="inline-end" />
+              Library →
             </Link>
           </div>
         ) : null}
@@ -110,7 +109,7 @@ export function SavedScanCards({
             {visibleScans.map((scan) => (
               <article
                 key={scan._id}
-                className="surface flex h-full min-w-0 flex-col overflow-hidden rounded-[1.75rem] p-5"
+                className="surface spring flex h-full min-w-0 flex-col overflow-hidden rounded-[1.75rem] p-5 hover:[transform:translate(-2px,-2px)_rotate(-0.3deg)] hover:shadow-[11px_11px_0_0_var(--shadow-stamp)]"
               >
                 <ScanPreview scan={scan} />
 
@@ -196,14 +195,12 @@ export function SavedScanCards({
             aria-label="Delete scan"
             aria-labelledby="delete-scan-title"
             aria-describedby="delete-scan-description"
-            className="surface w-full max-w-md rounded-[2rem] border border-border/80 p-6 shadow-2xl"
+            className="surface w-full max-w-md rounded-[2rem] border-[3px] border-border/80 p-6"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0 flex-1 space-y-2">
-                <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
-                  Delete scan
-                </p>
+                <span className="sticker">Delete scan</span>
                 <h3
                   id="delete-scan-title"
                   className="text-2xl font-semibold tracking-tight text-foreground [overflow-wrap:anywhere]"
@@ -258,28 +255,85 @@ export function SavedScanCards({
 }
 
 function ScanPreview({ scan }: { scan: SavedScanSummary }) {
-  const previewUrl = scan.latestExportUrl ?? scan.analysisUrl;
+  const previewUrl = scan.latestExportUrl;
 
-  if (!previewUrl) {
+  if (previewUrl) {
     return (
-      <div className="mb-4 flex aspect-video items-end overflow-hidden rounded-[1.25rem] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(58,173,104,0.22),transparent_55%),linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01))] p-4">
+      <div className="mb-4 overflow-hidden rounded-[1.25rem] border border-border/70 bg-black/20">
+        <video
+          aria-label={`Scan preview for ${getScanTitle(scan)}`}
+          className="aspect-video w-full object-cover"
+          muted
+          playsInline
+          poster={scan.thumbnailUrl ?? undefined}
+          preload="metadata"
+          src={previewUrl}
+        />
+      </div>
+    );
+  }
+
+  if (isCompareScan(scan) && (scan.thumbnailUrl || scan.secondaryThumbnailUrl)) {
+    return (
+      <div className="mb-4 grid grid-cols-2 gap-2">
+        <ThumbnailPreviewPanel
+          label={`Scan preview for ${scan.filename}`}
+          src={scan.thumbnailUrl}
+          fallbackLabel="Primary preview pending"
+        />
+        <ThumbnailPreviewPanel
+          label={`Scan preview for ${scan.secondaryFilename ?? "Version B"}`}
+          src={scan.secondaryThumbnailUrl}
+          fallbackLabel="Secondary preview pending"
+        />
+      </div>
+    );
+  }
+
+  if (scan.thumbnailUrl) {
+    return (
+      <div className="mb-4 overflow-hidden rounded-[1.25rem] border border-border/70 bg-black/20">
+        <img
+          alt={`Scan preview for ${getScanTitle(scan)}`}
+          className="aspect-video w-full object-cover"
+          loading="lazy"
+          src={scan.thumbnailUrl}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-4 flex aspect-video items-end overflow-hidden rounded-[1.25rem] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(58,173,104,0.22),transparent_55%),linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01))] p-4">
+      <span className="text-xs uppercase tracking-[0.24em] text-muted-foreground">
+        {isCompareScan(scan) ? "Compare preview pending" : "Preview pending"}
+      </span>
+    </div>
+  );
+}
+
+function ThumbnailPreviewPanel({
+  label,
+  src,
+  fallbackLabel,
+}: {
+  label: string;
+  src: string | null;
+  fallbackLabel: string;
+}) {
+  if (!src) {
+    return (
+      <div className="flex aspect-video items-end overflow-hidden rounded-[1.25rem] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(58,173,104,0.22),transparent_55%),linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01))] p-4">
         <span className="text-xs uppercase tracking-[0.24em] text-muted-foreground">
-          {isCompareScan(scan) ? "Compare preview pending" : "Preview pending"}
+          {fallbackLabel}
         </span>
       </div>
     );
   }
 
   return (
-    <div className="mb-4 overflow-hidden rounded-[1.25rem] border border-border/70 bg-black/20">
-      <video
-        aria-label={`Scan preview for ${getScanTitle(scan)}`}
-        className="aspect-video w-full object-cover"
-        muted
-        playsInline
-        preload="metadata"
-        src={previewUrl}
-      />
+    <div className="overflow-hidden rounded-[1.25rem] border border-border/70 bg-black/20">
+      <img alt={label} className="aspect-video w-full object-cover" loading="lazy" src={src} />
     </div>
   );
 }

@@ -15,6 +15,8 @@ const baseScan: Omit<
   title: null,
   uploadId: "upload-1",
   secondaryUploadId: null,
+  thumbnailUrl: null,
+  secondaryThumbnailUrl: null,
   localUploadId: null,
   localAnalysisId: null,
   secondaryLocalAnalysisId: null,
@@ -114,6 +116,42 @@ describe("SavedScanCards", () => {
     expect(preview).toHaveAttribute("src", "/videos/export.mp4");
     expect(screen.queryByText(/ship the strongest cut\./i)).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /latest export/i })).not.toBeInTheDocument();
+  });
+
+  it("renders a stored thumbnail instead of the analysis route when no export exists", () => {
+    const scanWithThumbnail = {
+      ...baseScan,
+      _id: "scan-single-5",
+      filename: "thumbnail-only.mp4",
+      secondaryFilename: null,
+      analysisUrl: "/analysis/analysis-1",
+      thumbnailUrl: "/videos/thumbnail-only.jpg",
+    } as SavedScanSummary & { thumbnailUrl: string | null };
+
+    const { container } = render(<SavedScanCards scans={[scanWithThumbnail]} title="Saved scans" />);
+
+    const preview = screen.getByRole("img", {
+      name: /scan preview for thumbnail-only\.mp4/i,
+    });
+    expect(preview).toHaveAttribute("src", "/videos/thumbnail-only.jpg");
+    expect(container.querySelector("video")).toBeNull();
+  });
+
+  it("uses the stored thumbnail as the poster for exported preview videos", () => {
+    const scanWithPreview = {
+      ...baseScan,
+      _id: "scan-single-6",
+      filename: "poster-preview.mp4",
+      secondaryFilename: null,
+      latestExportUrl: "/videos/poster-preview.mp4",
+      thumbnailUrl: "/videos/poster-preview.jpg",
+    } as SavedScanSummary & { thumbnailUrl: string | null };
+
+    render(<SavedScanCards scans={[scanWithPreview]} title="Saved scans" />);
+
+    const preview = screen.getByLabelText(/scan preview for poster-preview\.mp4/i);
+    expect(preview).toHaveAttribute("src", "/videos/poster-preview.mp4");
+    expect(preview).toHaveAttribute("poster", "/videos/poster-preview.jpg");
   });
 
   it("renders flowing skeleton cards while scans are loading", () => {

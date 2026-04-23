@@ -1,0 +1,25 @@
+- generic [active] [ref=e1]:
+  - button "Open Next.js Dev Tools" [ref=e7] [cursor=pointer]:
+    - img [ref=e8]
+  - alert [ref=e11]
+  - generic [ref=e13]:
+    - generic [ref=e14]:
+      - generic [ref=e15]:
+        - img [ref=e16]
+        - text: Secure workspace
+      - generic [ref=e20]:
+        - heading "Sign in to Twine" [level=1] [ref=e21]
+        - paragraph [ref=e22]: Email/password auth. Saved scans stay tied to your account.
+    - generic [ref=e23]:
+      - button "Sign in" [ref=e24]
+      - button "Create account" [ref=e25]
+    - generic [ref=e26]:
+      - generic [ref=e27]:
+        - generic [ref=e28]: Email
+        - textbox "Email" [ref=e29]:
+          - /placeholder: you@example.com
+      - generic [ref=e30]:
+        - generic [ref=e31]: Password
+        - textbox "Password" [ref=e32]:
+          - /placeholder: Minimum 8 characters
+      - button "Enter workspace" [ref=e33]

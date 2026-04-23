@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -16,6 +18,8 @@ from app.services.mirofish_runner import MiroFishRunner
 from app.services.nvidia_editor_ai import NvidiaEditorAI
 from app.services.storage import StorageService
 from app.services.tribe_runner import TribeRunner
+
+logger = logging.getLogger(__name__)
 
 
 def build_context(settings=None) -> APIContext:
@@ -69,6 +73,25 @@ def build_context(settings=None) -> APIContext:
 
 def create_app(context: APIContext | None = None) -> FastAPI:
     resolved_context = context or build_context()
+    recovered_analyses = 0
+    recover_analyses = getattr(resolved_context.jobs, "recover_zombie_analyses", None)
+    if callable(recover_analyses):
+        recovered_analyses = int(recover_analyses())
+    recovered_drafts = 0
+    recover_drafts = getattr(resolved_context.editor_jobs, "recover_zombie_drafts", None)
+    if callable(recover_drafts):
+        recovered_drafts = int(recover_drafts())
+    recovered_repurposes = 0
+    recover_repurposes = getattr(resolved_context.repurpose_jobs, "recover_zombie_repurposes", None)
+    if callable(recover_repurposes):
+        recovered_repurposes = int(recover_repurposes())
+    logger.info(
+        "Zombie recovery complete: %s analyses, %s editor drafts, %s repurpose results recovered (%s total)",
+        recovered_analyses,
+        recovered_drafts,
+        recovered_repurposes,
+        recovered_analyses + recovered_drafts + recovered_repurposes,
+    )
     app = FastAPI(title="Content Analysis API", version="0.1.0")
     app.state.context = resolved_context
     app.add_middleware(

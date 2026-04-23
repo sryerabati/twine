@@ -10,6 +10,8 @@ type ScanSummary = {
   title: string | null;
   filename: string;
   secondaryFilename: string | null;
+  thumbnailUrl: string | null;
+  secondaryThumbnailUrl: string | null;
   uploadId: Doc<"scans">["uploadId"];
   secondaryUploadId: Doc<"scans">["secondaryUploadId"] | null;
   localUploadId: string | null;
@@ -83,6 +85,17 @@ async function summarizeScan(ctx: QueryCtx, row: Doc<"scans">): Promise<ScanSumm
     ctx.db.get(row.uploadId),
     row.secondaryUploadId ? ctx.db.get(row.secondaryUploadId) : Promise.resolve(null),
   ]);
+  const [thumbnailUrl, secondaryThumbnailUrl, latestExportUrl] = await Promise.all([
+    primaryUpload?.convexThumbnailStorageId
+      ? ctx.storage.getUrl(primaryUpload.convexThumbnailStorageId)
+      : Promise.resolve(null),
+    secondaryUpload?.convexThumbnailStorageId
+      ? ctx.storage.getUrl(secondaryUpload.convexThumbnailStorageId)
+      : Promise.resolve(null),
+    row.latestExportStorageId
+      ? ctx.storage.getUrl(row.latestExportStorageId)
+      : Promise.resolve(row.latestExportUrl ?? null),
+  ]);
 
   return {
     _id: row._id,
@@ -90,6 +103,8 @@ async function summarizeScan(ctx: QueryCtx, row: Doc<"scans">): Promise<ScanSumm
     title: row.displayName ? normalizeCompareTitle(row.displayName) : null,
     filename: primaryUpload?.filename ?? "untitled.mp4",
     secondaryFilename: secondaryUpload?.filename ?? null,
+    thumbnailUrl,
+    secondaryThumbnailUrl,
     uploadId: row.uploadId,
     secondaryUploadId: row.secondaryUploadId ?? null,
     localUploadId: primaryUpload?.localUploadId ?? null,
@@ -106,9 +121,7 @@ async function summarizeScan(ctx: QueryCtx, row: Doc<"scans">): Promise<ScanSumm
     analysisUrl: row.analysisUrl ?? null,
     overviewRecommendation: row.overviewRecommendation ?? null,
     selectedCutIds: row.selectedCutIds ?? [],
-    latestExportUrl: row.latestExportStorageId
-      ? await ctx.storage.getUrl(row.latestExportStorageId)
-      : row.latestExportUrl ?? null,
+    latestExportUrl,
     lastExportedAt: row.lastExportedAt ?? null,
     errorMessage: row.errorMessage ?? null,
     createdAt: row.createdAt,

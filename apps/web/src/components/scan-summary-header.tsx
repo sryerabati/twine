@@ -86,10 +86,10 @@ export function ScanSummaryHeader({
       </div>
 
       <div className="mt-8 grid gap-5 border-t border-border/70 pt-6 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric label="Hook" value={hookScore} />
-        <Metric label="Pacing" value={pacingScore} />
-        <Metric label="Retention" value={retentionEstimate} />
-        <Metric label="Viral" value={viralPotential} />
+        <Metric label="Hook" value={hookScore} tone="headline" />
+        <Metric label="Retention" value={retentionEstimate} tone="headline" />
+        <Metric label="Pacing" value={pacingScore} tone="secondary" />
+        <Metric label="Viral" value={viralPotential} tone="secondary" />
       </div>
     </section>
   );
@@ -105,12 +105,29 @@ function MetaReadout({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Metric({ label, value }: { label: string; value: number | null }) {
+function Metric({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number | null;
+  tone: "headline" | "secondary";
+}) {
   return (
     <div className="min-w-0">
       <span aria-hidden="true" className="block h-px w-10 bg-border/80" />
       <p className="mt-3 text-[0.68rem] uppercase tracking-[0.24em] text-muted-foreground">{label}</p>
-      <p className="mt-2 text-2xl font-semibold tracking-tight text-foreground">{value ?? "—"}</p>
+      <p
+        className={cn(
+          "mt-2 tracking-tight text-foreground",
+          tone === "headline"
+            ? "font-cartoon text-[2.35rem] font-black leading-none"
+            : "text-[1.35rem] font-semibold",
+        )}
+      >
+        {value ?? "—"}
+      </p>
     </div>
   );
 }

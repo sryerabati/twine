@@ -1,12 +1,12 @@
 {
   "draftId": "f3dfdb52dd344f84a13b50329b2b107d",
   "projectId": "kd734hd5xxx9p5jceb5w1qafbs855547",
-  "status": "running",
-  "stage": "preparing_clips",
+  "status": "failed",
+  "stage": "failed",
   "progressPercent": 23,
   "statusMessage": "Preparing clip 1 of 6.",
   "createdAt": "2026-04-19T07:08:28.447029Z",
-  "updatedAt": "2026-04-19T07:08:45.340703Z",
-  "error": null,
+  "updatedAt": "2026-04-22T22:36:28.771260Z",
+  "error": "Editor draft interrupted by server restart. Please re-run.",
   "payload": null
 }

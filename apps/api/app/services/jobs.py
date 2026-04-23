@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
+import logging
 import math
 from pathlib import Path
 import re
 
 from app.models.contracts import (
     AnalysisResponse,
+    AudienceWorldInterview,
+    AudienceWorldPayload,
     DeadspaceCut,
     EditorClipDescriptor,
     EditorDraftExport,
@@ -27,6 +30,14 @@ from app.services.media import MediaInspectionError, MediaService, SequenceClipP
 from app.services.storage import StorageService
 from app.services.gemini_runner import GeminiIntegrationError
 from app.services.tribe_runner import TribeIntegrationError, TribeRunner
+
+logger = logging.getLogger(__name__)
+
+PRESET_INTERVIEW_PROMPTS = (
+    "What made you trust this?",
+    "What made you skeptical?",
+    "What would change your mind?",
+)
 
 
 @dataclass
@@ -112,6 +123,39 @@ class AnalysisJobService:
     def run_now(self, analysis_id: str, upload_id: str, convex_scan_id: str | None = None) -> None:
         self._run_analysis(analysis_id, upload_id, convex_scan_id)
 
+    def recover_zombie_analyses(self) -> int:
+        recovered = 0
+        try:
+            for directory in sorted(self.storage.settings.results_dir.iterdir()):
+                if not directory.is_dir():
+                    continue
+                try:
+                    record = self.storage.read_analysis_record(directory.name)
+                    if record.status != "running":
+                        continue
+                    failed = record.model_copy(
+                        update={
+                            "status": "failed",
+                            "error": "Analysis interrupted by server restart. Please re-run the scan.",
+                            "updatedAt": datetime.now(UTC),
+                        }
+                    )
+                    self.storage.write_analysis_record(failed)
+                    # Convex sync skipped in zombie sweep: the local FastAPI record is the source
+                    # of truth for status polling. The Convex scan row will remain stuck-running
+                    # until the user re-scans, which is acceptable for this recovery path.
+                    logger.warning("Recovered zombie analysis %s from previous run", record.analysisId)
+                    recovered += 1
+                except Exception:
+                    logger.warning(
+                        "Skipping corrupt analysis record during zombie sweep: %s",
+                        directory.name,
+                        exc_info=True,
+                    )
+        except Exception:
+            logger.error("Zombie analysis sweep failed", exc_info=True)
+        return recovered
+
     def _run_analysis(self, analysis_id: str, upload_id: str, convex_scan_id: str | None = None) -> None:
         record = self.storage.read_analysis_record(analysis_id)
         running = record.model_copy(
@@ -168,7 +212,16 @@ class AnalysisJobService:
             )
             if artifacts.payload.analysisMode == "read_the_room":
                 self.hydration_executor.submit(self._hydrate_world, analysis_id)
-        except (GeminiIntegrationError, TribeIntegrationError, FileNotFoundError, RuntimeError) as exc:
+        except (
+            GeminiIntegrationError,
+            TribeIntegrationError,
+            FileNotFoundError,
+            AttributeError,
+            TypeError,
+            KeyError,
+            ValueError,
+            RuntimeError,
+        ) as exc:
             failed = AnalysisResponse(
                 analysisId=analysis_id,
                 status="failed",
@@ -222,8 +275,14 @@ class AnalysisJobService:
             world = payload.audienceWorld.model_dump(mode="json")
             world["status"] = "unavailable"
 
-        next_payload = payload.model_copy(update={"audienceWorld": world})
-        self.storage.write_analysis_world(analysis_id, world)
+        world_payload = AudienceWorldPayload.model_validate(world)
+        world_payload = self._pregenerate_preset_interviews(
+            world=world_payload,
+            simulation_id=self._resolve_simulation_id(world=world_payload, provider_raw=provider_raw),
+            seed_interviews=payload.audienceWorld.interviews if payload.audienceWorld is not None else None,
+        )
+        next_payload = payload.model_copy(update={"audienceWorld": world_payload})
+        self.storage.write_analysis_world(analysis_id, world_payload)
         self.storage.write_analysis_payload(analysis_id, next_payload)
         self.storage.write_analysis_record(
             record.model_copy(
@@ -233,6 +292,92 @@ class AnalysisJobService:
                 }
             )
         )
+
+    @staticmethod
+    def _resolve_simulation_id(
+        *,
+        world: AudienceWorldPayload | None,
+        provider_raw: dict[str, object] | None,
+    ) -> str:
+        if world is not None:
+            simulation_id = str(world.simulationId).strip()
+            if simulation_id:
+                return simulation_id
+        if provider_raw:
+            return str(provider_raw.get("simulationId") or "").strip()
+        return ""
+
+    def _pregenerate_preset_interviews(
+        self,
+        *,
+        world: AudienceWorldPayload,
+        simulation_id: str,
+        seed_interviews: list[AudienceWorldInterview] | None = None,
+    ) -> AudienceWorldPayload:
+        merged: dict[tuple[int, str, str | None], AudienceWorldInterview] = {}
+        try:
+            for interview in seed_interviews or []:
+                merged[(interview.agentId, interview.prompt, interview.platform)] = interview
+            for interview in world.interviews:
+                merged[(interview.agentId, interview.prompt, interview.platform)] = interview
+
+            agent_ids = list(dict.fromkeys(agent.id for agent in world.agents))
+            interview_agents = getattr(self.runner, "interview_agents", None)
+            if not simulation_id or not agent_ids or not callable(interview_agents):
+                return world.model_copy(update={"interviews": list(merged.values())})
+
+            prompts_to_generate = [
+                prompt
+                for prompt in PRESET_INTERVIEW_PROMPTS
+                if any(
+                    not any(
+                        interview.agentId == agent_id and interview.prompt == prompt
+                        for interview in merged.values()
+                    )
+                    for agent_id in agent_ids
+                )
+            ]
+            if not prompts_to_generate:
+                return world.model_copy(update={"interviews": list(merged.values())})
+
+            logger.info(
+                "Pre-generating interviews for %s agents x %s prompts",
+                len(agent_ids),
+                len(prompts_to_generate),
+            )
+            cached_count = 0
+            with ThreadPoolExecutor(max_workers=len(prompts_to_generate)) as executor:
+                future_to_prompt = {
+                    executor.submit(
+                        interview_agents,
+                        simulation_id,
+                        agent_ids=agent_ids,
+                        prompt=prompt,
+                        platform=None,
+                    ): prompt
+                    for prompt in prompts_to_generate
+                }
+                for future in as_completed(future_to_prompt):
+                    prompt = future_to_prompt[future]
+                    try:
+                        results = future.result()
+                    except Exception as exc:  # pragma: no cover - defensive path for runner integrations.
+                        logger.warning("Interview pre-generation failed for prompt %s: %s", prompt, exc)
+                        continue
+                    for item in results:
+                        interview = AudienceWorldInterview.model_validate(item).model_copy(
+                            update={"cached": True}
+                        )
+                        key = (interview.agentId, interview.prompt, interview.platform)
+                        if key in merged:
+                            continue
+                        merged[key] = interview
+                        cached_count += 1
+            logger.info("Interview pre-generation complete: %s responses cached", cached_count)
+        except Exception as exc:  # pragma: no cover - completion must never be blocked by cache fill.
+            logger.warning("Interview pre-generation failed: %s", exc)
+
+        return world.model_copy(update={"interviews": list(merged.values())})
 
 
 class EditorDraftJobService:
@@ -269,6 +414,41 @@ class EditorDraftJobService:
         clips: list[EditorClipDescriptor],
     ) -> None:
         self._run_draft(project_id, draft_id, clips)
+
+    def recover_zombie_drafts(self) -> int:
+        recovered = 0
+        drafts_root = self.storage.settings.storage_root / "editor-drafts"
+        try:
+            for directory in sorted(drafts_root.iterdir()):
+                if not directory.is_dir():
+                    continue
+                try:
+                    record = self.storage.read_editor_draft_record(directory.name)
+                    if record.status != "running":
+                        continue
+                    failed = record.model_copy(
+                        update={
+                            "status": "failed",
+                            "stage": "failed",
+                            "error": "Editor draft interrupted by server restart. Please re-run.",
+                            "updatedAt": datetime.now(UTC),
+                        }
+                    )
+                    self.storage.write_editor_draft_record(failed)
+                    # Convex sync skipped in zombie sweep: the local FastAPI record is the source
+                    # of truth for status polling. The Convex scan row will remain stuck-running
+                    # until the user re-scans, which is acceptable for this recovery path.
+                    logger.warning("Recovered zombie editor draft %s from previous run", record.draftId)
+                    recovered += 1
+                except Exception:
+                    logger.warning(
+                        "Skipping corrupt editor draft record during zombie sweep: %s",
+                        directory.name,
+                        exc_info=True,
+                    )
+        except Exception:
+            logger.error("Zombie editor draft sweep failed", exc_info=True)
+        return recovered
 
     def _run_draft(
         self,
@@ -402,7 +582,17 @@ class EditorDraftJobService:
             )
             if stored_draft_video.storage_id:
                 draft_paths.video_path.unlink(missing_ok=True)
-        except (GeminiIntegrationError, TribeIntegrationError, FileNotFoundError, MediaInspectionError, RuntimeError) as exc:
+        except (
+            GeminiIntegrationError,
+            TribeIntegrationError,
+            FileNotFoundError,
+            AttributeError,
+            TypeError,
+            KeyError,
+            ValueError,
+            MediaInspectionError,
+            RuntimeError,
+        ) as exc:
             current_record = self.storage.read_editor_draft_record(draft_id)
             failed = EditorDraftResponse(
                 draftId=draft_id,
@@ -936,6 +1126,41 @@ class RepurposeJobService:
     ) -> None:
         self._run_result(project_id, result_id, source)
 
+    def recover_zombie_repurposes(self) -> int:
+        recovered = 0
+        repurpose_root = self.storage.settings.storage_root / "repurpose-results"
+        try:
+            for directory in sorted(repurpose_root.iterdir()):
+                if not directory.is_dir():
+                    continue
+                try:
+                    record = self.storage.read_repurpose_result_record(directory.name)
+                    if record.status != "running":
+                        continue
+                    failed = record.model_copy(
+                        update={
+                            "status": "failed",
+                            "stage": "failed",
+                            "error": "Repurpose generation interrupted by server restart. Please re-run.",
+                            "updatedAt": datetime.now(UTC),
+                        }
+                    )
+                    self.storage.write_repurpose_result_record(failed)
+                    # Convex sync skipped in zombie sweep: the local FastAPI record is the source
+                    # of truth for status polling. The Convex scan row will remain stuck-running
+                    # until the user re-scans, which is acceptable for this recovery path.
+                    logger.warning("Recovered zombie repurpose result %s from previous run", record.resultId)
+                    recovered += 1
+                except Exception:
+                    logger.warning(
+                        "Skipping corrupt repurpose record during zombie sweep: %s",
+                        directory.name,
+                        exc_info=True,
+                    )
+        except Exception:
+            logger.error("Zombie repurpose sweep failed", exc_info=True)
+        return recovered
+
     def _run_result(
         self,
         project_id: str,
@@ -1117,7 +1342,17 @@ class RepurposeJobService:
             for variant in variants:
                 if variant.videoStorageId:
                     result_paths.variant_video_path(variant.variantId).unlink(missing_ok=True)
-        except (GeminiIntegrationError, TribeIntegrationError, FileNotFoundError, MediaInspectionError, RuntimeError) as exc:
+        except (
+            GeminiIntegrationError,
+            TribeIntegrationError,
+            FileNotFoundError,
+            AttributeError,
+            TypeError,
+            KeyError,
+            ValueError,
+            MediaInspectionError,
+            RuntimeError,
+        ) as exc:
             current_record = self.storage.read_repurpose_result_record(result_id)
             failed = RepurposeResultResponse(
                 resultId=result_id,

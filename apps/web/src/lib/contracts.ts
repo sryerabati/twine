@@ -387,6 +387,8 @@ export type SavedScanSummary = {
   title: string | null;
   filename: string;
   secondaryFilename: string | null;
+  thumbnailUrl: string | null;
+  secondaryThumbnailUrl: string | null;
   uploadId: string;
   secondaryUploadId: string | null;
   localUploadId: string | null;

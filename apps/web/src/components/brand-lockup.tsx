@@ -35,11 +35,11 @@ const variantStyles = {
   },
   cartoon: {
     root: "gap-3",
-    mark: "size-[2.2rem] rounded-[0.7rem]",
+    mark: "size-[3rem] rounded-[0.9rem]",
     surface:
       "border-[3px] border-border bg-[var(--cartoon-green-xdk)] ring-transparent shadow-[3px_3px_0_0_var(--shadow-stamp)]",
     meta: "text-[0.6rem] tracking-[0.28em]",
-    title: "text-[1.45rem] tracking-[-0.04em]",
+    title: "text-[1.85rem] tracking-[-0.06em]",
     titleFont: "font-cartoon font-black",
     titleColor: "text-foreground",
     metaColor: "text-primary/70",

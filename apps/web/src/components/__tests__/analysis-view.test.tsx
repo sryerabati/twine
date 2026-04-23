@@ -614,6 +614,36 @@ describe("AnalysisView", () => {
     expect(container.querySelectorAll(".surface-soft")).toHaveLength(0);
   });
 
+  it("shows a cancel scan action while running and routes back to the library after cancellation", async () => {
+    const { fetchAnalysis } = await import("@/lib/api");
+    const navigation = await import("next/navigation");
+    vi.mocked(fetchAnalysis).mockResolvedValue({
+      analysisId: "analysis-1",
+      status: "running",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      error: null,
+      payload: null,
+    });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    render(<AnalysisView analysisId="analysis-1" />);
+
+    await user.click(await screen.findByRole("button", { name: /cancel scan/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/analysis/analysis-1/cancel", {
+        method: "POST",
+      });
+      expect(navigation.useRouter().push).toHaveBeenCalledWith("/app/library");
+    });
+  });
+
   it("keeps the evidence workspace behind tabs instead of stacking every section at once", async () => {
     const { fetchAnalysis, fetchAnalysisWorld } = await import("@/lib/api");
     vi.mocked(fetchAnalysis).mockResolvedValue(completedResponse);

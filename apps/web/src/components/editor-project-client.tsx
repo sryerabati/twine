@@ -200,9 +200,7 @@ export function EditorProjectClient({ projectId }: { projectId: string }) {
   const [savingTitle, setSavingTitle] = useState(false);
   const [titleError, setTitleError] = useState<string | null>(null);
   const draftReviewSectionRef = useRef<HTMLElement | null>(null);
-  const titleInputRef = useRef<HTMLInputElement | null>(null);
   const shouldScrollToDraftRef = useRef(false);
-  const autoPromptedForTitleRef = useRef(false);
 
   useEffect(() => {
     if (!project?._id) {
@@ -298,23 +296,7 @@ export function EditorProjectClient({ projectId }: { projectId: string }) {
     if (!editingTitle) {
       setTitleDraft(project.title);
     }
-    if (
-      !autoPromptedForTitleRef.current &&
-      project.title.trim() === DEFAULT_PROJECT_TITLE
-    ) {
-      autoPromptedForTitleRef.current = true;
-      setEditingTitle(true);
-      setTitleError(null);
-    }
   }, [editingTitle, project]);
-
-  useEffect(() => {
-    if (!editingTitle || !titleInputRef.current) {
-      return;
-    }
-    titleInputRef.current.focus();
-    titleInputRef.current.select();
-  }, [editingTitle]);
 
   if (project === undefined) {
     return (
@@ -365,6 +347,12 @@ export function EditorProjectClient({ projectId }: { projectId: string }) {
     currentProject.clips.every((clip) => clip.localUploadId) &&
     !uploading &&
     !generating;
+  const sourceReady = currentProject.clips.some((clip) => Boolean(clip.localUploadId));
+  const showTitleInput = editingTitle || untitledProject;
+  const draftBannerActive =
+    generating ||
+    draftResponse?.status === "queued" ||
+    draftResponse?.status === "running";
 
   async function submitTitleChange() {
     const nextTitle = titleDraft.trim();
@@ -468,54 +456,62 @@ export function EditorProjectClient({ projectId }: { projectId: string }) {
   return (
     <div className="space-y-6">
       <section className="surface rounded-[2rem] p-6 lg:p-8">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="space-y-4">
           <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <Badge variant="secondary">AI Editor</Badge>
-              <Badge variant="outline">{currentProject.status}</Badge>
-              {untitledProject ? <Badge variant="outline">Needs name</Badge> : null}
-            </div>
-            <div>
-              {editingTitle ? (
-                <div className="max-w-2xl space-y-3">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                    <Input
-                      ref={titleInputRef}
-                      aria-label="Project title"
-                      value={titleDraft}
-                      onChange={(event) => {
-                        setTitleDraft(event.target.value);
-                        if (titleError) {
-                          setTitleError(null);
-                        }
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          void submitTitleChange();
-                        }
-                        if (event.key === "Escape") {
-                          event.preventDefault();
-                          cancelTitleEdit();
-                        }
-                      }}
-                      placeholder="Name this project"
-                      className="h-12 text-lg font-semibold"
-                      disabled={savingTitle}
-                    />
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => void submitTitleChange()}
-                        disabled={savingTitle}
-                      >
-                        {savingTitle ? (
-                          <LoaderCircle data-icon="inline-start" className="animate-spin" />
-                        ) : (
-                          <Check data-icon="inline-start" />
-                        )}
-                        Save
-                      </Button>
+            <span className="sticker">Project name</span>
+            <h1 className="font-cartoon text-[1.4rem] font-black text-foreground">
+              Name your project
+            </h1>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Badge variant="secondary">AI Editor</Badge>
+            <Badge variant="outline">{currentProject.status}</Badge>
+            {untitledProject ? <Badge variant="outline">Needs name</Badge> : null}
+          </div>
+
+          <div className="max-w-2xl space-y-3">
+            <label htmlFor="editor-project-title" className="text-sm font-medium text-foreground">
+              Project title
+            </label>
+
+            {showTitleInput ? (
+              <div className="space-y-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <Input
+                    id="editor-project-title"
+                    aria-label="Project title"
+                    value={titleDraft}
+                    onChange={(event) => {
+                      setTitleDraft(event.target.value);
+                      if (titleError) {
+                        setTitleError(null);
+                      }
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void submitTitleChange();
+                      }
+                      if (event.key === "Escape") {
+                        event.preventDefault();
+                        cancelTitleEdit();
+                      }
+                    }}
+                    placeholder="Name this project"
+                    className="h-12 border-[3px] text-lg font-semibold"
+                    disabled={savingTitle}
+                  />
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" onClick={() => void submitTitleChange()} disabled={savingTitle}>
+                      {savingTitle ? (
+                        <LoaderCircle data-icon="inline-start" className="animate-spin" />
+                      ) : (
+                        <Check data-icon="inline-start" />
+                      )}
+                      Save
+                    </Button>
+                    {editingTitle ? (
                       <Button
                         variant="outline"
                         size="sm"
@@ -525,69 +521,78 @@ export function EditorProjectClient({ projectId }: { projectId: string }) {
                         <X data-icon="inline-start" />
                         Cancel
                       </Button>
-                    </div>
+                    ) : null}
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    {untitledProject
-                      ? "Give this draft a real name before you start piling on clips."
-                      : "Rename the project inline. Press Enter to save or Escape to cancel."}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {untitledProject
+                    ? "Give this draft a real name before you start piling on clips."
+                    : "Rename the project inline. Press Enter to save or Escape to cancel."}
+                </p>
+              </div>
+            ) : (
+              <div className="surface-soft flex flex-col gap-3 rounded-[1.5rem] border-[3px] border-border/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                    Current title
+                  </p>
+                  <p className="mt-2 text-lg font-semibold text-foreground [overflow-wrap:anywhere]">
+                    {currentProject.title}
                   </p>
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-                      {currentProject.title}
-                    </h1>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setTitleDraft(currentProject.title);
-                        setEditingTitle(true);
-                        setTitleError(null);
-                      }}
-                    >
-                      <PencilLine data-icon="inline-start" />
-                      Rename
-                    </Button>
-                  </div>
-                  {untitledProject ? (
-                    <p className="text-sm text-muted-foreground">
-                      This project still has the default name. Rename it now so it is easy to find later.
-                    </p>
-                  ) : null}
-                </div>
-              )}
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
-                Upload the clips you want to combine, then generate a first-pass edit that trims
-                deadspace and assembles them into a sensible narrative order.
-              </p>
-            </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setTitleDraft(currentProject.title);
+                    setEditingTitle(true);
+                    setTitleError(null);
+                  }}
+                >
+                  <PencilLine data-icon="inline-start" />
+                  Rename
+                </Button>
+              </div>
+            )}
           </div>
 
-        </div>
+          <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
+            Upload the clips you want to combine, then generate a first-pass edit that trims
+            deadspace and assembles them into a sensible narrative order.
+          </p>
 
-        {actionError ? <p className="mt-4 text-sm text-destructive">{actionError}</p> : null}
-        {titleError ? <p className="mt-4 text-sm text-destructive">{titleError}</p> : null}
-        {draftError ? <p className="mt-4 text-sm text-destructive">{draftError}</p> : null}
-        {visibleProjectError ? (
-          <p className="mt-4 text-sm text-destructive">{visibleProjectError}</p>
-        ) : null}
+          {titleError ? <p className="text-sm text-destructive">{titleError}</p> : null}
+        </div>
       </section>
 
-      <section className="surface rounded-[2rem] p-6 lg:p-8">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Source clips</p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
-              Upload and manage your sequence
+      {draftBannerActive ? (
+        <div className="surface-soft spring sticky top-[4.5rem] z-20 mb-4 rounded-[1.5rem] border-[3px] border-border/70 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="space-y-2">
+              <span className="sticker-green">Generating</span>
+              <p className="text-sm font-medium text-foreground">
+                {draftPresentation?.label ?? "Queued"}
+              </p>
+            </div>
+            <p className="font-cartoon text-[1.2rem] font-black text-foreground">
+              {draftPresentation?.progressPercent ?? 5}%
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      <section className="surface space-y-4 rounded-[2rem] p-6 lg:p-8">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-3">
+            <span className="sticker-green">Step 1 · Upload clips</span>
+            <h2 className="font-cartoon text-[1.4rem] font-black text-foreground">
+              Bring your raw footage
             </h2>
           </div>
           <Badge variant="outline">{currentProject.clips.length} clips</Badge>
         </div>
 
-        <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
           <UploadDropzone
             label="Add clips"
             description="Drop multiple clips at once or browse for a batch. The editor preserves upload order until generation."
@@ -633,9 +638,7 @@ export function EditorProjectClient({ projectId }: { projectId: string }) {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() =>
-                          void removeClip({ projectId, clipId: clip._id } as never)
-                        }
+                        onClick={() => void removeClip({ projectId, clipId: clip._id } as never)}
                       >
                         <Trash2 data-icon="inline-start" />
                         Remove
@@ -651,34 +654,61 @@ export function EditorProjectClient({ projectId }: { projectId: string }) {
           </div>
         </div>
 
-        {uploadError ? <p className="mt-4 text-sm text-destructive">{uploadError}</p> : null}
+        {uploadError ? <p className="text-sm text-destructive">{uploadError}</p> : null}
+      </section>
 
-        <div className="mt-6 flex flex-col gap-3 border-t border-border/70 pt-6 lg:items-end">
-          <Button className="w-full sm:w-auto" onClick={() => void handleGenerate()} disabled={!canGenerate}>
-            {generating ? (
-              <LoaderCircle data-icon="inline-start" className="animate-spin" />
-            ) : (
-              <Sparkles data-icon="inline-start" />
-            )}
-            Generate rough cut
-          </Button>
-          {!canGenerate ? (
-            <p className="text-sm text-muted-foreground lg:text-right">
-              Add at least two clips and wait for each upload to finish before generating.
-            </p>
-          ) : null}
+      <section className="surface space-y-4 rounded-[2rem] p-6 lg:p-8">
+        <div className="space-y-3">
+          <span className="sticker-green">Step 2 · Generate draft</span>
+          <h2 className="font-cartoon text-[1.4rem] font-black text-foreground">
+            Let the AI arrange a first cut
+          </h2>
         </div>
+
+        {!sourceReady ? (
+          <p className="text-sm text-muted-foreground">Upload at least one clip to unlock.</p>
+        ) : null}
+
+        <div
+          aria-disabled={sourceReady ? undefined : "true"}
+          className={sourceReady ? undefined : "opacity-60 pointer-events-none"}
+        >
+          <div className="surface-soft space-y-3 rounded-[1.5rem] border-[3px] border-border/70 p-5">
+            <p className="text-sm text-muted-foreground">
+              {sourceReady
+                ? "Generate a first-pass draft once your clips are uploaded and ready."
+                : "The draft generator stays visible here so the next step is clear."}
+            </p>
+            <div className="flex flex-col gap-3 lg:items-end">
+              <Button className="w-full sm:w-auto" onClick={() => void handleGenerate()} disabled={!canGenerate}>
+                {generating ? (
+                  <LoaderCircle data-icon="inline-start" className="animate-spin" />
+                ) : (
+                  <Sparkles data-icon="inline-start" />
+                )}
+                Generate rough cut
+              </Button>
+              {!canGenerate ? (
+                <p className="text-sm text-muted-foreground lg:text-right">
+                  Add at least two clips and wait for each upload to finish before generating.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        {actionError ? <p className="text-sm text-destructive">{actionError}</p> : null}
       </section>
 
       <section
         ref={draftReviewSectionRef}
-        className="surface rounded-[2rem] p-6 lg:p-8"
+        className="surface space-y-4 rounded-[2rem] p-6 lg:p-8"
       >
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Draft review</p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
-              Latest generated edit
+          <div className="space-y-3">
+            <span className="sticker-green">Step 3 · Review &amp; export</span>
+            <h2 className="font-cartoon text-[1.4rem] font-black text-foreground">
+              Play it back and pick your exports
             </h2>
           </div>
           {draftResponse?.payload?.export.videoUrl ? (
@@ -691,12 +721,12 @@ export function EditorProjectClient({ projectId }: { projectId: string }) {
           ) : null}
         </div>
 
-        {draftPresentation ? (
-          <DraftStatusPanel presentation={draftPresentation} />
-        ) : null}
+        {draftPresentation ? <DraftStatusPanel presentation={draftPresentation} /> : null}
+        {draftError ? <p className="text-sm text-destructive">{draftError}</p> : null}
+        {visibleProjectError ? <p className="text-sm text-destructive">{visibleProjectError}</p> : null}
 
         {draftResponse?.payload && currentProject.status !== "drafting" ? (
-          <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
             <div className="space-y-4">
               <div className="overflow-hidden rounded-[1.5rem] border border-border/70 bg-black/40">
                 <video
@@ -762,7 +792,7 @@ export function EditorProjectClient({ projectId }: { projectId: string }) {
         ) : draftIsProcessing ? (
           <DraftReviewSkeleton presentation={draftPresentation} />
         ) : draftFailed ? (
-          <div className="mt-6 rounded-[1.5rem] border border-destructive/30 bg-destructive/5 p-6">
+          <div className="rounded-[1.5rem] border border-destructive/30 bg-destructive/5 p-6">
             <p className="text-base font-medium text-foreground">Rough cut failed</p>
             <p className="mt-2 text-sm text-muted-foreground">
               {draftResponse?.error ||
@@ -771,9 +801,11 @@ export function EditorProjectClient({ projectId }: { projectId: string }) {
             </p>
           </div>
         ) : (
-          <div className="mt-6 rounded-[1.5rem] border border-dashed border-border/80 bg-muted/20 p-6 text-sm text-muted-foreground">
-            Generate a rough cut to review the exported draft, clip order, and transcript-based
-            rationale here.
+          <div
+            aria-disabled="true"
+            className="rounded-[1.5rem] border border-dashed border-border/80 bg-muted/20 p-6 text-sm text-muted-foreground opacity-60"
+          >
+            Generate a draft to see the rendered cut here.
           </div>
         )}
       </section>

@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import httpx
+import pytest
 
 from app.core.config import Settings
 
@@ -36,6 +37,42 @@ def test_mirofish_settings_default_to_premium_round_budget() -> None:
     settings = Settings()
 
     assert settings.mirofish_simulation_max_rounds == 10
+
+
+def test_extract_analysis_rejects_list_data_payload(tmp_path: Path) -> None:
+    from app.services.mirofish_runner import MiroFishIntegrationError, MiroFishRunner
+
+    runner = MiroFishRunner(make_mirofish_settings(tmp_path))
+
+    with pytest.raises(MiroFishIntegrationError) as exc_info:
+        runner._extract_analysis({"data": ["not", "a", "dict"]})
+
+    message = str(exc_info.value)
+    assert "expected dict with response key" in message
+    assert "got list" in message
+    assert "First 200 chars:" in message
+
+
+def test_interview_agents_ignores_list_result_wrapper(tmp_path: Path, monkeypatch) -> None:
+    from app.services.mirofish_runner import MiroFishRunner
+
+    runner = MiroFishRunner(make_mirofish_settings(tmp_path))
+
+    def fake_service_data(*args, **kwargs) -> dict[str, object]:  # noqa: ANN002, ANN003
+        return {"result": [{"agent_id": 1}]}
+
+    monkeypatch.setattr(runner, "_service_data", fake_service_data)
+
+    interviews = runner._interview_agents(
+        object(),
+        "http://mirofish.test",
+        "sim_123",
+        agent_ids=[1],
+        prompt="Why did this land?",
+        platform=None,
+    )
+
+    assert interviews == []
 
 
 def test_mirofish_runner_executes_service_workflow_and_returns_proxy_analysis(

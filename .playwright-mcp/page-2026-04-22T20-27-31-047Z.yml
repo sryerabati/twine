@@ -1,0 +1,171 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - link "Twine" [ref=e5] [cursor=pointer]:
+          - /url: /
+          - img [ref=e7]
+          - generic [ref=e9]: Twine
+        - navigation [ref=e10]:
+          - link "Get started →" [ref=e11] [cursor=pointer]:
+            - /url: /app
+    - main [ref=e12]:
+      - generic [ref=e13]:
+        - img
+        - img
+        - img
+        - generic [ref=e14]:
+          - generic [ref=e15]:
+            - generic [ref=e16]: Creative signal
+            - heading "Read the room before you post." [level=1] [ref=e17]:
+              - text: Read the
+              - generic [ref=e18]:
+                - text: room
+                - img [ref=e19]
+              - text: before you post.
+            - paragraph [ref=e21]: Drop in one video, make two compete, or turn raw clips into a rough cut with the AI editor.
+            - generic [ref=e22]:
+              - link "Get started free →" [ref=e23] [cursor=pointer]:
+                - /url: /app
+              - link "See the workflow" [ref=e24] [cursor=pointer]:
+                - /url: "#workflow"
+          - generic [ref=e26]:
+            - img
+            - generic [ref=e27]:
+              - generic [ref=e28]: Read the room
+              - generic [ref=e29]: ● 4 readers
+            - generic [ref=e30]:
+              - generic [ref=e31]:
+                - generic [ref=e32]: CM
+                - generic [ref=e33]:
+                  - paragraph [ref=e34]: Creator Mom
+                  - paragraph [ref=e35]: Content creator · 34
+                - generic [ref=e39]: 92%
+              - generic [ref=e40]:
+                - generic [ref=e41]: GZ
+                - generic [ref=e42]:
+                  - paragraph [ref=e43]: Gen Z Gamer
+                  - paragraph [ref=e44]: Gamer · 22
+                - generic [ref=e48]: 71%
+              - generic [ref=e49]:
+                - generic [ref=e50]: FP
+                - generic [ref=e51]:
+                  - paragraph [ref=e52]: Fitness Pro
+                  - paragraph [ref=e53]: Health & wellness · 28
+                - generic [ref=e57]: 84%
+              - generic [ref=e58]:
+                - generic [ref=e59]: BM
+                - generic [ref=e60]:
+                  - paragraph [ref=e61]: Brand Manager
+                  - paragraph [ref=e62]: Marketing · 38
+                - generic [ref=e66]: 68%
+            - generic [ref=e67]:
+              - paragraph [ref=e68]: Avg signal strength
+              - paragraph [ref=e69]: 79%
+      - generic [ref=e71]:
+        - generic [ref=e72]:
+          - generic [ref=e73]: Shared workflow
+          - heading "Two lanes. One stronger post." [level=2] [ref=e74]
+          - paragraph [ref=e75]: Read the signal, then shape the next cut while the footage still feels fresh.
+        - generic [ref=e76]:
+          - article [ref=e77]:
+            - paragraph [ref=e78]: "01"
+            - heading "Read one cut" [level=3] [ref=e79]
+            - paragraph [ref=e80]: See hook pressure, pacing, and clarity before the post goes live and the comments do the diagnosing for you.
+          - article [ref=e81]:
+            - paragraph [ref=e82]: "02"
+            - heading "Compare two edits" [level=3] [ref=e83]
+            - paragraph [ref=e84]: Put hooks, trims, or CTAs head to head when instinct isn't enough to choose.
+          - article [ref=e85]:
+            - paragraph [ref=e86]: "03"
+            - heading "Build the next pass" [level=3] [ref=e87]
+            - paragraph [ref=e88]: Turn raw clips into a rough cut with transcript-guided ordering and deadspace trims.
+      - generic [ref=e91]:
+        - generic [ref=e92]:
+          - generic [ref=e93]:
+            - generic [ref=e94]: Scan lane
+            - heading "Scan the cut before it goes live." [level=2] [ref=e95]
+            - paragraph [ref=e96]: Pick the hook, pace, and framing that actually deserves to ship. Pressure-test one edit or compare two versions before live performance makes the call for you.
+          - generic [ref=e97]:
+            - generic [ref=e98]:
+              - term [ref=e99]: Hook pressure
+              - definition [ref=e100]: Catch whether the opening earns the next few seconds before the post is already out.
+            - generic [ref=e101]:
+              - term [ref=e102]: A/B judgment
+              - definition [ref=e103]: Put two directions side by side when the team is split and vibes aren't enough.
+            - generic [ref=e104]:
+              - term [ref=e105]: Clarity drift
+              - definition [ref=e106]: See where messaging softens or pacing slips before the cut ships.
+        - generic [ref=e108]:
+          - generic [ref=e109]: Scan board
+          - generic [ref=e110]:
+            - generic [ref=e111]:
+              - paragraph [ref=e112]: Pick the winner
+              - generic [ref=e113]:
+                - generic [ref=e114]:
+                  - paragraph [ref=e115]: Cut A ✓
+                  - paragraph [ref=e116]: Sharper hook, clearer offer, stronger opening pace.
+                - generic [ref=e117]:
+                  - paragraph [ref=e118]: Cut B
+                  - paragraph [ref=e119]: Slower start, softer transition into the proof beat.
+            - generic [ref=e120]:
+              - paragraph [ref=e122]: Hook pressure
+              - paragraph [ref=e126]: Pacing
+              - paragraph [ref=e130]: Clarity
+      - generic [ref=e135]:
+        - generic [ref=e136]:
+          - generic [ref=e137]:
+            - generic [ref=e138]: Build lane
+            - heading "Build the first pass while it's still fresh." [level=2] [ref=e139]
+            - paragraph [ref=e140]: Cut deadspace, find the story, and hand over a usable first pass while raw clips are still easy to shape.
+          - generic [ref=e141]:
+            - generic [ref=e142]:
+              - term [ref=e143]: Transcript-led cut
+              - definition [ref=e144]: Start from what was actually said so the first pass has structure instead of just trims.
+            - generic [ref=e145]:
+              - term [ref=e146]: Deadspace trim
+              - definition [ref=e147]: Strip the obvious pauses so your first review starts closer to the right rhythm.
+            - generic [ref=e148]:
+              - term [ref=e149]: Story order
+              - definition [ref=e150]: Hand over a cut with a workable sequence, not a folder of clips and a hope.
+        - generic [ref=e152]:
+          - generic [ref=e153]:
+            - generic [ref=e154]: Rough cut engine
+            - generic [ref=e155]: Build lane
+          - generic [ref=e156]:
+            - paragraph [ref=e158]: Transcript-led rough cut
+            - generic [ref=e163]:
+              - generic [ref=e164]:
+                - paragraph [ref=e165]: Story order
+                - generic [ref=e166]:
+                  - generic [ref=e167]:
+                    - generic [ref=e168]: "1"
+                    - generic [ref=e169]: Hook
+                  - generic [ref=e170]:
+                    - generic [ref=e171]: "2"
+                    - generic [ref=e172]: Proof
+                  - generic [ref=e173]:
+                    - generic [ref=e174]: "3"
+                    - generic [ref=e175]: Offer
+                  - generic [ref=e176]:
+                    - generic [ref=e177]: "4"
+                    - generic [ref=e178]: CTA
+              - generic [ref=e179]:
+                - paragraph [ref=e181]: Deadspace trim
+                - generic [ref=e183]:
+                  - paragraph [ref=e184]: First pass ready
+                  - paragraph [ref=e185]: Build a reviewable cut before the edit thread turns into guesswork.
+      - generic [ref=e188]:
+        - img
+        - img
+        - generic [ref=e189]:
+          - paragraph [ref=e190]: Post with a stronger point of view
+          - paragraph [ref=e191]: Scan the version you have. Build the version you need next. Twine keeps both moves in one playful workflow instead of splitting judgment and editing into separate tools.
+        - link "Get started free →" [ref=e193] [cursor=pointer]:
+          - /url: /app
+    - contentinfo [ref=e194]:
+      - paragraph [ref=e195]:
+        - strong [ref=e196]: Twine
+        - text: · © 2026 — Read the room.
+  - button "Open Next.js Dev Tools" [ref=e202] [cursor=pointer]:
+    - img [ref=e203]

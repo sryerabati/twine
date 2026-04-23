@@ -11,6 +11,14 @@ export function ScanLibrary() {
   const scans = useQuery("scans:listMine" as never, {}) as SavedScanSummary[] | undefined;
   const [deletingScanId, setDeletingScanId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const resolvedScans = scans ?? [];
+  const sortedScans = resolvedScans
+    .slice()
+    .sort((left, right) => right.createdAt - left.createdAt);
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const thisWeekScans = sortedScans.filter((scan) => scan.createdAt >= sevenDaysAgo);
+  const earlierScans = sortedScans.filter((scan) => scan.createdAt < sevenDaysAgo);
+  const shouldGroup = sortedScans.length > 6;
 
   async function handleDeleteScan(scanId: string) {
     setDeletingScanId(scanId);
@@ -28,15 +36,64 @@ export function ScanLibrary() {
 
   return (
     <div className="space-y-6">
-      <SavedScanCards
-        scans={scans ?? []}
-        loading={scans === undefined}
-        emptyTitle="Your library is empty"
-        emptyBody="Create a scan from the dashboard to start building a reusable history."
-        onDeleteScan={handleDeleteScan}
-        deletingScanId={deletingScanId}
-        deleteError={deleteError}
-      />
+      <section className="space-y-3">
+        <span className="sticker">Library</span>
+        <h1 className="font-cartoon text-[1.8rem] font-black text-foreground">
+          {resolvedScans.length} saved scan{resolvedScans.length === 1 ? "" : "s"}
+        </h1>
+        <p className="text-sm text-muted-foreground">Sorted by most recent first</p>
+      </section>
+
+      {scans === undefined ? (
+        <SavedScanCards
+          scans={[]}
+          loading
+          emptyTitle="Your library is empty"
+          emptyBody="Create a scan from the dashboard to start building a reusable history."
+          onDeleteScan={handleDeleteScan}
+          deletingScanId={deletingScanId}
+          deleteError={deleteError}
+        />
+      ) : shouldGroup ? (
+        <div className="space-y-8">
+          {thisWeekScans.length ? (
+            <section className="space-y-4">
+              <h3 className="sticker sticker-green w-fit">This week</h3>
+              <SavedScanCards
+                scans={thisWeekScans}
+                emptyTitle="Your library is empty"
+                emptyBody="Create a scan from the dashboard to start building a reusable history."
+                onDeleteScan={handleDeleteScan}
+                deletingScanId={deletingScanId}
+                deleteError={deleteError}
+              />
+            </section>
+          ) : null}
+
+          {earlierScans.length ? (
+            <section className="space-y-4">
+              <h3 className="sticker sticker-green w-fit">Earlier</h3>
+              <SavedScanCards
+                scans={earlierScans}
+                emptyTitle="Your library is empty"
+                emptyBody="Create a scan from the dashboard to start building a reusable history."
+                onDeleteScan={handleDeleteScan}
+                deletingScanId={deletingScanId}
+                deleteError={deleteError}
+              />
+            </section>
+          ) : null}
+        </div>
+      ) : (
+        <SavedScanCards
+          scans={sortedScans}
+          emptyTitle="Your library is empty"
+          emptyBody="Create a scan from the dashboard to start building a reusable history."
+          onDeleteScan={handleDeleteScan}
+          deletingScanId={deletingScanId}
+          deleteError={deleteError}
+        />
+      )}
     </div>
   );
 }

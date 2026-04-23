@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { FileWarning } from "lucide-react";
@@ -7,6 +8,7 @@ import { FileWarning } from "lucide-react";
 import { AnalysisView } from "@/components/analysis-view";
 import { ScanWorkspaceSkeleton } from "@/components/loading-states";
 import { ScanSummaryHeader } from "@/components/scan-summary-header";
+import { buttonVariants } from "@/components/ui/button";
 import type { SavedScanRecord } from "@/lib/contracts";
 import { fetchAnalysisByUpload } from "@/lib/api";
 
@@ -41,6 +43,10 @@ export function ScanDetailClient({ scanId }: { scanId: string }) {
 
   return (
     <div className="space-y-8">
+      <Link href="/app/library" className={buttonVariants({ variant: "outline" })}>
+        ← Back to library
+      </Link>
+
       <ScanSummaryHeader
         status={scan.status}
         title={scan.title ?? scan.filename}

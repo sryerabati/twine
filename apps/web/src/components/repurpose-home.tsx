@@ -57,9 +57,7 @@ export function RepurposeHome() {
       <section className="surface rounded-[2rem] p-6 lg:p-8">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
-              Recent projects
-            </p>
+            <span className="sticker">Recent projects</span>
             <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
               Open a result or start a new repurpose run
             </h2>
@@ -69,7 +67,7 @@ export function RepurposeHome() {
 
         <div className="mt-6 grid gap-4">
           {projects === undefined ? (
-            <div className="rounded-[1.5rem] border border-border/60 bg-muted/25 p-5 text-sm text-muted-foreground">
+            <div className="rounded-[1.5rem] border-[3px] border-border/60 bg-muted/25 p-5 text-sm text-muted-foreground">
               Loading repurpose history...
             </div>
           ) : projects.length ? (
@@ -77,7 +75,7 @@ export function RepurposeHome() {
               <Link
                 key={project._id}
                 href={`/app/repurpose/${project._id}`}
-                className="rounded-[1.5rem] border border-border/70 bg-background/40 p-5 transition-colors hover:border-primary/45 hover:bg-primary/5"
+                className="spring rounded-[1.5rem] border-[3px] border-border/70 bg-background/40 p-5 shadow-[5px_5px_0_0_var(--shadow-stamp)] transition-[background-color,border-color] hover:border-primary/45 hover:bg-primary/5 hover:-translate-x-[1px] hover:-translate-y-[1px] hover:shadow-[8px_8px_0_0_var(--shadow-stamp)]"
               >
                 <div className="space-y-3">
                   <div className="flex flex-wrap items-center gap-2">
@@ -98,7 +96,7 @@ export function RepurposeHome() {
               </Link>
             ))
           ) : (
-            <div className="rounded-[1.5rem] border border-dashed border-border/70 bg-muted/20 p-6 text-sm text-muted-foreground">
+            <div className="rounded-[1.5rem] border-[3px] border-dashed border-border/70 bg-muted/20 p-6 text-sm text-muted-foreground">
               No repurpose projects yet.
             </div>
           )}
